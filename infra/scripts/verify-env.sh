@@ -67,6 +67,18 @@ echo "== OpenBao (PI 7.2)"
 paths=$(docker exec -e BAO_ADDR=http://127.0.0.1:8200 -e BAO_TOKEN="$OPENBAO_DEV_ROOT_TOKEN" ${PROJECT}-openbao-1 sh -c 'for p in backend worker-ingest worker-agent platform; do bao kv list -format=json kv/tender-eval/$p; done' | jq -s 'add|length')
 [ "$paths" -ge 20 ] && ok "$paths secret paths loaded under kv/tender-eval" || bad "only $paths secret paths"
 
+echo "== OpenBao AppRoles (PI 7.2)"
+bao_login() { curl -s -X POST "http://localhost:$OPENBAO_PORT/v1/auth/approle/login" -d "{\"role_id\":\"$1\",\"secret_id\":\"$2\"}" | jq -r '.auth.client_token // empty'; }
+bao_read() { curl -s -o /dev/null -w '%{http_code}' -H "X-Vault-Token: $1" "http://localhost:$OPENBAO_PORT/v1/kv/data/tender-eval/$2"; }
+BT=$(bao_login "$OPENBAO_BACKEND_ROLE_ID" "$OPENBAO_BACKEND_SECRET_ID")
+[ -n "$BT" ] && ok "backend AppRole signs in" || bad "backend AppRole login"
+[ "$(bao_read "$BT" backend/db-app)" = 200 ] && ok "backend reads its own path" || bad "backend cannot read backend/db-app"
+[ "$(bao_read "$BT" worker-agent/llm)" = 403 ] && ok "backend cannot read the agent's path" || bad "backend can read worker-agent/llm"
+WT=$(bao_login "$OPENBAO_WORKER_AGENT_ROLE_ID" "$OPENBAO_WORKER_AGENT_SECRET_ID")
+[ "$(bao_read "$WT" worker-agent/llm)" = 200 ] && ok "agent reads its own path" || bad "agent cannot read its path"
+[ "$(bao_read "$WT" backend/db-app)" = 403 ] && ok "agent cannot read the backend's database credentials" || bad "agent can read backend/db-app"
+[ -z "$(bao_login "$OPENBAO_BACKEND_ROLE_ID" wrong-secret-id)" ] && ok "a wrong secret id is refused" || bad "wrong secret id accepted"
+
 echo "== Gateway (PI Q13)"
 check "gateway answers /healthz" curl -fsS "http://localhost:$GATEWAY_PORT/config.json"
 # The body limit is enforced while the body is read, so something must read it.

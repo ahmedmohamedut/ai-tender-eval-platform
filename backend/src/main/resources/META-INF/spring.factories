@@ -1,0 +1,2 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+app.tendereval.backend.secrets.OpenBaoEnvironmentPostProcessor

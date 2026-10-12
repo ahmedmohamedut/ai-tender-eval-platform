@@ -114,6 +114,12 @@ services:
       PHOENIX_SECRET: ${PHOENIX_SECRET}
       TENDER_APP_PASSWORD: ${TENDER_APP_PASSWORD}
       TENDER_AI_INGEST_PASSWORD: ${TENDER_AI_INGEST_PASSWORD}
+      OPENBAO_BACKEND_ROLE_ID: ${OPENBAO_BACKEND_ROLE_ID}
+      OPENBAO_BACKEND_SECRET_ID: ${OPENBAO_BACKEND_SECRET_ID}
+      OPENBAO_WORKER_INGEST_ROLE_ID: ${OPENBAO_WORKER_INGEST_ROLE_ID}
+      OPENBAO_WORKER_INGEST_SECRET_ID: ${OPENBAO_WORKER_INGEST_SECRET_ID}
+      OPENBAO_WORKER_AGENT_ROLE_ID: ${OPENBAO_WORKER_AGENT_ROLE_ID}
+      OPENBAO_WORKER_AGENT_SECRET_ID: ${OPENBAO_WORKER_AGENT_SECRET_ID}
     volumes: ["../openbao:/provision:ro"]
     entrypoint: ["sh", "/provision/provision.sh"]
 
@@ -261,11 +267,14 @@ services:
     depends_on:
       provision-db: { condition: service_completed_successfully }
       provision-nats: { condition: service_completed_successfully }
+      provision-openbao: { condition: service_completed_successfully }
       keycloak: { condition: service_healthy }
     environment:
       DB_URL: r2dbc:postgresql://postgres:5432/${POSTGRES_DB}
-      DB_APP_USERNAME: tender_app
-      DB_APP_PASSWORD: ${TENDER_APP_PASSWORD}
+      # The application role and the Keycloak admin secret come from OpenBao (AppRole).
+      OPENBAO_ADDR: http://openbao:8200
+      OPENBAO_ROLE_ID: ${OPENBAO_BACKEND_ROLE_ID}
+      OPENBAO_SECRET_ID: ${OPENBAO_BACKEND_SECRET_ID}
       DB_MIGRATION_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       DB_MIGRATION_USERNAME: tender_owner
       DB_MIGRATION_PASSWORD: ${TENDER_OWNER_PASSWORD}
@@ -275,7 +284,6 @@ services:
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
       NATS_URL: nats://nats:4222
       KEYCLOAK_ADMIN_BASE_URL: http://keycloak:8080/admin/realms/tender-eval
-      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_BACKEND_ADMIN_SECRET}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
       APP_DEV_ENDPOINTS: "true"
       LOG_LEVEL: ${LOG_LEVEL}

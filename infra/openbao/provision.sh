@@ -27,4 +27,25 @@ put worker-agent/phoenix api_key="dev-not-needed"
 for svc in keycloak rustfs qdrant phoenix nats; do
   put "platform/$svc" note="dev values live in .env"
 done
+# ---- AppRole: one role and one policy per component (PI 7.2) ----------------------------
+bao auth list -format=json | grep -q '"approle/"' || bao auth enable approle >/dev/null
+
+role() { # name role_id secret_id
+  name=$1; rid=$2; sid=$3
+  bao policy write "$name" - >/dev/null <<POLICY
+path "kv/data/tender-eval/$name/*" { capabilities = ["read"] }
+path "kv/metadata/tender-eval/$name/*" { capabilities = ["list", "read"] }
+POLICY
+  bao write "auth/approle/role/$name" token_policies="$name" token_ttl=1h token_max_ttl=4h \
+      secret_id_ttl=0 secret_id_num_uses=0 >/dev/null
+  bao write "auth/approle/role/$name/role-id" role_id="$rid" >/dev/null
+  # Local development delivers the secret id by environment, not response-wrapped.
+  if ! bao write auth/approle/login role_id="$rid" secret_id="$sid" >/dev/null 2>&1; then
+    bao write "auth/approle/role/$name/custom-secret-id" secret_id="$sid" >/dev/null
+  fi
+  echo "approle $name (policy: read kv/tender-eval/$name/*)"
+}
+role backend        "$OPENBAO_BACKEND_ROLE_ID"       "$OPENBAO_BACKEND_SECRET_ID"
+role worker-ingest  "$OPENBAO_WORKER_INGEST_ROLE_ID" "$OPENBAO_WORKER_INGEST_SECRET_ID"
+role worker-agent   "$OPENBAO_WORKER_AGENT_ROLE_ID"  "$OPENBAO_WORKER_AGENT_SECRET_ID"
 echo "openbao provisioning done"
