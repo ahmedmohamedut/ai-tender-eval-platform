@@ -91,12 +91,16 @@ class JetStreamPublisher:
 class Runner:
     settings: Settings
 
-    async def run(self) -> None:
+    async def run(
+        self, stop: asyncio.Event | None = None, ready: asyncio.Event | None = None
+    ) -> None:
+        """Run until SIGTERM/SIGINT, or until `stop` is set when one is supplied (tests)."""
         s = self.settings
-        stop = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, stop.set)
+        if stop is None:
+            stop = asyncio.Event()
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, stop.set)
 
         store = S3Store(s)
         bucket = s.S3_BUCKET_DOCUMENTS if s.WORKER_ROLE == "ingest" else s.S3_BUCKET_JOBS
@@ -137,6 +141,8 @@ class Runner:
             asyncio.create_task(self._consume(js, spec, ctx, slots, stop))
             for spec in ROLE_CONSUMERS[s.WORKER_ROLE]
         ]
+        if ready is not None:
+            ready.set()
         await stop.wait()
         health.accepting = False
         log.info("stopping: no longer pulling")

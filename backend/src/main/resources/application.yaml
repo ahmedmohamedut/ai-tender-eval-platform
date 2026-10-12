@@ -14,6 +14,7 @@ spring:
     username: ${DB_APP_USERNAME}
     password: ${DB_APP_PASSWORD}
     pool:
+      initial-size: ${DB_POOL_INITIAL_SIZE:1}
       max-size: ${DB_POOL_MAX_SIZE:20}
   flyway:
     # Migrations run as the owner role over JDBC; the application never owns a table.

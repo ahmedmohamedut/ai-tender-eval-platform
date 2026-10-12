@@ -58,3 +58,43 @@ def test_other_bucket_is_ignored():
 def test_malformed_body_is_rejected(body):
     with pytest.raises(MalformedEvent):
         parse_upload_event(body, "tender-documents")
+
+
+def test_accepts_the_shape_rustfs_1_0_1_actually_sends():
+    key = f"originals%2F{T}%2F{D}%2F{V}.pdf"
+    body = json.dumps(
+        {
+            "EventName": "s3:ObjectCreated:Put",
+            "Key": f"tender-documents/originals/{T}/{D}/{V}.pdf",
+            "Records": [
+                {
+                    "object_name": key,
+                    "bucket_name": "tender-documents",
+                    "data": {
+                        "s3": {"bucket": {"name": "tender-documents"}, "object": {"key": key}}
+                    },
+                }
+            ],
+        }
+    ).encode()
+    [doc] = parse_upload_event(body, "tender-documents")
+    assert str(doc.document_version_id) == V
+
+
+def test_falls_back_to_record_level_names():
+    body = json.dumps(
+        {
+            "Records": [
+                {
+                    "bucket_name": "tender-documents",
+                    "object_name": f"originals%2F{T}%2F{D}%2F{V}.docx",
+                }
+            ]
+        }
+    ).encode()
+    [doc] = parse_upload_event(body, "tender-documents")
+    assert doc.file_format == "docx"
+
+
+def test_record_without_any_known_shape_is_skipped():
+    assert parse_upload_event(b'{"Records":[{"x":1},"y",null]}', "tender-documents") == []

@@ -4,7 +4,7 @@ COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml
 
 .PHONY: up up-infra down clean ps logs env verify-env \
 	api contracts contracts-check lint lint-worker lint-backend lint-frontend lint-api \
-	test test-worker test-backend test-frontend deps
+	test test-unit test-integration test-worker test-backend test-frontend deps
 
 .env:
 	cp .env.example .env
@@ -97,5 +97,14 @@ test-backend:
 test-frontend: frontend/node_modules api
 	cd frontend && npm run --silent typecheck && npm test --silent
 
-## Unit tests of all three components. Integration and the walking slice are added below.
-test: test-worker test-backend test-frontend
+## Unit tests of all three components (no Docker).
+test-unit: test-worker test-backend test-frontend
+
+## Integration tests against real containers (Docker): row-level security and the
+## request transaction on PostgreSQL; the ingest role on NATS and RustFS.
+test-integration: worker/.venv
+	cd backend && ./gradlew --console=plain --quiet integrationTest --rerun
+	cd worker && uv run pytest -q -m integration
+
+## Everything, in order. The walking slice is added in M6.
+test: test-unit test-integration
