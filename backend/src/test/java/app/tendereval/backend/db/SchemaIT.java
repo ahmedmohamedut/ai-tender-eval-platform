@@ -551,6 +551,10 @@ class SchemaIT {
   void auditEventsAreAppendOnlyForTheApplicationRole() {
     exec(
         app,
+        "SELECT set_config('app.user_id', ?, false), set_config('app.role', 'admin', false)",
+        admin.toString());
+    exec(
+        app,
         "INSERT INTO audit_events (source, actor_user_id, actor_role, object_type, action) VALUES ('person', ?, 'admin', 'tender', 'tender_created')",
         admin);
     assertThat(failure(app, "UPDATE audit_events SET note = 'x'")).isEqualTo("42501");
@@ -566,6 +570,10 @@ class SchemaIT {
 
   @Test
   void auditActionsThatNeedANoteRefuseWithoutOne() {
+    exec(
+        app,
+        "SELECT set_config('app.user_id', ?, false), set_config('app.role', 'member', false)",
+        member.toString());
     String base =
         "INSERT INTO audit_events (source, actor_user_id, actor_role, object_type, action, note) VALUES ('person', ?, 'member', 'requirement', ?, ?)";
     assertThat(failure(app, base, member, "requirement_edited", null)).isEqualTo("23514");

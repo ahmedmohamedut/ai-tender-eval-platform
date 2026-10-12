@@ -11,8 +11,9 @@ CREATE TABLE status_transitions (
     UNIQUE NULLS NOT DISTINCT (table_name, column_name, from_value, to_value)
 );
 
+-- SECURITY DEFINER: whichever role changes a status needs no privilege on the reference table.
 CREATE FUNCTION enforce_status_transition() RETURNS trigger LANGUAGE plpgsql
-SET search_path = public, pg_temp AS $$
+SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE
   col   text := TG_ARGV[0];
   new_v text := to_jsonb(NEW) ->> col;

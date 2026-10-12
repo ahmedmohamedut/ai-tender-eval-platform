@@ -72,8 +72,9 @@ CREATE INDEX document_access_events_user ON document_access_events (user_id, ope
 CREATE INDEX document_access_events_version ON document_access_events (document_version_id, opened_at);
 
 -- Creates the month partitions of both logs from the current month to months_ahead later,
--- and a default partition. Every partition gets INSERT and SELECT only for the application
--- role: privileges on the parent do not cover a partition addressed by name.
+-- and a default partition. The application role gets no privilege on a partition itself: a
+-- query through the parent is checked against the parent (and its policies), so a partition
+-- addressed by name would otherwise bypass them.
 CREATE FUNCTION ensure_monthly_partitions(months_ahead integer DEFAULT 24) RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE
@@ -92,14 +93,14 @@ BEGIN
         EXECUTE format('CREATE TABLE %I PARTITION OF %I FOR VALUES FROM (%L) TO (%L)',
                        part, parent, m, (m + interval '1 month')::date);
         EXECUTE format('REVOKE ALL ON %I FROM PUBLIC', part);
-        EXECUTE format('REVOKE UPDATE, DELETE, TRUNCATE ON %I FROM tender_app', part);
+        EXECUTE format('REVOKE ALL ON %I FROM tender_app', part);
         created := created + 1;
       END IF;
     END LOOP;
     part := parent || '_default';
     IF to_regclass(part) IS NULL THEN
       EXECUTE format('CREATE TABLE %I PARTITION OF %I DEFAULT', part, parent);
-      EXECUTE format('REVOKE UPDATE, DELETE, TRUNCATE ON %I FROM tender_app', part);
+      EXECUTE format('REVOKE ALL ON %I FROM tender_app', part);
       created := created + 1;
     END IF;
   END LOOP;

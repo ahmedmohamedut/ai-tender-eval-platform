@@ -48,7 +48,8 @@ CREATE TRIGGER tender_members_touch BEFORE INSERT OR UPDATE ON tender_members
     FOR EACH ROW EXECUTE FUNCTION touch_row();
 
 -- An administrator cannot also sit on a committee (UX-TND-02).
-CREATE FUNCTION refuse_admin_member() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION refuse_admin_member() RETURNS trigger LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public, pg_temp AS $$
 BEGIN
   IF NEW.status = 'active' AND EXISTS (SELECT 1 FROM users u WHERE u.id = NEW.user_id AND u.role = 'admin') THEN
     RAISE EXCEPTION 'an administrator cannot be a committee member' USING ERRCODE = '23514';
