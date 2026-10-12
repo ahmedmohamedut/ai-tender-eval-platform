@@ -274,6 +274,9 @@ services:
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/tender-eval/protocol/openid-connect/certs
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
       NATS_URL: nats://nats:4222
+      KEYCLOAK_ADMIN_BASE_URL: http://keycloak:8080/admin/realms/tender-eval
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_BACKEND_ADMIN_SECRET}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
       APP_DEV_ENDPOINTS: "true"
       LOG_LEVEL: ${LOG_LEVEL}
     networks: [default, data]

@@ -165,7 +165,7 @@ Tables are grouped by the eleven areas in the overview. The standard columns fro
 | --- | --- | --- |
 | **tenders** | name, reference_no, description, status, opened_at, archived_at, created_by | status is draft, requirements, evaluation, consolidation or finalized. Archiving sets archived_at and keeps the status, so the stage the tender reached is not lost. name is unique among tenders that are not soft-deleted. Opening to the committee needs an RFP and at least one member, which the service checks. |
 | **tender_members** | tender_id, user_id, is_chair, status, added_at, removed_at, removal_handling, reassigned_to_user_id | status is active or removed. A partial unique index allows one active Chair per tender, and the Chair must be an active member. A trigger rejects users whose role is admin, so the administrator cannot also sit on the committee. removal_handling is kept_as_history or reassigned. |
-| **tender_stage_dates** | tender_id, stage, due_date, reminder_lead_days, last_reminded_at | Optional, one row per stage (requirements, evaluation, consolidation). The evaluation row holds the due date entered when the tender is created, so tenders has no due-date column of its own. |
+| **tender_stage_dates** | tender_id, stage, due_date, reminder_lead_days, last_reminded_at, removed_at | Optional, one row per stage (requirements, evaluation, consolidation). The evaluation row holds the due date entered when the tender is created, so tenders has no due-date column of its own. |
 
 ### Documents
 

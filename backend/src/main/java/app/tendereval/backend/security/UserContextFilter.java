@@ -20,9 +20,11 @@ import reactor.core.publisher.Mono;
 public class UserContextFilter implements WebFilter {
 
   private final UserDirectory directory;
+  private final OperationRoles roles;
 
-  public UserContextFilter(UserDirectory directory) {
+  public UserContextFilter(UserDirectory directory, OperationRoles roles) {
     this.directory = directory;
+    this.roles = roles;
   }
 
   @Override
@@ -40,11 +42,22 @@ public class UserContextFilter implements WebFilter {
         .map(Optional::of)
         .defaultIfEmpty(Optional.empty())
         .flatMap(
-            user ->
-                user.isPresent()
-                    ? chain
-                        .filter(exchange)
-                        .contextWrite(ctx -> ctx.put(CurrentUser.class, user.get()))
-                    : chain.filter(exchange));
+            user -> {
+              if (user.isEmpty()) {
+                return chain.filter(exchange);
+              }
+              // The operation's x-roles: a role that may never call it is refused here, before
+              // any work (the database policies decide again).
+              String path = exchange.getRequest().getPath().pathWithinApplication().value();
+              var allowed = roles.allowed(exchange.getRequest().getMethod(), path);
+              if (allowed.isPresent() && !allowed.get().contains(user.get().role())) {
+                return Mono.error(
+                    app.tendereval.backend.web.ApiException.forbidden(
+                        "forbidden", "This action is not allowed for your role"));
+              }
+              return chain
+                  .filter(exchange)
+                  .contextWrite(ctx -> ctx.put(CurrentUser.class, user.get()));
+            });
   }
 }

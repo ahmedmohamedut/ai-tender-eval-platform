@@ -49,6 +49,14 @@ public class ProblemExceptionHandler implements WebExceptionHandler {
               "The request has invalid values",
               errors));
     }
+    if (ex instanceof org.springframework.web.server.MissingRequestValueException missing
+        && "If-Match".equalsIgnoreCase(missing.getName())) {
+      return problems.write(
+          exchange,
+          HttpStatus.PRECONDITION_REQUIRED,
+          "precondition_required",
+          "If-Match is required");
+    }
     if (ex instanceof org.springframework.web.server.ServerWebInputException) {
       return problems.write(
           exchange, HttpStatus.BAD_REQUEST, "bad_request", "The request could not be read");

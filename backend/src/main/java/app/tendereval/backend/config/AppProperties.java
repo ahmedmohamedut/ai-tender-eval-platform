@@ -25,4 +25,8 @@ public record AppProperties(
     int rateLimitUploadsPerMinute,
     int rateLimitSearchPerMinute,
     int rateLimitJobStartsPerMinute,
-    int rateLimitExportsPerMinute) {}
+    int rateLimitExportsPerMinute,
+    @NotBlank String keycloakAdminBaseUrl,
+    @NotBlank String keycloakAdminClientId,
+    @NotBlank String keycloakAdminClientSecret,
+    int invitationLifespanSeconds) {}

@@ -80,6 +80,14 @@ tasks.compileJava {
     dependsOn(tasks.openApiGenerate)
 }
 
+// The contract travels inside the jar: the role guard reads x-roles from it at start.
+tasks.processResources {
+    from(rootProject.file("../api")) {
+        include("openapi.yaml")
+        into("openapi")
+    }
+}
+
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }

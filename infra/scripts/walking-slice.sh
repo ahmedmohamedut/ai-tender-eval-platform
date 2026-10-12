@@ -25,11 +25,16 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/_dev/walking-slice")
 ctype=$(curl -s -D - -o /dev/null -X POST "$GW/_dev/walking-slice" | tr -d '\r' | grep -i '^content-type:' | head -1)
 echo "$ctype" | grep -qi 'application/problem+json' && ok "401 body is problem+json" || bad "401 content type: $ctype"
 
+me=$(curl -s -H "Authorization: Bearer $TOKEN" "$GW/me")
+USER_ID=$(echo "$me" | jq -r .user.id)
+[ "$(echo "$me" | jq -r .user.role)" = admin ] && ok "GET /me: bootstrap administrator row exists with role admin" || bad "GET /me: $me"
+[ "$(echo "$me" | jq -r .client_config.session_idle_timeout_seconds)" = 1800 ] && ok "idle timeout read from the realm (1800 s)" || bad "idle timeout not 1800"
+
 resp=$(curl -s -w '\n%{http_code}' -X POST -H "Authorization: Bearer $TOKEN" -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" "$GW/_dev/walking-slice")
 code=${resp##*$'\n'}; body=${resp%$'\n'*}
 [ "$code" = 202 ] && ok "start accepted (202)" || { bad "start got $code: $body"; exit 1; }
 job=$(echo "$body" | jq -r .job_id)
-[ "$(echo "$body" | jq -r .transaction_user_id)" = "$SUB" ] && ok "transaction ran as the token subject" || bad "app.user_id was $(echo "$body" | jq -r .transaction_user_id)"
+[ "$(echo "$body" | jq -r .transaction_user_id)" = "$USER_ID" ] && ok "transaction ran as the platform user (users.id), not the token subject" || bad "app.user_id was $(echo "$body" | jq -r .transaction_user_id)"
 [ "$(echo "$body" | jq -r .transaction_role)" = admin ] && ok "role mapped procurement_admin -> admin" || bad "app.role was $(echo "$body" | jq -r .transaction_role)"
 [ "$(echo "$body" | jq -r .database_user)" = tender_app ] && ok "connected as tender_app (not the owner)" || bad "db user $(echo "$body" | jq -r .database_user)"
 [ "$(echo "$body" | jq -r .trace_id)" = 4bf92f3577b34da6a3ce929d0e0e4736 ] && ok "trace id carried from traceparent" || bad "trace id not carried"

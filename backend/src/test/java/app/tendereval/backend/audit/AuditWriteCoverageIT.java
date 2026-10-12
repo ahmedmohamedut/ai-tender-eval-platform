@@ -3,6 +3,7 @@ package app.tendereval.backend.audit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import app.tendereval.backend.testsupport.AbstractApiIT;
+import app.tendereval.backend.testsupport.Fixtures;
 import app.tendereval.backend.testsupport.TestUsers;
 import app.tendereval.backend.testsupport.TestUsers.TestUser;
 import java.lang.reflect.Method;
@@ -14,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -40,6 +42,71 @@ class AuditWriteCoverageIT extends AbstractApiIT {
 
     /** Makes a refused call (wrong role, bad input, stale version): no audit event. */
     void refused() throws Exception;
+  }
+
+  @org.junit.jupiter.api.AfterEach
+  void restoreSharedSettings() {
+    TestUsers.sql("UPDATE settings SET value = '10' WHERE key = 'note.min_length'");
+  }
+
+  private TestUser adminUser;
+  private TestUser chairUser;
+
+  private TestUser admin() {
+    if (adminUser == null) {
+      adminUser = TestUsers.create("admin");
+    }
+    return adminUser;
+  }
+
+  private TestUser chair() {
+    if (chairUser == null) {
+      chairUser = TestUsers.create("member");
+    }
+    return chairUser;
+  }
+
+  private UUID finished() {
+    UUID t = Fixtures.tender(admin(), TestUsers.create("member"));
+    for (String st : List.of("requirements", "evaluation", "consolidation", "finalized")) {
+      TestUsers.sql("UPDATE tenders SET status = ? WHERE id = ?", st, t);
+    }
+    return t;
+  }
+
+  /** Runs {@code cleanup} after the success call, so a shared setting is left as found. */
+  private static Scenario restoring(Runnable cleanup, Scenario inner) {
+    return new Scenario() {
+      @Override
+      public int success() throws Exception {
+        try {
+          return inner.success();
+        } finally {
+          cleanup.run();
+        }
+      }
+
+      @Override
+      public void refused() throws Exception {
+        inner.refused();
+      }
+    };
+  }
+
+  /** A scenario with one successful call (one event) and one refused call. */
+  private static Scenario simple(Runnable success, Runnable refused) {
+    return new Scenario() {
+      @Override
+      public int success() {
+        success.run();
+        return 1;
+      }
+
+      @Override
+      public void refused() {
+        refused.run();
+      }
+    };
   }
 
   /** Operations that write nothing the data model asks to audit, with the reason. */
@@ -78,6 +145,339 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isEqualTo(422);
           }
         });
+    // ---- users (PI 3.5) ----
+    m.put(
+        "inviteUser",
+        simple(
+            () ->
+                post("/users", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(
+                        Map.of(
+                            "email",
+                            "c-" + UUID.randomUUID() + "@example.test",
+                            "display_name",
+                            "Cov Erage",
+                            "role",
+                            "member"))
+                    .exchange()
+                    .expectStatus()
+                    .isCreated(),
+            () ->
+                post("/users", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(
+                        Map.of("email", "not-an-email", "display_name", "", "role", "member"))
+                    .exchange()
+                    .expectStatus()
+                    .is4xxClientError()));
+    m.put(
+        "updateUser",
+        new Scenario() {
+          TestUser target = TestUsers.create("member");
+
+          @Override
+          public int success() {
+            patch("/users/" + target.id(), admin())
+                .header("If-Match", "\"1\"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("display_name", "Covered Again"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            patch("/users/" + target.id(), admin())
+                .header("If-Match", "\"1\"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("display_name", "Stale"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(412);
+          }
+        });
+    m.put(
+        "deactivateUser",
+        simple(
+            () ->
+                post("/users/" + TestUsers.create("member").id() + "/deactivate", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("handling", "kept_as_history"))
+                    .exchange()
+                    .expectStatus()
+                    .isOk(),
+            () ->
+                post("/users/" + UUID.randomUUID() + "/deactivate", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("handling", "kept_as_history"))
+                    .exchange()
+                    .expectStatus()
+                    .isNotFound()));
+    m.put(
+        "reactivateUser",
+        simple(
+            () ->
+                post(
+                        "/users/" + TestUsers.create("member", "deactivated").id() + "/reactivate",
+                        admin())
+                    .exchange()
+                    .expectStatus()
+                    .isOk(),
+            () ->
+                post("/users/" + UUID.randomUUID() + "/reactivate", admin())
+                    .exchange()
+                    .expectStatus()
+                    .isNotFound()));
+    m.put(
+        "resendInvitation",
+        simple(
+            () ->
+                post(
+                        "/users/"
+                            + TestUsers.create("member", "invited").id()
+                            + "/resend-invitation",
+                        admin())
+                    .exchange()
+                    .expectStatus()
+                    .isNoContent(),
+            () ->
+                post("/users/" + TestUsers.create("member").id() + "/resend-invitation", admin())
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(409)));
+    // ---- settings ----
+    m.put(
+        "updateSetting",
+        simple(
+            () ->
+                web.put()
+                    .uri("/settings/note.min_length")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("value", 12))
+                    .exchange()
+                    .expectStatus()
+                    .isOk(),
+            () ->
+                web.put()
+                    .uri("/settings/note.min_length")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("value", 0))
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(422)));
+    // ---- tenders ----
+    m.put(
+        "createTender",
+        simple(
+            () ->
+                post("/tenders", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(
+                        Map.of(
+                            "name",
+                            "Cov " + UUID.randomUUID(),
+                            "member_ids",
+                            List.of(chair().id()),
+                            "chair_id",
+                            chair().id()))
+                    .exchange()
+                    .expectStatus()
+                    .isCreated(),
+            () ->
+                post("/tenders", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(
+                        Map.of("name", "", "member_ids", List.of(), "chair_id", chair().id()))
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(422)));
+    m.put(
+        "updateTender",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+
+          @Override
+          public int success() {
+            patch("/tenders/" + t, admin())
+                .header("If-Match", "\"1\"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("description", "d"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            patch("/tenders/" + t, admin())
+                .header("If-Match", "\"1\"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("description", "stale"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(412);
+          }
+        });
+    m.put(
+        "openTender",
+        new Scenario() {
+          UUID ready = Fixtures.tender(admin(), chair());
+          UUID notReady = Fixtures.tender(admin(), chair());
+
+          @Override
+          public int success() {
+            Fixtures.rfp(ready, admin());
+            post("/tenders/" + ready + "/open", admin()).exchange().expectStatus().isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            post("/tenders/" + notReady + "/open", admin())
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "archiveTender",
+        new Scenario() {
+          UUID done = finished();
+          UUID open = Fixtures.tender(admin(), chair());
+
+          @Override
+          public int success() {
+            post("/tenders/" + done + "/archive", admin()).exchange().expectStatus().isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            post("/tenders/" + open + "/archive", admin()).exchange().expectStatus().isEqualTo(409);
+          }
+        });
+    m.put(
+        "duplicateTender",
+        simple(
+            () ->
+                post("/tenders/" + Fixtures.tender(admin(), chair()) + "/duplicate", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("name", "Dup " + UUID.randomUUID()))
+                    .exchange()
+                    .expectStatus()
+                    .isCreated(),
+            () ->
+                post("/tenders/" + Fixtures.tender(admin(), chair()) + "/duplicate", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("name", " "))
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(422)));
+    m.put(
+        "addMember",
+        simple(
+            () ->
+                post("/tenders/" + Fixtures.tender(admin(), chair()) + "/members", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("user_id", TestUsers.create("member").id()))
+                    .exchange()
+                    .expectStatus()
+                    .isCreated(),
+            () ->
+                post("/tenders/" + Fixtures.tender(admin(), chair()) + "/members", admin())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("user_id", UUID.randomUUID()))
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(422)));
+    m.put(
+        "setChair",
+        new Scenario() {
+          TestUser second = TestUsers.create("member");
+          UUID t = Fixtures.tender(admin(), chair(), second);
+
+          @Override
+          public int success() {
+            web.put()
+                .uri("/tenders/" + t + "/chair")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("user_id", second.id()))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            web.put()
+                .uri("/tenders/" + t + "/chair")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("user_id", UUID.randomUUID()))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "removeMember",
+        new Scenario() {
+          TestUser leaver = TestUsers.create("member");
+          UUID t = Fixtures.tender(admin(), chair(), leaver);
+
+          @Override
+          public int success() {
+            post("/tenders/" + t + "/members/" + leaver.id() + "/remove", admin())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("handling", "kept_as_history"))
+                .exchange()
+                .expectStatus()
+                .isNoContent();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            post("/tenders/" + t + "/members/" + chair().id() + "/remove", admin())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("handling", "kept_as_history"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(409);
+          }
+        });
+    m.put(
+        "setStageDates",
+        simple(
+            () ->
+                web.put()
+                    .uri("/tenders/" + Fixtures.tender(admin(), chair()) + "/stage-dates")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(
+                        Map.of(
+                            "items",
+                            List.of(Map.of("stage", "evaluation", "due_date", "2027-05-05"))))
+                    .exchange()
+                    .expectStatus()
+                    .isOk(),
+            () ->
+                web.put()
+                    .uri("/tenders/" + Fixtures.tender(admin(), chair()) + "/stage-dates")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("items", List.of(Map.of("stage", "evaluation"))))
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(422)));
     return m;
   }
 

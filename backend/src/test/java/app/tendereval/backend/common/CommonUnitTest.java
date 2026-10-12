@@ -142,7 +142,11 @@ class CommonUnitTest {
         uploadsPerMinute,
         120,
         20,
-        10);
+        10,
+        "http://kc/admin/realms/r",
+        "c",
+        "s",
+        259200);
   }
 
   @Test

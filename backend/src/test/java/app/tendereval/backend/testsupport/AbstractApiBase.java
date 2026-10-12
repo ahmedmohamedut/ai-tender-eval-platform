@@ -23,7 +23,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 @Tag("integration")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureWebTestClient
-@Import(TestAuthConfig.class)
+@Import({TestAuthConfig.class, TestIdentityConfig.class})
 public abstract class AbstractApiBase {
 
   public static final TestTokens TOKENS = new TestTokens();
@@ -46,6 +46,8 @@ public abstract class AbstractApiBase {
     r.add("NATS_URL", () -> "nats://unused.test:4222");
     r.add("MANAGEMENT_PORT", () -> "0");
     r.add("BOOTSTRAP_ADMIN_EMAIL", () -> BOOTSTRAP_EMAIL);
+    r.add("KEYCLOAK_ADMIN_BASE_URL", () -> "http://keycloak.test/admin/realms/tender-eval");
+    r.add("KEYCLOAK_ADMIN_CLIENT_SECRET", () -> "test-secret");
     // No stale answers in tests: a deactivation applies on the next request.
     r.add("USER_STATUS_CACHE_SECONDS", () -> "0");
     r.add("RATE_LIMIT_UPLOADS_PER_MINUTE", () -> "1000");
@@ -57,6 +59,7 @@ public abstract class AbstractApiBase {
   @MockitoBean StatusConsumer statusConsumer;
 
   @Autowired protected WebTestClient web;
+  @Autowired protected FakeKeycloakAdmin keycloak;
 
   protected static String tokenFor(TestUser user) {
     return TOKENS.token(user.sub(), TestUsers.roles(user.role()), Map.of("email", user.email()));

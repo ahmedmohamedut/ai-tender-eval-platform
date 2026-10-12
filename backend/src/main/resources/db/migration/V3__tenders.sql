@@ -66,10 +66,13 @@ CREATE TABLE tender_stage_dates (
     due_date          date NOT NULL,
     reminder_lead_days integer CHECK (reminder_lead_days >= 0),
     last_reminded_at  timestamptz,
+    -- A stage left out of a later PUT is marked removed, never deleted (rule 11).
+    removed_at        timestamptz,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
-    row_version       integer NOT NULL DEFAULT 1,
-    UNIQUE (tender_id, stage)
+    row_version       integer NOT NULL DEFAULT 1
 );
+CREATE UNIQUE INDEX tender_stage_dates_one_per_stage ON tender_stage_dates (tender_id, stage)
+    WHERE removed_at IS NULL;
 CREATE TRIGGER tender_stage_dates_touch BEFORE INSERT OR UPDATE ON tender_stage_dates
     FOR EACH ROW EXECUTE FUNCTION touch_row();

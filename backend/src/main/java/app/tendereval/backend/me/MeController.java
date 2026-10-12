@@ -12,6 +12,7 @@ import app.tendereval.backend.audit.AuditService;
 import app.tendereval.backend.common.Settings;
 import app.tendereval.backend.config.AppProperties;
 import app.tendereval.backend.db.RequestTransaction;
+import app.tendereval.backend.identity.SessionPolicy;
 import app.tendereval.backend.security.CurrentUser;
 import app.tendereval.backend.security.UserDirectory;
 import app.tendereval.backend.web.ApiException;
@@ -32,9 +33,15 @@ public class MeController implements SessionApi {
   private final AppProperties props;
   private final UserDirectory directory;
   private final AuditService audit;
+  private final SessionPolicy sessionPolicy;
 
   public MeController(
-      RequestTransaction tx, AppProperties props, UserDirectory directory, AuditService audit) {
+      RequestTransaction tx,
+      AppProperties props,
+      UserDirectory directory,
+      AuditService audit,
+      SessionPolicy sessionPolicy) {
+    this.sessionPolicy = sessionPolicy;
     this.tx = tx;
     this.props = props;
     this.directory = directory;
@@ -134,22 +141,22 @@ public class MeController implements SessionApi {
         db.sql("SELECT count(*) AS n FROM tenders WHERE deleted_at IS NULL AND archived_at IS NULL")
             .map((row, meta) -> row.get("n", Long.class))
             .one();
-    return Mono.zip(user, assigned, Settings.load(db))
+    return Mono.zip(user, assigned, Settings.load(db), sessionPolicy.idleTimeoutSeconds())
         .map(
             t ->
                 new Me()
                     .user(t.getT1())
                     .assignedTenderCount(t.getT2().intValue())
-                    .clientConfig(clientConfig(t.getT3())));
+                    .clientConfig(clientConfig(t.getT3(), t.getT4())));
   }
 
-  private ClientConfig clientConfig(Settings s) {
+  private ClientConfig clientConfig(Settings s, int idleTimeoutSeconds) {
     return new ClientConfig()
         .minNoteLength(s.minNoteLength())
         .uploadMaxBytes((int) Math.min(Integer.MAX_VALUE, s.uploadMaxBytes()))
         .acceptedFormats(List.of("pdf", "docx"))
         .lowConfidenceThreshold(s.lowConfidenceThreshold())
-        .sessionIdleTimeoutSeconds(props.sessionIdleTimeoutSeconds())
+        .sessionIdleTimeoutSeconds(idleTimeoutSeconds)
         .sessionWarningSeconds(s.sessionWarningSeconds());
   }
 }
