@@ -1,0 +1,36 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Build output
+build/
+.gradle/
+.kotlin/
+out/
+target/
+node_modules/
+dist/
+coverage/
+.vite/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Generated from api/openapi.yaml (make api); not committed
+backend/build/generated/
+frontend/src/api/generated/
+
+# Local tooling
+.idea/
+.vscode/
+*.log
+.DS_Store
+.claude/settings.local.json
