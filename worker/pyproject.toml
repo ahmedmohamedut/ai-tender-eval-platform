@@ -1,0 +1,40 @@
+[project]
+name = "tender-worker"
+version = "0.1.0"
+description = "AI Tender Evaluation Platform worker: one image, two roles (ingest, agent)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pydantic==2.14.1",
+    "pydantic-settings==2.15.0",
+    "nats-py==2.16.0",
+    "aioboto3==15.5.0",
+    "aiohttp==3.14.5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.17.0",
+    "testcontainers==4.15.0",
+]
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tender_worker"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = ["integration: needs Docker (real NATS and RustFS containers)"]
+addopts = "-m 'not integration'"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

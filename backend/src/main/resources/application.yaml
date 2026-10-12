@@ -1,0 +1,51 @@
+# Every key without a default is required: an unset environment variable stops the
+# application at start (PI 7.1). Names follow PI 7.3.
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: tender-backend
+  webflux:
+    base-path: /api/v1
+  r2dbc:
+    url: ${DB_URL}
+    username: ${DB_APP_USERNAME}
+    password: ${DB_APP_PASSWORD}
+    pool:
+      max-size: ${DB_POOL_MAX_SIZE:20}
+  flyway:
+    # Migrations run as the owner role over JDBC; the application never owns a table.
+    url: ${DB_MIGRATION_URL}
+    user: ${DB_MIGRATION_USERNAME}
+    password: ${DB_MIGRATION_PASSWORD}
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,r2dbc,nats
+
+app:
+  public-base-url: ${PUBLIC_BASE_URL}
+  keycloak-issuer-uri: ${KEYCLOAK_ISSUER_URI}
+  keycloak-jwk-set-uri: ${KEYCLOAK_JWK_SET_URI}
+  keycloak-audience: ${KEYCLOAK_AUDIENCE:tender-api}
+  spa-client-id: ${SPA_CLIENT_ID:tender-spa}
+  nats-url: ${NATS_URL}
+  dev-endpoints: ${APP_DEV_ENDPOINTS:false}
+
+logging:
+  level:
+    root: ${LOG_LEVEL:info}
