@@ -1,0 +1,57 @@
+{
+	admin off
+	auto_https off
+	servers {
+		timeouts {
+			read_header 30s
+			read_body   15m
+			idle        5m
+		}
+	}
+}
+
+# Health of the gateway itself, used by the compose health check.
+:8081 {
+	respond /healthz 200
+}
+
+:8080 {
+	# Runtime configuration of the single-page application (PI 7.5). No secret.
+	handle /config.json {
+		header Content-Type application/json
+		header Cache-Control no-store
+		respond `{"apiBaseUrl":"/api/v1","oidcAuthority":"{$KEYCLOAK_PUBLIC_URL}/realms/tender-eval","oidcClientId":"tender-spa","oidcRedirectUri":"{$PUBLIC_BASE_URL}/","postLogoutRedirectUri":"{$PUBLIC_BASE_URL}/"}` 200
+	}
+
+	# Server-sent events: never buffered.
+	handle /api/v1/events {
+		reverse_proxy backend:8080 {
+			flush_interval -1
+			transport http {
+				read_timeout 15m
+				write_timeout 15m
+				response_header_timeout 15m
+			}
+		}
+	}
+
+	handle /api/* {
+		request_body {
+			max_size 120MiB
+		}
+		reverse_proxy backend:8080 {
+			flush_interval -1
+			transport http {
+				read_timeout 15m
+				write_timeout 15m
+				response_header_timeout 15m
+			}
+		}
+	}
+
+	handle {
+		root * /srv/spa
+		try_files {path} /index.html
+		file_server
+	}
+}

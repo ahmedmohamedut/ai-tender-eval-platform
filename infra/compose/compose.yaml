@@ -1,0 +1,255 @@
+# Local environment. Started by `make up` with the root .env file.
+# Host ports are bound to 127.0.0.1 and come from .env so they never clash with
+# a Postgres or NATS already running on the machine.
+name: tender-eval
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:18.6
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set in .env}
+    ports: ["127.0.0.1:${POSTGRES_PORT}:5432"]
+    volumes: [pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER:-postgres}"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  provision-db:
+    image: postgres:18.6
+    depends_on: { postgres: { condition: service_healthy } }
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_SUPERUSER:-postgres}
+      PGPASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TENDER_OWNER_PASSWORD: ${TENDER_OWNER_PASSWORD:?}
+      TENDER_APP_PASSWORD: ${TENDER_APP_PASSWORD:?}
+      TENDER_AI_INGEST_PASSWORD: ${TENDER_AI_INGEST_PASSWORD:?}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?}
+    volumes: ["../postgres:/provision:ro"]
+    entrypoint: ["sh", "/provision/provision.sh"]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.0
+    <<: *restart
+    depends_on:
+      provision-db: { condition: service_completed_successfully }
+      mailpit: { condition: service_healthy }
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME: ${KEYCLOAK_PUBLIC_URL}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      # Realm import placeholders (PI 7.5)
+      SPA_BASE_URL: ${SPA_BASE_URL}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      KEYCLOAK_BACKEND_ADMIN_SECRET: ${KEYCLOAK_BACKEND_ADMIN_SECRET}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
+      BOOTSTRAP_ADMIN_TEMP_PASSWORD: ${BOOTSTRAP_ADMIN_TEMP_PASSWORD}
+    ports: ["127.0.0.1:${KEYCLOAK_PORT}:8080"]
+    volumes:
+      - ../keycloak/tender-eval-realm.json:/opt/keycloak/data/import/tender-eval-realm.json:ro
+    healthcheck:
+      # The image has no curl: speak HTTP over /dev/tcp to the management port.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+
+  openbao:
+    image: openbao/openbao:2.7.1
+    <<: *restart
+    command: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200"]
+    environment:
+      BAO_DEV_ROOT_TOKEN_ID: ${OPENBAO_DEV_ROOT_TOKEN}
+    cap_add: [IPC_LOCK]
+    ports: ["127.0.0.1:${OPENBAO_PORT}:8200"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8200/v1/sys/health >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  provision-openbao:
+    image: openbao/openbao:2.7.1
+    depends_on: { openbao: { condition: service_healthy } }
+    restart: "no"
+    environment:
+      BAO_ADDR: http://openbao:8200
+      BAO_TOKEN: ${OPENBAO_DEV_ROOT_TOKEN}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      KEYCLOAK_BACKEND_ADMIN_SECRET: ${KEYCLOAK_BACKEND_ADMIN_SECRET}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      PHOENIX_SECRET: ${PHOENIX_SECRET}
+      TENDER_APP_PASSWORD: ${TENDER_APP_PASSWORD}
+      TENDER_AI_INGEST_PASSWORD: ${TENDER_AI_INGEST_PASSWORD}
+    volumes: ["../openbao:/provision:ro"]
+    entrypoint: ["sh", "/provision/provision.sh"]
+
+  rustfs:
+    image: rustfs/rustfs:1.0.1
+    <<: *restart
+    depends_on: { nats: { condition: service_healthy } }
+    environment:
+      # Bucket events to NATS. Only RUSTFS_NOTIFY_NATS_ADDRESS is documented; the
+      # ENABLE and SUBJECT keys were found by experiment on 1.0.1 (docs/decisions.md D5).
+      RUSTFS_NOTIFY_ENABLE: "true"
+      RUSTFS_NOTIFY_NATS_ENABLE_PRIMARY: "on"
+      RUSTFS_NOTIFY_NATS_ADDRESS_PRIMARY: nats:4222
+      RUSTFS_NOTIFY_NATS_SUBJECT_PRIMARY: documents.uploaded
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    ports:
+      - "127.0.0.1:${RUSTFS_PORT}:9000"
+      - "127.0.0.1:${RUSTFS_CONSOLE_PORT}:9001"
+    volumes: [rustfsdata:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/health >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  provision-rustfs:
+    image: amazon/aws-cli:latest
+    depends_on: { rustfs: { condition: service_healthy } }
+    restart: "no"
+    environment:
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY}
+      AWS_DEFAULT_REGION: ${S3_REGION}
+      S3_ENDPOINT: http://rustfs:9000
+    volumes: ["../rustfs:/provision:ro"]
+    entrypoint: ["sh", "/provision/provision.sh"]
+
+  nats:
+    image: nats:2.15.0-alpine
+    <<: *restart
+    command: ["-js", "-m", "8222", "-sd", "/data"]
+    ports:
+      - "127.0.0.1:${NATS_PORT}:4222"
+      - "127.0.0.1:${NATS_MONITOR_PORT}:8222"
+    volumes: [natsdata:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8222/healthz >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  provision-nats:
+    image: natsio/nats-box:latest
+    depends_on: { nats: { condition: service_healthy } }
+    restart: "no"
+    environment:
+      NATS_URL: nats://nats:4222
+    volumes: ["../nats:/provision:ro"]
+    entrypoint: ["sh", "/provision/provision.sh"]
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    <<: *restart
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+      QDRANT__SERVICE__READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+    ports: ["127.0.0.1:${QDRANT_PORT}:6333"]
+    volumes: [qdrantdata:/qdrant/storage]
+    healthcheck:
+      # No curl in the image and /bin/sh is dash: use bash and /dev/tcp.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/6333 &&
+          printf 'GET /readyz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          grep -q '200 OK' <&3
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  phoenix:
+    image: arizephoenix/phoenix:version-20.21
+    <<: *restart
+    environment:
+      PHOENIX_PORT: "6006"
+      PHOENIX_WORKING_DIR: /data
+      # Authentication is off locally; PI 7.5 requires it on in shared environments.
+      PHOENIX_ENABLE_AUTH: "false"
+    ports: ["127.0.0.1:${PHOENIX_PORT}:6006"]
+    volumes: [phoenixdata:/data]
+    healthcheck:
+      test:
+        - CMD
+        - /usr/bin/python3.13
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6006/healthz', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    <<: *restart
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT}:1025"
+      - "127.0.0.1:${MAILPIT_HTTP_PORT}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  gateway:
+    image: caddy:2.11.7-alpine
+    <<: *restart
+    environment:
+      KEYCLOAK_PUBLIC_URL: ${KEYCLOAK_PUBLIC_URL}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+    ports: ["127.0.0.1:${GATEWAY_PORT}:8080"]
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../../frontend/dist:/srv/spa:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/healthz >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+  rustfsdata:
+  natsdata:
+  qdrantdata:
+  phoenixdata:

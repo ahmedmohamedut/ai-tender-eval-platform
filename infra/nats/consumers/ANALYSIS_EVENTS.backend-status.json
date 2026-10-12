@@ -1,0 +1,10 @@
+{
+  "durable_name": "backend-status",
+  "ack_policy": "explicit",
+  "ack_wait": 30000000000,
+  "max_ack_pending": 64,
+  "max_deliver": 10,
+  "filter_subject": "documents.analysis.status.>",
+  "deliver_policy": "all",
+  "replay_policy": "instant"
+}

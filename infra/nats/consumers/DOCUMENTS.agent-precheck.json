@@ -1,0 +1,10 @@
+{
+  "durable_name": "agent-precheck",
+  "ack_policy": "explicit",
+  "ack_wait": 120000000000,
+  "max_ack_pending": 2,
+  "max_deliver": 3,
+  "filter_subject": "documents.analysis.requested.screening_precheck",
+  "deliver_policy": "all",
+  "replay_policy": "instant"
+}

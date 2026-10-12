@@ -1,0 +1,10 @@
+{
+  "durable_name": "backend-results",
+  "ack_policy": "explicit",
+  "ack_wait": 30000000000,
+  "max_ack_pending": 16,
+  "max_deliver": 10,
+  "filter_subject": "documents.analysis.result.>",
+  "deliver_policy": "all",
+  "replay_policy": "instant"
+}

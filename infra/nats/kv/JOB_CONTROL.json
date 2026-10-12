@@ -1,0 +1,7 @@
+{
+  "bucket": "JOB_CONTROL",
+  "description": "cancel.{job_id} keys and sealed result parts part.{job_id}.{part_no} (PI 5.1)",
+  "ttl_seconds": 604800,
+  "history": 1,
+  "replicas": 1
+}

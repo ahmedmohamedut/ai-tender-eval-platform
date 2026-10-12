@@ -1,0 +1,10 @@
+{
+  "durable_name": "ingest-commands",
+  "ack_policy": "explicit",
+  "ack_wait": 60000000000,
+  "max_ack_pending": 8,
+  "max_deliver": 5,
+  "filter_subject": "documents.analysis.requested.document_processing",
+  "deliver_policy": "all",
+  "replay_policy": "instant"
+}

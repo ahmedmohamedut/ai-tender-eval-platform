@@ -17,4 +17,17 @@ Phase 0 tooling choices, assumptions and known gaps. Newest decisions are added 
 
 ## Assumptions and gaps
 
-Filled in as milestones complete.
+| # | Item | Status |
+| --- | --- | --- |
+| D1 | Host ports are non-standard (`.env.example`) because 5432, 4222 and 9000 are commonly taken. `make up` checks them first. | Decision |
+| D2 | Database roles are `tender_owner` (migrations only), `tender_app`, `tender_ai_ingest`, named as in PI 7.5. Implementation guide 5.4 writes `tender-app` and `tender-ai-ingest` and lists two roles; PI wins (higher source) and the guide is corrected. The application roles own nothing, have no DELETE by default and are NOSUPERUSER NOBYPASSRLS. | Decision, verified |
+| D3 | Realm roles are `procurement_admin`, `committee_member`, `observer` (realm file, PI 3.2). The backend maps them to admin, member, observer. Implementation guide 4.3 and AGENTS.md use the short names for the platform roles. | Decision |
+| D4 | The realm file imports cleanly on Keycloak 26.8.0 (design tested 26.4.2). The bootstrap administrator signs in with code + PKCE, is forced to change the temporary password, and the token has `iss`, `aud` `tender-api`, `azp` `tender-spa` and `roles` `["procurement_admin"]`. | Verified by `infra/scripts/signin_check.py` |
+| D5 | PI Q2 (bucket events to NATS) is resolved by experiment on RustFS 1.0.1. The docs name only `RUSTFS_NOTIFY_NATS_ADDRESS`. `RUSTFS_NOTIFY_NATS_ENABLE_<NAME>=on`, `RUSTFS_NOTIFY_NATS_ADDRESS_<NAME>` and `RUSTFS_NOTIFY_NATS_SUBJECT_<NAME>` work, with a bucket queue configuration whose `QueueArn` is `arn:rustfs:sqs:<region>:<name>:nats`. The event carries `EventName`, a top-level `Key` (`bucket/key`), and `Records[0].s3.object.key` URL-encoded, with `size` and `eTag` present. The extra keys are undocumented, so a RustFS upgrade must re-run `make verify-env`. A HEAD request remains the source of size and ETag (PI 4.3). | Verified, undocumented upstream |
+| D6 | RustFS: delete-deny bucket policy is enforced (even for the root key) and lifecycle rules are accepted and read back; actual expiry after 90 days was not observed. Versioning and Object Lock are not attempted (need erasure coding on 4 or more drives, PI Q3). Per-component access keys (PI 4.5) are not created locally; every component would use the root key. | Gap |
+| D7 | OpenBao runs in dev mode and holds the PI 7.2 paths, but components read their secrets from environment variables locally (`.env` is allowed for local development). The AppRole client in the worker (AI 2.1, PI Q4) and in the backend lands with the shared development environment. | Gap |
+| D8 | Local transport is plain HTTP, NATS has no authentication or TLS, Phoenix authentication is off. PI 5.11 and PI 7.5 require NKey users, TLS and Phoenix authentication in shared environments. | Gap |
+| D9 | The gateway body limit is 120 MiB (`request_body max_size 120MiB`) and every proxy timeout is 15 minutes. The limit is enforced while the body is read, so the backend must be reachable for a 413. | Decision, verified with a stub upstream |
+| D10 | `make up` waits with `infra/scripts/wait-healthy.sh`, not `docker compose --wait`, because compose treats a one-shot that exited 0 as a failure under `--wait`. | Decision |
+| D11 | Qdrant collection creation (AI 2.7 step 3, AI 3.4) is not in Phase 0. `/readyz` of the worker only checks that Qdrant answers. | Deferred to Phase 2 |
+| D12 | Phoenix runs from the `version-20.21` tag; the Qdrant image has no curl, so its health check uses bash and `/dev/tcp`. | Decision |
