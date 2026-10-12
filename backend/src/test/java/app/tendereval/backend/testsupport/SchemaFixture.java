@@ -28,9 +28,24 @@ public final class SchemaFixture {
             .formatted(container.getHost(), container.getMappedPort(5432), PostgresFixture.DB);
     Flyway.configure()
         .dataSource(jdbcUrl, "tender_owner", PostgresFixture.OWNER_PASSWORD)
-        .locations("classpath:db/migration")
+        .locations("classpath:db/migration", "classpath:db/test-migration")
         .load()
         .migrate();
+  }
+
+  /** A fresh, provisioned and migrated database on the shared server. Returns its JDBC URL. */
+  public static synchronized String createDatabase(String name) {
+    ensureStarted();
+    PostgresFixture.provision(container, name);
+    String url =
+        "jdbc:postgresql://%s:%d/%s"
+            .formatted(container.getHost(), container.getMappedPort(5432), name);
+    Flyway.configure()
+        .dataSource(url, "tender_owner", PostgresFixture.OWNER_PASSWORD)
+        .locations("classpath:db/migration", "classpath:db/test-migration")
+        .load()
+        .migrate();
+    return url;
   }
 
   public static String jdbcUrl() {

@@ -24,6 +24,24 @@ public class Problems {
 
   public Mono<Void> write(
       ServerWebExchange exchange, HttpStatusCode status, String code, String title) {
+    return write(exchange, status, code, title, Map.of(), Map.of());
+  }
+
+  public Mono<Void> write(ServerWebExchange exchange, ApiException e) {
+    Map<String, Object> extra = new LinkedHashMap<>(e.extra());
+    if (!e.errors().isEmpty()) {
+      extra.put("errors", e.errors());
+    }
+    return write(exchange, e.status(), e.code(), e.getMessage(), extra, e.headers());
+  }
+
+  public Mono<Void> write(
+      ServerWebExchange exchange,
+      HttpStatusCode status,
+      String code,
+      String title,
+      Map<String, Object> extra,
+      Map<String, String> headers) {
     if (exchange.getResponse().isCommitted()) {
       return Mono.empty();
     }
@@ -33,6 +51,8 @@ public class Problems {
     body.put("status", status.value());
     body.put("code", code);
     body.put("trace_id", TraceFilter.traceId(exchange));
+    body.putAll(extra);
+    headers.forEach((k, v) -> exchange.getResponse().getHeaders().set(k, v));
     exchange.getResponse().setStatusCode(status);
     exchange.getResponse().getHeaders().setContentType(PROBLEM_JSON);
     exchange.getResponse().getHeaders().setCacheControl("no-store");
@@ -60,14 +80,43 @@ public class Problems {
       }
       first = false;
       sb.append('"').append(escape(e.getKey())).append("\":");
-      Object v = e.getValue();
-      if (v instanceof Number) {
-        sb.append(v);
-      } else {
-        sb.append('"').append(escape(String.valueOf(v))).append('"');
-      }
+      sb.append(value(e.getValue()));
     }
     return sb.append('}').toString();
+  }
+
+  private static String value(Object v) {
+    if (v == null) {
+      return "null";
+    }
+    if (v instanceof Number || v instanceof Boolean) {
+      return String.valueOf(v);
+    }
+    if (v instanceof Map<?, ?> m) {
+      Map<String, Object> copy = new LinkedHashMap<>();
+      m.forEach((k, val) -> copy.put(String.valueOf(k), val));
+      return toJson(copy);
+    }
+    if (v instanceof Iterable<?> it) {
+      StringBuilder sb = new StringBuilder("[");
+      boolean first = true;
+      for (Object o : it) {
+        if (!first) {
+          sb.append(',');
+        }
+        first = false;
+        sb.append(value(o));
+      }
+      return sb.append(']').toString();
+    }
+    if (v instanceof ApiException.FieldError f) {
+      Map<String, Object> m = new LinkedHashMap<>();
+      m.put("field", f.field());
+      m.put("code", f.code());
+      m.put("message", f.message());
+      return toJson(m);
+    }
+    return '"' + escape(String.valueOf(v)) + '"';
   }
 
   private static String escape(String s) {

@@ -35,13 +35,18 @@ public final class PostgresFixture {
 
   /** Runs the provisioning script twice: it must be safe to repeat. */
   private static void provision(PostgreSQLContainer pg) {
+    provision(pg, DB);
+  }
+
+  /** Creates and provisions a further database on the same server (for isolated scenarios). */
+  public static void provision(PostgreSQLContainer pg, String database) {
     for (int i = 0; i < 2; i++) {
       try {
         ExecResult r =
             pg.execInContainer(
                 "env",
                 "PGUSER=postgres",
-                "POSTGRES_DB=" + DB,
+                "POSTGRES_DB=" + database,
                 "TENDER_OWNER_PASSWORD=" + OWNER_PASSWORD,
                 "TENDER_APP_PASSWORD=" + APP_PASSWORD,
                 "TENDER_AI_INGEST_PASSWORD=" + INGEST_PASSWORD,

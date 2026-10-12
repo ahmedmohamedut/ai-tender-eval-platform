@@ -1,10 +1,14 @@
 package app.tendereval.backend.testsupport;
 
+import app.tendereval.backend.common.Idempotency;
 import app.tendereval.backend.db.RequestTransaction;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
@@ -14,9 +18,34 @@ import reactor.core.publisher.Mono;
 public class ProbeController {
 
   private final RequestTransaction tx;
+  private final Idempotency idempotency;
+  public final AtomicInteger executions = new AtomicInteger();
 
-  public ProbeController(RequestTransaction tx) {
+  public ProbeController(RequestTransaction tx, Idempotency idempotency) {
     this.tx = tx;
+    this.idempotency = idempotency;
+  }
+
+  public record Started(int execution, String value) {}
+
+  @PostMapping("/_test/idem")
+  public Mono<ResponseEntity<Started>> idem(
+      @RequestHeader(value = "Idempotency-Key", required = false) String header,
+      @RequestParam String value) {
+    String key = Idempotency.requireKey(header);
+    return tx.asUser(
+        (db, user) ->
+            idempotency.run(
+                db,
+                user.id(),
+                key,
+                "POST /_test/idem",
+                Idempotency.hash(value),
+                Started.class,
+                () ->
+                    Mono.just(
+                        ResponseEntity.accepted()
+                            .body(new Started(executions.incrementAndGet(), value)))));
   }
 
   @GetMapping("/_test/context")

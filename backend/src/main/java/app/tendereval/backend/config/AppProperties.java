@@ -18,4 +18,11 @@ public record AppProperties(
     @NotBlank String keycloakAudience,
     @NotBlank String spaClientId,
     @NotBlank String natsUrl,
-    boolean devEndpoints) {}
+    boolean devEndpoints,
+    String bootstrapAdminEmail,
+    int userStatusCacheSeconds,
+    int sessionIdleTimeoutSeconds,
+    int rateLimitUploadsPerMinute,
+    int rateLimitSearchPerMinute,
+    int rateLimitJobStartsPerMinute,
+    int rateLimitExportsPerMinute) {}

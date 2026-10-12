@@ -46,6 +46,13 @@ app:
   spa-client-id: ${SPA_CLIENT_ID:tender-spa}
   nats-url: ${NATS_URL}
   dev-endpoints: ${APP_DEV_ENDPOINTS:false}
+  bootstrap-admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
+  user-status-cache-seconds: ${USER_STATUS_CACHE_SECONDS:30}
+  session-idle-timeout-seconds: ${SESSION_IDLE_TIMEOUT_SECONDS:1800}
+  rate-limit-uploads-per-minute: ${RATE_LIMIT_UPLOADS_PER_MINUTE:10}
+  rate-limit-search-per-minute: ${RATE_LIMIT_SEARCH_PER_MINUTE:120}
+  rate-limit-job-starts-per-minute: ${RATE_LIMIT_JOB_STARTS_PER_MINUTE:20}
+  rate-limit-exports-per-minute: ${RATE_LIMIT_EXPORTS_PER_MINUTE:10}
 
 logging:
   level:

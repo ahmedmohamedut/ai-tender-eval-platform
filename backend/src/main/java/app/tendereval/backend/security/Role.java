@@ -24,6 +24,15 @@ public enum Role {
     return platformName;
   }
 
+  public static Optional<Role> fromPlatformName(String name) {
+    for (Role r : values()) {
+      if (r.platformName.equals(name)) {
+        return Optional.of(r);
+      }
+    }
+    return Optional.empty();
+  }
+
   public static Optional<Role> fromRealmRole(String realmRole) {
     for (Role r : values()) {
       if (r.realmRole.equals(realmRole)) {

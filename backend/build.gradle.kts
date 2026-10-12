@@ -54,13 +54,15 @@ openApiGenerate {
     apiPackage = "app.tendereval.backend.api"
     modelPackage = "app.tendereval.backend.api.model"
     invokerPackage = "app.tendereval.backend.api.invoker"
+    // Replaces the generator's default method body (which returns example data with 501).
+    templateDir.set(layout.projectDirectory.dir("openapi-templates").asFile.absolutePath)
     globalProperties = mapOf("apis" to "", "models" to "", "supportingFiles" to "false")
     configOptions = mapOf(
         "interfaceOnly" to "true",
         "reactive" to "true",
         "useSpringBoot3" to "true",
         "useTags" to "true",
-        "skipDefaultInterface" to "true",
+        "skipDefaultInterface" to "false",
         "documentationProvider" to "none",
         "openApiNullable" to "false",
         "useBeanValidation" to "true",
