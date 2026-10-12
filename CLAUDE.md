@@ -49,11 +49,12 @@ The plan names the requirement IDs served, the contract files that change first,
 - Use a separate reviewing agent, which has not seen the work being produced, for changes to row-level security, the grounding checks, the message loop or anything in the list of rules that must never be broken in `AGENTS.md`.
 - Give each subagent the exact section numbers to read and the question to answer, so it does not re-derive context.
 
-## Suggested project automation
+## Project automation
 
-Not set up yet. Add them when the repository has code, and list them here:
+Exists: CI (`.github/workflows/ci.yml`) with lint, generation, schema drift, unit, integration, image builds, the walking slice and a secret scan; `make verify-env`; Dependabot.
+
+Not set up yet. Add them when the code needs them, and list them here:
 
 - A pre-commit hook for formatting and secret scanning.
-- A check that fails when `api/openapi.yaml` changes without regenerated clients.
 - A check that fails when a prompt file changes without a version bump (the build hashes every prompt file, AI 4.7).
 - A skill or command that, given a requirement ID, prints the requirement, its screens and the tables it touches (the traceability tables in `03-...` and `01-...` already hold this).

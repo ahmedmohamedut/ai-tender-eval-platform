@@ -8,7 +8,7 @@ AI Tender Evaluation Platform. A procurement committee uploads an RFP and vendor
 
 Components: React SPA, Spring Boot reactive REST API (the only writer of business data), PostgreSQL with row-level security, Keycloak, OpenBao, RustFS (S3), NATS JetStream, one Python worker image in two roles (`ingest`, `agent`), Qdrant, Arize Phoenix.
 
-Status: design complete, code not started. Check the repository before assuming a file exists.
+Status: design complete; Phase 0 scaffold in place (environment, contract pipeline, CI, walking slice); no business feature yet. Check the repository before assuming a file exists.
 
 ## Read before you change anything
 
@@ -66,17 +66,25 @@ frontend/    React application
 
 ## Commands
 
-No commands exist yet. Phase 0 creates a root entry point (a `Makefile` or a task runner) with these names. Replace this section with the real commands as they appear, and keep them exact.
+Run from the repository root. Each command below exists and was run (see `docs/decisions.md` for what was and was not verified).
 
-| Intent | Name to provide |
+| Intent | Command |
 | --- | --- |
-| Start the whole local environment with realm imported, buckets, streams, collection and migrations ready | `make up` |
+| Start the whole local environment (realm imported, buckets, streams, consumers, KV bucket, database roles and migrations ready; applications built and started). Returns only when every service is healthy. | `make up` |
+| Start only the dependencies, without backend and workers | `make up-infra` |
 | Stop it | `make down` |
-| Run every test suite | `make test` |
-| Lint and format check everything | `make lint` |
-| Lint the OpenAPI file and regenerate the server interfaces and the typed client | `make api` |
-| Export JSON Schemas from the Pydantic message models | `make contracts` |
-| Run the AI evaluation set | `make eval` |
+| Stop it and delete local volumes | `make clean` |
+| Check the provisioned environment (roles, buckets, streams, consumers, secret paths, gateway limits, bootstrap sign-in) | `make verify-env` |
+| Run every test suite: unit, integration (Docker), walking slice | `make test` |
+| Unit tests only (no Docker) | `make test-unit` |
+| Integration tests only (PostgreSQL, NATS, RustFS containers) | `make test-integration` |
+| Walking slice only (starts the environment if needed) | `make test-slice` |
+| Lint and format check everything, including schema drift | `make lint` |
+| Lint the OpenAPI file; generate and compile the server interfaces; generate the typed client | `make api` |
+| Export JSON Schemas from the Pydantic message models and test the backend against them | `make contracts` |
+| Run the AI evaluation set | `make eval` (not yet: no evaluation set exists) |
+
+Per component: `cd backend && ./gradlew test integrationTest spotlessApply`, `cd worker && uv run pytest` (add `-m integration` for the container tests) and `cd frontend && npm test`. Generated code (`backend/build/generated`, `frontend/src/api/generated`) is never committed. Ports on the host are in `.env` (copied from `.env.example` by `make up`).
 
 ## Conventions
 

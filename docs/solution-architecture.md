@@ -54,7 +54,7 @@ flowchart TB
     llm["Model endpoint"]
     spa -- "REST + SSE, bearer token" --> gw --> api
     spa -- "OIDC code + PKCE" --> kc
-    api -- "tender-app and tender-ai-ingest roles" --> pg
+    api -- "tender_app and tender_ai_ingest roles" --> pg
     api -- "stream uploads, views, exports" --> s3
     api -- "commands, push hints, cancel keys" --> nats
     nats -- "status and result messages" --> api

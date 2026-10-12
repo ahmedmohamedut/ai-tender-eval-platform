@@ -219,14 +219,14 @@ Key rules:
 
 ### 4.3 The upload event
 
-RustFS publishes S3-style bucket events to NATS. The documented payload carries `EventName` and a `Records` array with `eventName`, `s3.bucket.name` and `s3.object.key`, and keys arrive URL-encoded. The worker therefore:
+RustFS publishes S3-style bucket events to NATS. The payload carries `EventName`, a top-level `Key` (`bucket/key`) and a `Records` array. Tested on RustFS 1.0.1: each record holds the S3 record under `data.s3` (`s3.bucket.name`, `s3.object.key`, and also `s3.object.size` and `s3.object.eTag`) and repeats the names as `bucket_name` and `object_name`; the documented shape has `s3` directly under the record. Keys arrive URL-encoded. The worker accepts all three shapes (`tender_worker/keys.py`) and therefore:
 
 - decodes the key and accepts only `tender-documents` keys that match `originals/{uuid}/{uuid}/{uuid}.(pdf|docx)`; anything else is acknowledged and ignored;
 - takes `tender_id`, `document_id` and `document_version_id` from the key, because it is not documented whether user metadata comes with the event;
 - reads size, ETag and content type with a HEAD request, not from the event;
 - treats a repeated event as normal: if `manifest.json` already exists for the same source hash, it only re-announces completion.
 
-Setup: set `RUSTFS_NOTIFY_ENABLE` and the NATS target (`RUSTFS_NOTIFY_NATS_ADDRESS` is the one NATS key the reference documents), then attach a queue configuration to `tender-documents` with `PutBucketNotificationConfiguration`. Only queue configurations are accepted. Section 8 lists what to confirm on the deployed version.
+Setup: set `RUSTFS_NOTIFY_ENABLE` and the NATS target. The reference documents only `RUSTFS_NOTIFY_NATS_ADDRESS`; on 1.0.1 the target `primary` works with `RUSTFS_NOTIFY_NATS_ENABLE_PRIMARY=on`, `RUSTFS_NOTIFY_NATS_ADDRESS_PRIMARY` and `RUSTFS_NOTIFY_NATS_SUBJECT_PRIMARY` (found by experiment, `docs/decisions.md` D5; credentials and TLS keys were not tried). Then attach a queue configuration to `tender-documents` with `PutBucketNotificationConfiguration`. Only queue configurations are accepted. Section 8 lists what to confirm on the deployed version.
 
 ### 4.4 Upload path
 
@@ -692,7 +692,7 @@ Thirteen points need a decision or a check on the deployed system. Each row name
 | # | Question | Why it matters | Default in this design |
 | --- | --- | --- | --- |
 | 1 | Which model endpoint may receive proposals, and where does it run? | The RFP and every proposal leave the platform in prompts, and could be stored in traces. | Only an endpoint the organisation has approved, private or self-hosted. Traces keep no content (`TRACE_CAPTURE_CONTENT` false). |
-| 2 | Which RustFS keys set the NATS subject, credentials and TLS, and does the event carry size, ETag and user metadata? | The reference documents only `RUSTFS_NOTIFY_NATS_ADDRESS`, and its event example shows the event name, bucket and key. | The design works either way: ids come from the key, size and ETag from a HEAD request. |
+| 2 | Which RustFS keys set the NATS subject, credentials and TLS, and does the event carry size, ETag and user metadata? | The reference documents only `RUSTFS_NOTIFY_NATS_ADDRESS`, and its event example shows the event name, bucket and key. | The design works either way: ids come from the key, size and ETag from a HEAD request. Phase 0 result: subject, address and enable keys work on 1.0.1 and the event does carry size and ETag; credentials and TLS keys are still open. |
 | 3 | Which storage features does the deployed RustFS offer: versioning (needs erasure coding on at least 4 drives), Object Lock, lifecycle expiry, KMS through OpenBao Transit, conditional writes? | They would strengthen "never delete evidence" and the 90-day expiry of working copies. | None is relied on. Deletion is denied by policy, keys are never reused, and expiry falls back to a backend sweep. |
 | 4 | Do the worker and agent read OpenBao themselves? | The diagram links OpenBao to the backend only. | Yes, each with its own AppRole and policy (7.2). The alternative is injection by the deployment. |
 | 5 | Which OpenBao sign-in method does each environment use, and is the database engine available? | Dynamic Postgres users need the engine. | AppRole, and static secrets under `kv/` where the engine is missing. |

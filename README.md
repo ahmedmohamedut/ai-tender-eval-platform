@@ -6,7 +6,7 @@ A web platform that helps a procurement committee evaluate vendor proposals for 
 
 ## Status
 
-The design is complete and the code has not been written yet. The five design documents, the REST contract and the identity realm exist. The next step is Phase 0 of the [roadmap](docs/roadmap-plan.md).
+The design is complete. Phase 0 of the [roadmap](docs/roadmap-plan.md) is scaffolded: the local environment, the contract pipeline, CI and one walking slice (gateway, backend, PostgreSQL, NATS, worker) run. No business feature exists yet. What was assumed and what is still open is in [`docs/decisions.md`](docs/decisions.md).
 
 ## What it does
 
@@ -81,11 +81,30 @@ frontend/    React application
 
 ## Getting started
 
-There is no code to run yet. To start building:
+You need Docker with Compose v2, GNU make, Node 22.12 or newer, [uv](https://docs.astral.sh/uv/), `curl`, `jq` and `bc`. Java 25 and Python 3.12 are downloaded by Gradle and uv on first use. Roughly 6 GB of memory and 10 GB of disk are enough.
 
-1. Read the [roadmap](docs/roadmap-plan.md), Phase 0, and close the decisions it lists.
-2. Follow the [implementation guide](docs/implementation-guide.md), sections 2 and 3, to create the repository skeleton and the local environment.
-3. Record the real commands in this section and in `AGENTS.md` as soon as they exist: start the environment, run all tests, lint, regenerate the API client and the message schemas.
+```bash
+git clone https://github.com/ahmedmohamedut/ai-tender-eval-platform.git
+cd ai-tender-eval-platform
+make up            # creates .env from .env.example, builds, starts, waits until everything is healthy
+make verify-env    # roles, buckets, streams, secret paths, gateway limits, bootstrap sign-in
+make test          # unit, integration (Docker) and the walking slice
+make down
+```
+
+| Where | What |
+| --- | --- |
+| http://localhost:18080 | Gateway: the single-page application and `/api/v1` |
+| http://localhost:18081 | Keycloak. Sign in as `BOOTSTRAP_ADMIN_EMAIL` with `BOOTSTRAP_ADMIN_TEMP_PASSWORD` from `.env` (you are asked to change it). Admin console: `KC_BOOTSTRAP_ADMIN_*`. |
+| http://localhost:18025 | Mail catcher |
+| http://localhost:19001 | RustFS console |
+| http://localhost:16006 | Phoenix |
+
+All values in `.env.example` are throwaway development values. Host ports are non-standard on purpose; change them in `.env`.
+
+Other commands: `make lint`, `make api` (lint the contract, generate server interfaces and the typed client), `make contracts` (export message schemas), `make up-infra` (dependencies only), `make clean` (delete local data). The full list is in [`AGENTS.md`](AGENTS.md).
+
+Before building a feature read [`AGENTS.md`](AGENTS.md), then the [implementation guide](docs/implementation-guide.md), sections 1 and 12.
 
 ## Principles that shape every change
 

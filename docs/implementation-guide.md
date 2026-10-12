@@ -129,14 +129,15 @@ The read and write rules are tables in DM, Independence and access. Implement ea
 - The application connects with a role that **does not own the tables**, so it cannot disable policies.
 - `audit_events` and `document_access_events` allow insert and select only.
 
-### 5.4 Two database roles
+### 5.4 Database roles
 
 | Role | Used for | Can |
 | --- | --- | --- |
-| `tender-app` | The request path | Read and write application data with policies applied |
-| `tender-ai-ingest` | The result handler only | Insert AI tables, passages and AI-origin requirements. Cannot read `member_evaluation_rows`, so AI output never depends on a human decision. |
+| `tender_owner` | Migrations only (Flyway), never at runtime | Owns every table, so no runtime role does |
+| `tender_app` | The request path | Read and write application data with policies applied |
+| `tender_ai_ingest` | The result handler only | Insert AI tables, passages and AI-origin requirements. Cannot read `member_evaluation_rows`, so AI output never depends on a human decision. |
 
-Credentials come from OpenBao (`database/creds/tender-app`, `database/creds/tender-ai-ingest`) where the database engine is available, otherwise static secrets under `kv/tender-eval/backend/`. Dynamic users live 24 hours and are renewed at two thirds of their life; pools drain and reconnect on renewal.
+The database role names use underscores as in PI 7.5; the OpenBao role names below keep their hyphens (PI 7.2). Credentials come from OpenBao (`database/creds/tender-app`, `database/creds/tender-ai-ingest`) where the database engine is available, otherwise static secrets under `kv/tender-eval/backend/`. Dynamic users live 24 hours and are renewed at two thirds of their life; pools drain and reconnect on renewal.
 
 ## 6. Backend
 
@@ -179,7 +180,7 @@ Three backend timers close the gaps (PI 5.8): a job queued longer than `watchdog
 ### 6.4 Result and status handlers
 
 - Consumers `backend-status` and `backend-results` run on every backend instance. Delivery is at least once and not ordered, so **never rely on arrival order**.
-- Insert items with the producer's id and `ON CONFLICT DO NOTHING`. Persist through the `tender-ai-ingest` role.
+- Insert items with the producer's id and `ON CONFLICT DO NOTHING`. Persist through the `tender_ai_ingest` role.
 - Process a `completed` status only when the stored result batches match `result_parts` and `counts`; otherwise return the message with a 5-second delay.
 - For a document, set `ready` when the job is `completed` and the rows are stored. Read the parsed files named in the `parsed` result and insert `document_pages`, `document_sections`, `passages` in batches, then check counts.
 - Drop and log messages for jobs already in a terminal state.
