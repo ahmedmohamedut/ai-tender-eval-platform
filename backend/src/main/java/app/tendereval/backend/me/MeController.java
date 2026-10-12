@@ -7,6 +7,8 @@ import app.tendereval.backend.api.model.MeUpdate;
 import app.tendereval.backend.api.model.User;
 import app.tendereval.backend.api.model.UserRole;
 import app.tendereval.backend.api.model.UserStatus;
+import app.tendereval.backend.audit.AuditEntry;
+import app.tendereval.backend.audit.AuditService;
 import app.tendereval.backend.common.Settings;
 import app.tendereval.backend.config.AppProperties;
 import app.tendereval.backend.db.RequestTransaction;
@@ -29,11 +31,14 @@ public class MeController implements SessionApi {
   private final RequestTransaction tx;
   private final AppProperties props;
   private final UserDirectory directory;
+  private final AuditService audit;
 
-  public MeController(RequestTransaction tx, AppProperties props, UserDirectory directory) {
+  public MeController(
+      RequestTransaction tx, AppProperties props, UserDirectory directory, AuditService audit) {
     this.tx = tx;
     this.props = props;
     this.directory = directory;
+    this.audit = audit;
   }
 
   @Override
@@ -56,14 +61,33 @@ public class MeController implements SessionApi {
               }
               return tx.asUser(
                   (db, user) -> {
-                    Mono<Long> write =
+                    Mono<Void> write =
                         zone == null
-                            ? Mono.just(0L)
-                            : db.sql("UPDATE users SET time_zone = :tz WHERE id = :id")
-                                .bind("tz", zone)
+                            ? Mono.empty()
+                            : db.sql("SELECT time_zone FROM users WHERE id = :id")
                                 .bind("id", user.id())
-                                .fetch()
-                                .rowsUpdated();
+                                .map((row, meta) -> row.get("time_zone", String.class))
+                                .one()
+                                .flatMap(
+                                    old ->
+                                        old.equals(zone)
+                                            ? Mono.<Void>empty()
+                                            : db.sql(
+                                                    "UPDATE users SET time_zone = :tz WHERE id = :id")
+                                                .bind("tz", zone)
+                                                .bind("id", user.id())
+                                                .fetch()
+                                                .rowsUpdated()
+                                                .then(
+                                                    audit.record(
+                                                        db,
+                                                        user,
+                                                        AuditEntry.of(
+                                                                "user_updated", "user", user.id())
+                                                            .changed(
+                                                                java.util.Map.of("time_zone", old),
+                                                                java.util.Map.of("time_zone", zone))
+                                                            .build())));
                     return write.then(Mono.defer(() -> build(db, user.id().toString())));
                   });
             })

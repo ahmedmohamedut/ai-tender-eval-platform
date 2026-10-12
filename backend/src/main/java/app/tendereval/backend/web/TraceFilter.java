@@ -14,13 +14,14 @@ import reactor.core.publisher.Mono;
 public class TraceFilter implements WebFilter {
 
   public static final String ATTRIBUTE = "app.trace_id";
+  public static final String CONTEXT_KEY = "app.trace_id";
 
   @Override
   public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
     String id = TraceIds.traceIdOf(exchange.getRequest().getHeaders().getFirst("traceparent"));
     exchange.getAttributes().put(ATTRIBUTE, id);
     exchange.getResponse().getHeaders().set("X-Trace-Id", id);
-    return chain.filter(exchange);
+    return chain.filter(exchange).contextWrite(ctx -> ctx.put(CONTEXT_KEY, id));
   }
 
   public static String traceId(ServerWebExchange exchange) {
