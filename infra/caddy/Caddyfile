@@ -35,6 +35,15 @@
 		}
 	}
 
+	# Refuse by Content-Length before anything is proxied, so the limit holds even when
+	# the backend would answer first (401, 404) without reading the body. Chunked bodies
+	# without a length are still stopped by request_body below as they are read.
+	@tooLarge expression `{http.request.header.Content-Length} != "" && int({http.request.header.Content-Length}) > 125829120`
+	handle @tooLarge {
+		header Content-Type application/problem+json
+		respond `{"type":"about:blank","title":"Payload too large","status":413,"code":"payload_too_large"}` 413
+	}
+
 	handle /api/* {
 		request_body {
 			max_size 120MiB

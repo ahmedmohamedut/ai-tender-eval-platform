@@ -1,10 +1,10 @@
 # Single entry point (AGENTS.md "Commands"). Targets are added milestone by milestone.
 SHELL := /bin/bash
-COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml
+COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profile apps
 
 .PHONY: up up-infra down clean ps logs env verify-env \
 	api contracts contracts-check lint lint-worker lint-backend lint-frontend lint-api \
-	test test-unit test-integration test-worker test-backend test-frontend deps
+	test test-unit test-integration test-slice test-worker test-backend test-frontend deps
 
 .env:
 	cp .env.example .env
@@ -13,14 +13,18 @@ COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml
 env: .env
 
 ## Start the whole local environment and wait until every service is healthy.
-up: .env
+up: .env frontend/node_modules
 	@infra/scripts/preflight.sh
-	$(COMPOSE) up -d
+	cd frontend && npm run --silent build
+	$(COMPOSE) up -d --build
 	@infra/scripts/wait-healthy.sh
 	@$(COMPOSE) ps --format 'table {{.Service}}\t{{.Status}}'
 
 ## Dependencies only (no application containers).
-up-infra: up
+up-infra: .env
+	@infra/scripts/preflight.sh
+	docker compose --env-file .env -f infra/compose/compose.yaml up -d
+	@infra/scripts/wait-healthy.sh
 
 down:
 	$(COMPOSE) down
@@ -106,5 +110,10 @@ test-integration: worker/.venv
 	cd backend && ./gradlew --console=plain --quiet integrationTest --rerun
 	cd worker && uv run pytest -q -m integration
 
-## Everything, in order. The walking slice is added in M6.
-test: test-unit test-integration
+## Walking slice through the gateway: backend, PostgreSQL, NATS, worker and back.
+## Starts the environment if it is not running.
+test-slice: up
+	infra/scripts/walking-slice.sh
+
+## Everything, in order.
+test: test-unit test-integration test-slice

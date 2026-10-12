@@ -89,6 +89,11 @@ checks = {
     "azp is tender-spa": claims.get("azp") == "tender-spa",
     "exactly one role": claims.get("roles") == ["procurement_admin"],
 }
+if "--print-token" in sys.argv:
+    # Development only: lets scripts call the API as the bootstrap administrator.
+    print(f"TOKEN={token}")
+    print(f"SUB={claims.get('sub')}")
+    sys.exit(0 if all(checks.values()) else 1)
 for k, v in checks.items():
     print(("ok   " if v else "FAIL ") + k)
 print("claims:", json.dumps({k: claims.get(k) for k in ("iss", "aud", "azp", "roles", "email")}))

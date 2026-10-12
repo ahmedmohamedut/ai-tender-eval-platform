@@ -3,7 +3,7 @@
 # provision-* one-shot has exited with 0. Exits 1 with the offender named.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-COMPOSE="docker compose --env-file .env -f infra/compose/compose.yaml"
+COMPOSE="docker compose --env-file .env -f infra/compose/compose.yaml --profile apps"
 deadline=$(( $(date +%s) + ${WAIT_TIMEOUT:-300} ))
 while :; do
   pending=(); failed=()
