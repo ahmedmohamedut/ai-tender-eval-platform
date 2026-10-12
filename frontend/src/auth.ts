@@ -1,4 +1,4 @@
-import { WebStorageStateStore, type UserManagerSettings } from "oidc-client-ts";
+import { InMemoryWebStorage, WebStorageStateStore, type UserManagerSettings } from "oidc-client-ts";
 import type { RuntimeConfig } from "./config";
 
 /**
@@ -14,8 +14,11 @@ export function oidcSettings(config: RuntimeConfig): UserManagerSettings {
     post_logout_redirect_uri: config.postLogoutRedirectUri,
     response_type: "code",
     scope: "openid profile email",
-    // Tokens stay in memory for the tab's session only.
-    userStore: new WebStorageStateStore({ store: window.sessionStorage }),
+    // The signed-in user, with its tokens, is held in memory only (PI 7.1: the SPA keeps no
+    // secret and stores nothing). A reload signs in again through the Keycloak session.
+    userStore: new WebStorageStateStore({ store: new InMemoryWebStorage() }),
+    // The sign-in request state must survive the redirect, so it uses session storage.
+    stateStore: new WebStorageStateStore({ store: window.sessionStorage }),
     automaticSilentRenew: false,
   };
 }

@@ -1,31 +1,56 @@
-import { useAuth } from "react-oidc-context";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { AnnounceProvider } from "./components/ui";
+import { Shell } from "./app/Shell";
+import { SessionProvider, useSession } from "./app/Session";
+import { ApiProvider, type ApiClient } from "./lib/api";
+import { TenderForm } from "./pages/TenderForm";
+import { TenderHome } from "./pages/TenderHome";
+import { TenderProgress } from "./pages/TenderProgress";
+import { TendersList } from "./pages/TendersList";
+import { Users } from "./pages/Users";
+import { EmptyState } from "./components/ui";
 
-/** Application shell. Screens arrive from Phase 1; this proves sign-in and the API path. */
-export function App() {
-  const auth = useAuth();
+function Landing() {
+  const { me } = useSession();
+  return <Navigate replace to={me.user.role === "member" ? "/my-tenders" : "/tenders"} />;
+}
 
-  if (auth.isLoading) {
-    return <p role="status">Loading</p>;
-  }
-  if (auth.error) {
-    return <p role="alert">Sign-in failed. Try again.</p>;
-  }
-
+/** Routes are the same for every role; each page and the API refuse what a role may not do. */
+export function AppRoutes() {
   return (
-    <main>
-      <h1>AI Tender Evaluation Platform</h1>
-      {auth.isAuthenticated ? (
-        <>
-          <p>Signed in as {auth.user?.profile.email ?? "unknown"}</p>
-          <button type="button" onClick={() => void auth.signoutRedirect()}>
-            Sign out
-          </button>
-        </>
-      ) : (
-        <button type="button" onClick={() => void auth.signinRedirect()}>
-          Sign in
-        </button>
-      )}
-    </main>
+    <Routes>
+      <Route element={<Shell />}>
+        <Route index element={<Landing />} />
+        <Route path="tenders" element={<TendersList />} />
+        <Route path="my-tenders" element={<TendersList mine />} />
+        <Route path="tenders/new" element={<TenderForm />} />
+        <Route path="tenders/:tenderId" element={<TenderHome />} />
+        <Route path="tenders/:tenderId/edit" element={<TenderForm />} />
+        <Route path="tenders/:tenderId/progress" element={<TenderProgress />} />
+        <Route path="users" element={<Users />} />
+        <Route
+          path="*"
+          element={
+            <EmptyState title="Page not found">
+              Check the address, or go back to your tenders.
+            </EmptyState>
+          }
+        />
+      </Route>
+    </Routes>
+  );
+}
+
+export function App({ api }: { api: ApiClient }) {
+  return (
+    <ApiProvider client={api}>
+      <AnnounceProvider>
+        <BrowserRouter>
+          <SessionProvider api={api}>
+            <AppRoutes />
+          </SessionProvider>
+        </BrowserRouter>
+      </AnnounceProvider>
+    </ApiProvider>
   );
 }
