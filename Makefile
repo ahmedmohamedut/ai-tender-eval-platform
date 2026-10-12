@@ -13,7 +13,7 @@ COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profil
 env: .env
 
 ## Start the whole local environment and wait until every service is healthy.
-up: .env frontend/node_modules
+up: .env frontend/src/api/generated/schema.d.ts
 	@infra/scripts/preflight.sh
 	cd frontend && npm run --silent build
 	$(COMPOSE) up -d --build
@@ -55,6 +55,10 @@ worker/.venv: worker/uv.lock worker/pyproject.toml
 deps: frontend/node_modules worker/.venv
 
 # ---------------------------------------------------------------- contracts
+## Typed client types, regenerated when the spec changes. Not committed.
+frontend/src/api/generated/schema.d.ts: api/openapi.yaml frontend/node_modules
+	cd frontend && npm run --silent api
+
 ## Lint api/openapi.yaml, generate the backend server interfaces and the typed
 ## TypeScript client. Generated code is not committed (build/ and src/api/generated/).
 api: frontend/node_modules
@@ -98,7 +102,7 @@ test-worker: worker/.venv
 test-backend:
 	cd backend && ./gradlew --console=plain --quiet test
 
-test-frontend: frontend/node_modules api
+test-frontend: frontend/src/api/generated/schema.d.ts
 	cd frontend && npm run --silent typecheck && npm test --silent
 
 ## Unit tests of all three components (no Docker).
