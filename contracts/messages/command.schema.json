@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "InputRef": {
+      "properties": {
+        "bucket": {
+          "title": "Bucket",
+          "type": "string"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bucket",
+        "key",
+        "sha256"
+      ],
+      "title": "InputRef",
+      "type": "object"
+    },
+    "Target": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "document_version",
+            "proposal_version",
+            "tender"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "Target",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Body of documents.analysis.requested.{job_type} (PI 5.4).",
+  "properties": {
+    "attempt": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "input": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Input"
+    },
+    "input_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InputRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "job_id": {
+      "format": "uuid",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "job_type": {
+      "enum": [
+        "document_processing",
+        "requirement_extraction",
+        "screening_precheck",
+        "evaluation"
+      ],
+      "title": "Job Type",
+      "type": "string"
+    },
+    "requested_by": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Requested By"
+    },
+    "target": {
+      "$ref": "#/$defs/Target"
+    },
+    "tender_id": {
+      "format": "uuid",
+      "title": "Tender Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id",
+    "job_type",
+    "tender_id",
+    "target",
+    "created_at"
+  ],
+  "title": "Command",
+  "type": "object",
+  "x-tender-schema": "tender.analysis.requested/1"
+}

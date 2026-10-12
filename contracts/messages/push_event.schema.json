@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Data of one server-sent event; mirrors schemas.PushEvent in api/openapi.yaml.",
+  "properties": {
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "object_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Object Id"
+    },
+    "object_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Object Type"
+    },
+    "tender_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tender Id"
+    },
+    "type": {
+      "enum": [
+        "job.updated",
+        "notification.created",
+        "document.updated",
+        "evaluation.progress",
+        "requirements.changed",
+        "baseline.changed",
+        "report.changed",
+        "tender.changed",
+        "resync"
+      ],
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type"
+  ],
+  "title": "PushEvent",
+  "type": "object",
+  "x-tender-schema": "tender.push/1"
+}

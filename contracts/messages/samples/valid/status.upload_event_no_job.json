@@ -1,0 +1,1 @@
+{"job_id":null,"job_type":"document_processing","tender_id":"22222222-2222-4222-8222-222222222222","target":{"type":"document_version","id":"33333333-3333-4333-8333-333333333333"},"seq":1001,"state":"completed","progress_percent":100,"result_parts":1,"counts":{"passages":0},"emitted_at":"2026-10-12T10:00:02Z","worker":{"id":"worker-ingest-1","version":"0.1.0"}}

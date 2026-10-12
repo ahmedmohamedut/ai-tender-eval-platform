@@ -1,0 +1,349 @@
+{
+  "$defs": {
+    "Failure": {
+      "properties": {
+        "code": {
+          "enum": [
+            "password_protected",
+            "no_selectable_text",
+            "unsupported_format",
+            "source_unavailable",
+            "index_unavailable",
+            "llm_unavailable",
+            "no_content_in_scope",
+            "timeout",
+            "other"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "title": "Failure",
+      "type": "object"
+    },
+    "RunInfo": {
+      "properties": {
+        "input_scope": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Scope"
+        },
+        "model_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Name"
+        },
+        "model_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Version"
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Version"
+        }
+      },
+      "title": "RunInfo",
+      "type": "object"
+    },
+    "Target": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "document_version",
+            "proposal_version",
+            "tender"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "Target",
+      "type": "object"
+    },
+    "Warning_": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "count": {
+          "default": 1,
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "Warning_",
+      "type": "object"
+    },
+    "WorkerInfo": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "WorkerInfo",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Body of documents.analysis.status.{job_type} (PI 5.5).",
+  "properties": {
+    "counts": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Counts"
+    },
+    "emitted_at": {
+      "format": "date-time",
+      "title": "Emitted At",
+      "type": "string"
+    },
+    "estimated_remaining_seconds": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Remaining Seconds"
+    },
+    "failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Failure"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "job_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Id"
+    },
+    "job_type": {
+      "enum": [
+        "document_processing",
+        "requirement_extraction",
+        "screening_precheck",
+        "evaluation"
+      ],
+      "title": "Job Type",
+      "type": "string"
+    },
+    "progress_percent": {
+      "anyOf": [
+        {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Progress Percent"
+    },
+    "result_parts": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result Parts"
+    },
+    "run": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "seq": {
+      "minimum": 1,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "state": {
+      "enum": [
+        "running",
+        "completed",
+        "completed_with_warnings",
+        "failed",
+        "cancelled"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "step": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Step"
+    },
+    "steps": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Steps"
+    },
+    "target": {
+      "$ref": "#/$defs/Target"
+    },
+    "tender_id": {
+      "format": "uuid",
+      "title": "Tender Id",
+      "type": "string"
+    },
+    "warnings": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Warning_"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Warnings"
+    },
+    "worker": {
+      "$ref": "#/$defs/WorkerInfo"
+    }
+  },
+  "required": [
+    "job_type",
+    "tender_id",
+    "target",
+    "seq",
+    "state",
+    "emitted_at",
+    "worker"
+  ],
+  "title": "Status",
+  "type": "object",
+  "x-tender-schema": "tender.analysis.status/1"
+}

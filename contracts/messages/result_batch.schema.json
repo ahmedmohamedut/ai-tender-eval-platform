@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "Target": {
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "document_version",
+            "proposal_version",
+            "tender"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "Target",
+      "type": "object"
+    },
+    "WorkerInfo": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "WorkerInfo",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Body of documents.analysis.result.{job_type} (PI 5.6): at most 50 items.",
+  "properties": {
+    "emitted_at": {
+      "format": "date-time",
+      "title": "Emitted At",
+      "type": "string"
+    },
+    "final": {
+      "title": "Final",
+      "type": "boolean"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "maxItems": 50,
+      "title": "Items",
+      "type": "array"
+    },
+    "job_id": {
+      "format": "uuid",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "job_type": {
+      "enum": [
+        "document_processing",
+        "requirement_extraction",
+        "screening_precheck",
+        "evaluation"
+      ],
+      "title": "Job Type",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "parsed",
+        "requirements",
+        "grades",
+        "prechecks"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "part_no": {
+      "minimum": 1,
+      "title": "Part No",
+      "type": "integer"
+    },
+    "target": {
+      "$ref": "#/$defs/Target"
+    },
+    "tender_id": {
+      "format": "uuid",
+      "title": "Tender Id",
+      "type": "string"
+    },
+    "worker": {
+      "$ref": "#/$defs/WorkerInfo"
+    }
+  },
+  "required": [
+    "job_id",
+    "job_type",
+    "tender_id",
+    "target",
+    "kind",
+    "part_no",
+    "final",
+    "emitted_at",
+    "worker"
+  ],
+  "title": "ResultBatch",
+  "type": "object",
+  "x-tender-schema": "tender.analysis.result/1"
+}
