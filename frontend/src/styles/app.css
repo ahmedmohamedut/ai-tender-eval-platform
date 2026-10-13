@@ -443,3 +443,85 @@ tbody tr:last-child td {
   padding: var(--space-2) var(--space-3);
   align-items: center;
 }
+
+/* ---- documents, jobs, viewer (Phase 2) ---------------------------------------------------- */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  margin: 12px 0;
+}
+.dropzone.over {
+  border-color: var(--accent);
+  background: var(--surface-alt, transparent);
+}
+.visually-hidden:focus + label.btn {
+  outline: 3px solid var(--focus, currentColor);
+  outline-offset: 2px;
+}
+progress {
+  width: 100%;
+  max-width: 420px;
+}
+.viewer {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .viewer {
+    grid-template-columns: 1fr;
+  }
+}
+.viewer-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.viewer-main {
+  overflow: auto;
+}
+.pdf-page {
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.pdf-page canvas {
+  display: block;
+}
+.pdf-page .textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  opacity: 0.25;
+}
+.pdf-page .textLayer span {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  transform-origin: 0 0;
+}
+.passage-highlight {
+  position: absolute;
+  background: rgb(255 200 0 / 0.35);
+  outline: 2px solid rgb(180 120 0);
+  pointer-events: none;
+}
+.linklike {
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  color: var(--link, inherit);
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.outline,
+.hits {
+  list-style: none;
+  padding-left: 0;
+}

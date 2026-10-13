@@ -11,10 +11,14 @@ export function Shell() {
     role === "admin"
       ? [
           { to: "/tenders", label: "Tenders" },
+          { to: "/jobs", label: "Jobs" },
           { to: "/users", label: "Users" },
         ]
       : role === "member"
-        ? [{ to: "/my-tenders", label: "My tenders" }]
+        ? [
+            { to: "/my-tenders", label: "My tenders" },
+            { to: "/jobs", label: "Jobs" },
+          ]
         : [{ to: "/tenders", label: "Tenders" }];
 
   return (

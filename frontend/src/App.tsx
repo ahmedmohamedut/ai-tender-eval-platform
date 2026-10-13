@@ -3,11 +3,15 @@ import { AnnounceProvider } from "./components/ui";
 import { Shell } from "./app/Shell";
 import { SessionProvider, useSession } from "./app/Session";
 import { ApiProvider, type ApiClient } from "./lib/api";
+import { Documents } from "./pages/Documents";
+import { Jobs } from "./pages/Jobs";
 import { TenderForm } from "./pages/TenderForm";
 import { TenderHome } from "./pages/TenderHome";
 import { TenderProgress } from "./pages/TenderProgress";
 import { TendersList } from "./pages/TendersList";
 import { Users } from "./pages/Users";
+import { Vendors } from "./pages/Vendors";
+import { Viewer } from "./pages/Viewer";
 import { EmptyState } from "./components/ui";
 
 function Landing() {
@@ -27,6 +31,10 @@ export function AppRoutes() {
         <Route path="tenders/:tenderId" element={<TenderHome />} />
         <Route path="tenders/:tenderId/edit" element={<TenderForm />} />
         <Route path="tenders/:tenderId/progress" element={<TenderProgress />} />
+        <Route path="tenders/:tenderId/documents" element={<Documents />} />
+        <Route path="tenders/:tenderId/vendors" element={<Vendors />} />
+        <Route path="documents/:versionId/view" element={<Viewer />} />
+        <Route path="jobs" element={<Jobs />} />
         <Route path="users" element={<Users />} />
         <Route
           path="*"

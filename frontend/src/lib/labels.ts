@@ -79,3 +79,62 @@ export function problemMessage(code: string | undefined, fallback: string): stri
       return fallback;
   }
 }
+
+/** Document and job vocabulary (02-ux-design, Content design). */
+export const docTypeLabel: Record<string, string> = {
+  rfp: "RFP",
+  brd: "Business requirements",
+  addendum: "Addendum",
+  other: "Other document",
+  proposal: "Proposal file",
+};
+
+export const documentStatusLabel: Record<string, string> = {
+  uploading: "Uploading",
+  processing: "Processing",
+  ready: "Ready",
+  failed: "Failed",
+};
+
+export const documentStatusTone: Record<string, Tone> = {
+  uploading: "info",
+  processing: "info",
+  ready: "success",
+  failed: "error",
+};
+
+export const jobStatusLabel: Record<string, string> = {
+  queued: "Waiting",
+  running: "Running",
+  completed: "Done",
+  completed_with_warnings: "Done with warnings",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
+export const jobStatusTone: Record<string, Tone> = {
+  queued: "neutral",
+  running: "info",
+  completed: "success",
+  completed_with_warnings: "warning",
+  failed: "error",
+  cancelled: "neutral",
+};
+
+export const jobTypeLabel: Record<string, string> = {
+  document_processing: "Reading a document",
+  requirement_extraction: "Finding requirements",
+  screening_precheck: "Checking a proposal",
+  evaluation: "Evaluating a proposal",
+};
+
+/** A failure reason in plain words, with what to do next. */
+export const failureText: Record<string, string> = {
+  password_protected: "The file is password protected. Upload an unprotected copy.",
+  no_selectable_text: "The file has no selectable text. Upload a text-based copy, not a scan.",
+  unsupported_format: "The file could not be read as a PDF or Word document.",
+  source_unavailable: "The stored file could not be read. Try again in a few minutes.",
+  index_unavailable: "The search index did not answer. Try again in a few minutes.",
+  timeout: "Processing took longer than allowed. Try again.",
+  other: "Processing failed for a reason the platform could not name. Ask an administrator.",
+};

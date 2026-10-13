@@ -46,6 +46,14 @@ export function useAsync<T>(load: () => Promise<T>, deps: unknown[]) {
     };
   }, [id]);
 
-  const state: AsyncState<T> = answer && answer.id === id ? answer.value : { status: "loading" };
+  // A reload (same dependencies, newer tick) keeps showing the data it had until the new answer
+  // arrives, so a push event refreshes a page without unmounting it and losing what was typed.
+  const sameRequest = answer !== null && answer.id.split("#")[0] === key;
+  const state: AsyncState<T> =
+    answer && answer.id === id
+      ? answer.value
+      : sameRequest && answer.value.status === "ready"
+        ? answer.value
+        : { status: "loading" };
   return { state, reload: () => setTick((t) => t + 1) };
 }

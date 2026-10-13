@@ -23,6 +23,7 @@ export class ApiError extends Error {
 export function toApiError(status: number, body: unknown): ApiError {
   const p = (body ?? {}) as Partial<Problem>;
   return new ApiError(status, {
+    ...p, // extras the platform names for a code, such as the matches of a possible duplicate
     title: p.title ?? "The request failed",
     status,
     code: p.code ?? "error",
