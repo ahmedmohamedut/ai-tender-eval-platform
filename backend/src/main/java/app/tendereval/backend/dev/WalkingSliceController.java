@@ -52,6 +52,7 @@ public class WalkingSliceController {
   @PostMapping
   public Mono<ResponseEntity<Map<String, Object>>> start(ServerWebExchange exchange) {
     UUID jobId = UUID.randomUUID();
+    statuses.registerDevJob(jobId.toString());
     UUID tenderId = UUID.randomUUID();
     UUID documentVersionId = UUID.randomUUID();
     String traceId = TraceFilter.traceId(exchange);

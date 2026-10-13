@@ -20,10 +20,31 @@ public class DocumentsController implements DocumentsApi {
 
   private final RequestTransaction tx;
   private final DocumentService service;
+  private final app.tendereval.backend.jobs.DocumentRetryService retries;
+  private final app.tendereval.backend.jobs.JobDispatcher dispatcher;
 
-  public DocumentsController(RequestTransaction tx, DocumentService service) {
+  public DocumentsController(
+      RequestTransaction tx,
+      DocumentService service,
+      app.tendereval.backend.jobs.DocumentRetryService retries,
+      app.tendereval.backend.jobs.JobDispatcher dispatcher) {
     this.tx = tx;
     this.service = service;
+    this.retries = retries;
+    this.dispatcher = dispatcher;
+  }
+
+  @Override
+  public Mono<ResponseEntity<app.tendereval.backend.api.model.Job>> retryDocumentProcessing(
+      UUID documentVersionId, ServerWebExchange exchange) {
+    return tx.asUser((db, user) -> retries.retryVersion(db, user, documentVersionId))
+        // The transaction has committed: only now is the command published (rule 4).
+        .flatMap(job -> dispatcher.publish(job.getId()).thenReturn(job))
+        .map(
+            job ->
+                ResponseEntity.status(org.springframework.http.HttpStatus.ACCEPTED)
+                    .location(java.net.URI.create("/api/v1/jobs/" + job.getId()))
+                    .body(job));
   }
 
   @Override

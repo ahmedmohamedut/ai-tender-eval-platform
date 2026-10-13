@@ -61,6 +61,17 @@ app:
   s3-bucket-documents: ${S3_BUCKET_DOCUMENTS:tender-documents}
   s3-bucket-derived: ${S3_BUCKET_DERIVED:tender-derived}
   s3-multipart-part-mb: ${S3_MULTIPART_PART_MB:8}
+  db-ingest-username: ${DB_INGEST_USERNAME}
+  db-ingest-password: ${DB_INGEST_PASSWORD}
+  db-ingest-pool-max-size: ${DB_INGEST_POOL_MAX_SIZE:8}
+  watchdog-queued-timeout-seconds: ${WATCHDOG_QUEUED_TIMEOUT_SECONDS:120}
+  watchdog-silence-timeout-seconds: ${WATCHDOG_SILENCE_TIMEOUT_SECONDS:300}
+  job-max-minutes-document-processing: ${JOB_MAX_DURATION_MINUTES_DOCUMENT_PROCESSING:30}
+  job-max-minutes-requirement-extraction: ${JOB_MAX_DURATION_MINUTES_REQUIREMENT_EXTRACTION:60}
+  job-max-minutes-screening-precheck: ${JOB_MAX_DURATION_MINUTES_SCREENING_PRECHECK:30}
+  job-max-minutes-evaluation: ${JOB_MAX_DURATION_MINUTES_EVALUATION:360}
+  watchdog-enabled: ${WATCHDOG_ENABLED:true}
+  watchdog-interval-seconds: ${WATCHDOG_INTERVAL_SECONDS:30}
   rate-limit-uploads-per-minute: ${RATE_LIMIT_UPLOADS_PER_MINUTE:10}
   rate-limit-search-per-minute: ${RATE_LIMIT_SEARCH_PER_MINUTE:120}
   rate-limit-job-starts-per-minute: ${RATE_LIMIT_JOB_STARTS_PER_MINUTE:20}

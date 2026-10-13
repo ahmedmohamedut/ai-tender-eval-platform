@@ -122,6 +122,22 @@ class Status(_Message):
         return self
 
 
+class ParsedFiles(_Message):
+    """The hand-over of one parsed document version (PI 5.6, kind ``parsed``).
+
+    Keys are in ``tender-derived`` and are the fixed keys of AI 3.3.
+    """
+
+    pages: str
+    sections: str
+    passages: str
+    rendered_pdf: str
+    manifest: str
+    page_count: int = Field(ge=0)
+    counts: dict[str, int]
+    source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class ResultBatch(_Message):
     """Body of documents.analysis.result.{job_type} (PI 5.6): at most 50 items."""
 
@@ -133,8 +149,15 @@ class ResultBatch(_Message):
     part_no: int = Field(ge=1)
     final: bool
     items: list[dict[str, Any]] = Field(default_factory=list, max_length=50)
+    parsed: ParsedFiles | None = None
     emitted_at: datetime
     worker: WorkerInfo
+
+    @model_validator(mode="after")
+    def _parsed_only_for_parsed(self) -> ResultBatch:
+        if (self.kind == "parsed") != (self.parsed is not None):
+            raise ValueError("parsed is required for kind parsed, and only then")
+        return self
 
 
 class PushEvent(_Message):

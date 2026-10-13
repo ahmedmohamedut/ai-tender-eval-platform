@@ -38,7 +38,17 @@ public final class TestProps {
         "secret",
         "tender-documents",
         "tender-derived",
-        8);
+        8,
+        "tender_ai_ingest",
+        "ingest",
+        2,
+        120,
+        300,
+        30,
+        60,
+        30,
+        360,
+        30);
   }
 
   public static AppProperties withKeycloak(String adminBase) {
@@ -69,6 +79,16 @@ public final class TestProps {
         d.s3SecretKey(),
         d.s3BucketDocuments(),
         d.s3BucketDerived(),
-        d.s3MultipartPartMb());
+        d.s3MultipartPartMb(),
+        d.dbIngestUsername(),
+        d.dbIngestPassword(),
+        d.dbIngestPoolMaxSize(),
+        d.watchdogQueuedTimeoutSeconds(),
+        d.watchdogSilenceTimeoutSeconds(),
+        d.jobMaxMinutesDocumentProcessing(),
+        d.jobMaxMinutesRequirementExtraction(),
+        d.jobMaxMinutesScreeningPrecheck(),
+        d.jobMaxMinutesEvaluation(),
+        d.watchdogIntervalSeconds());
   }
 }

@@ -649,6 +649,110 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isNotFound();
           }
         });
+    m.put(
+        "cancelJob",
+        new Scenario() {
+          TestUser starter = admin();
+          UUID t = Fixtures.tender(admin(), chair());
+
+          private UUID job() {
+            UUID doc =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO documents (tender_id, doc_type, title) VALUES (?, 'brd', 'D')"
+                            + " RETURNING id",
+                        t);
+            UUID v = UUID.randomUUID();
+            TestUsers.sql(
+                "INSERT INTO document_versions (id, document_id, version_no, file_name, file_format,"
+                    + " size_bytes, sha256, storage_key, status, uploaded_by) VALUES (?, ?, 1, 'a.pdf',"
+                    + " 'pdf', 10, repeat('a', 64), ?, 'uploading', ?)",
+                v,
+                doc,
+                "originals/%s/%s/%s.pdf".formatted(t, doc, v),
+                starter.id());
+            TestUsers.sql("UPDATE document_versions SET status = 'processing' WHERE id = ?", v);
+            return (UUID)
+                TestUsers.scalar(
+                    "INSERT INTO jobs (tender_id, job_type, target_type, target_id, started_by)"
+                        + " VALUES (?, 'document_processing', 'document_version', ?, ?) RETURNING id",
+                    t,
+                    v,
+                    starter.id());
+          }
+
+          @Override
+          public int success() {
+            web.post()
+                .uri("/jobs/" + job() + "/cancel")
+                .header("Authorization", "Bearer " + tokenFor(chair()))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            web.post()
+                .uri("/jobs/" + UUID.randomUUID() + "/cancel")
+                .header("Authorization", "Bearer " + tokenFor(chair()))
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+          }
+        });
+    m.put(
+        "retryDocumentProcessing",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+
+          private UUID failedVersion() {
+            UUID doc =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO documents (tender_id, doc_type, title) VALUES (?, 'brd', 'D')"
+                            + " RETURNING id",
+                        t);
+            UUID v = UUID.randomUUID();
+            TestUsers.sql(
+                "INSERT INTO document_versions (id, document_id, version_no, file_name, file_format,"
+                    + " size_bytes, sha256, storage_key, status, uploaded_by) VALUES (?, ?, 1, 'a.pdf',"
+                    + " 'pdf', 10, repeat('a', 64), ?, 'uploading', ?)",
+                v,
+                doc,
+                "originals/%s/%s/%s.pdf".formatted(t, doc, v),
+                admin().id());
+            TestUsers.sql("UPDATE document_versions SET status = 'processing' WHERE id = ?", v);
+            TestUsers.sql(
+                "UPDATE document_versions SET status = 'failed', failure_reason = 'source_unavailable'"
+                    + " WHERE id = ?",
+                v);
+            return v;
+          }
+
+          @Override
+          public int success() {
+            web.post()
+                .uri("/document-versions/" + failedVersion() + "/retry")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .exchange()
+                .expectStatus()
+                .isAccepted();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            // a version that did not fail is not retried
+            web.post()
+                .uri("/document-versions/" + Fixtures.rfp(t, admin()) + "/retry")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(409);
+          }
+        });
     return m;
   }
 

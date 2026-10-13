@@ -1,5 +1,59 @@
 {
   "$defs": {
+    "ParsedFiles": {
+      "description": "The hand-over of one parsed document version (PI 5.6, kind ``parsed``).\n\nKeys are in ``tender-derived`` and are the fixed keys of AI 3.3.",
+      "properties": {
+        "counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Counts",
+          "type": "object"
+        },
+        "manifest": {
+          "title": "Manifest",
+          "type": "string"
+        },
+        "page_count": {
+          "minimum": 0,
+          "title": "Page Count",
+          "type": "integer"
+        },
+        "pages": {
+          "title": "Pages",
+          "type": "string"
+        },
+        "passages": {
+          "title": "Passages",
+          "type": "string"
+        },
+        "rendered_pdf": {
+          "title": "Rendered Pdf",
+          "type": "string"
+        },
+        "sections": {
+          "title": "Sections",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pages",
+        "sections",
+        "passages",
+        "rendered_pdf",
+        "manifest",
+        "page_count",
+        "counts",
+        "source_sha256"
+      ],
+      "title": "ParsedFiles",
+      "type": "object"
+    },
     "Target": {
       "properties": {
         "id": {
@@ -88,6 +142,17 @@
       ],
       "title": "Kind",
       "type": "string"
+    },
+    "parsed": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ParsedFiles"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "part_no": {
       "minimum": 1,

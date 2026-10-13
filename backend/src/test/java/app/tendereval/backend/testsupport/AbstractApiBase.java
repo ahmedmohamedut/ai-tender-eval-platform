@@ -36,6 +36,10 @@ public abstract class AbstractApiBase {
     r.add("DB_APP_USERNAME", () -> "tender_app");
     r.add("DB_APP_PASSWORD", () -> PostgresFixture.APP_PASSWORD);
     r.add("DB_POOL_MAX_SIZE", () -> "5");
+    r.add("WATCHDOG_ENABLED", () -> "false");
+    r.add("DB_INGEST_USERNAME", () -> "tender_ai_ingest");
+    r.add("DB_INGEST_PASSWORD", () -> PostgresFixture.INGEST_PASSWORD);
+    r.add("DB_INGEST_POOL_MAX_SIZE", () -> "3");
     r.add("DB_MIGRATION_URL", () -> url);
     r.add("DB_MIGRATION_USERNAME", () -> "tender_owner");
     r.add("DB_MIGRATION_PASSWORD", () -> PostgresFixture.OWNER_PASSWORD);
@@ -61,6 +65,7 @@ public abstract class AbstractApiBase {
   @MockitoBean JetStream jetStream;
   @MockitoBean JetStreamManagement jetStreamManagement;
   @MockitoBean StatusConsumer statusConsumer;
+  @MockitoBean app.tendereval.backend.messaging.ResultConsumer resultConsumer;
 
   @Autowired protected WebTestClient web;
   @Autowired protected FakeKeycloakAdmin keycloak;

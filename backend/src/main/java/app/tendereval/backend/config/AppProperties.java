@@ -37,4 +37,25 @@ public record AppProperties(
     @NotBlank String s3SecretKey,
     String s3BucketDocuments,
     String s3BucketDerived,
-    int s3MultipartPartMb) {}
+    int s3MultipartPartMb,
+    @NotBlank String dbIngestUsername,
+    @NotBlank String dbIngestPassword,
+    int dbIngestPoolMaxSize,
+    int watchdogQueuedTimeoutSeconds,
+    int watchdogSilenceTimeoutSeconds,
+    int jobMaxMinutesDocumentProcessing,
+    int jobMaxMinutesRequirementExtraction,
+    int jobMaxMinutesScreeningPrecheck,
+    int jobMaxMinutesEvaluation,
+    int watchdogIntervalSeconds) {
+
+  /** Ceiling for a job type (PI 7.3). */
+  public int jobMaxMinutes(String jobType) {
+    return switch (jobType) {
+      case "document_processing" -> jobMaxMinutesDocumentProcessing;
+      case "requirement_extraction" -> jobMaxMinutesRequirementExtraction;
+      case "screening_precheck" -> jobMaxMinutesScreeningPrecheck;
+      default -> jobMaxMinutesEvaluation;
+    };
+  }
+}

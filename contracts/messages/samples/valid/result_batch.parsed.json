@@ -1,0 +1,32 @@
+{
+  "job_id": "0193a7a0-0000-7000-8000-000000000001",
+  "job_type": "document_processing",
+  "tender_id": "0193a7a0-0000-7000-8000-000000000002",
+  "target": {
+    "type": "document_version",
+    "id": "0193a7a0-0000-7000-8000-000000000003"
+  },
+  "kind": "parsed",
+  "part_no": 1,
+  "final": true,
+  "items": [],
+  "parsed": {
+    "pages": "parsed/t/v/pages.jsonl",
+    "sections": "parsed/t/v/sections.jsonl",
+    "passages": "parsed/t/v/passages.jsonl",
+    "rendered_pdf": "rendered/t/v/document.pdf",
+    "manifest": "parsed/t/v/manifest.json",
+    "page_count": 2,
+    "counts": {
+      "pages": 2,
+      "sections": 1,
+      "passages": 3
+    },
+    "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "emitted_at": "2026-10-13T09:00:00Z",
+  "worker": {
+    "id": "ingest-1",
+    "version": "0.2.0"
+  }
+}

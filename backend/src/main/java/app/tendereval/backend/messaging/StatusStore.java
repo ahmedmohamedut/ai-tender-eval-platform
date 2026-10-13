@@ -46,6 +46,17 @@ public class StatusStore {
     return changed.get();
   }
 
+  private final java.util.Set<String> devJobs = ConcurrentHashMap.newKeySet();
+
+  /** A job id of the walking slice: it has no database row and its statuses stay in memory. */
+  public void registerDevJob(String jobId) {
+    devJobs.add(jobId);
+  }
+
+  public boolean isDevJob(String jobId) {
+    return devJobs.contains(jobId);
+  }
+
   public Optional<Seen> get(String key) {
     return Optional.ofNullable(byKey.get(key));
   }

@@ -37,6 +37,9 @@ public class OpenBaoEnvironmentPostProcessor implements EnvironmentPostProcessor
     Map<String, String> db = bao.readKv(MOUNT, BASE + "db-app");
     values.put("DB_APP_USERNAME", require(db, "username", "db-app"));
     values.put("DB_APP_PASSWORD", require(db, "password", "db-app"));
+    Map<String, String> ingest = bao.readKv(MOUNT, BASE + "db-ai-ingest");
+    values.put("DB_INGEST_USERNAME", require(ingest, "username", "db-ai-ingest"));
+    values.put("DB_INGEST_PASSWORD", require(ingest, "password", "db-ai-ingest"));
     Map<String, String> kc = bao.readKv(MOUNT, BASE + "keycloak-admin");
     values.put("KEYCLOAK_ADMIN_CLIENT_SECRET", require(kc, "client_secret", "keycloak-admin"));
     Map<String, String> s3 = bao.readKv(MOUNT, BASE + "rustfs");

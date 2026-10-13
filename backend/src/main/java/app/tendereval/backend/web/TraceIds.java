@@ -24,6 +24,10 @@ public final class TraceIds {
     return randomHex(16);
   }
 
+  public static String newTraceId() {
+    return randomHex(16);
+  }
+
   public static String newTraceparent(String traceId) {
     return "00-" + traceId + "-" + randomHex(8) + "-01";
   }
