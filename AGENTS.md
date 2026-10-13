@@ -8,7 +8,7 @@ AI Tender Evaluation Platform. A procurement committee uploads an RFP and vendor
 
 Components: React SPA, Spring Boot reactive REST API (the only writer of business data), PostgreSQL with row-level security, Keycloak, OpenBao, RustFS (S3), NATS JetStream, one Python worker image in two roles (`ingest`, `agent`), Qdrant, Arize Phoenix.
 
-Status: design complete; Phase 0 (scaffold), Phase 1 (platform spine: identity, tenders, committees, audit, row-level security, SPA shell) and Phase 2 (documents, vendors and proposals, ingestion, index, viewer, job center, push) are built; Phase 3 (requirements, extraction, baseline, scoring) are built; screening, evaluation and the report are not built yet. Check the repository before assuming a file exists.
+Status: design complete; Phase 0 (scaffold), Phase 1 (platform spine: identity, tenders, committees, audit, row-level security, SPA shell) and Phase 2 (documents, vendors and proposals, ingestion, index, viewer, job center, push) are built; Phase 3 (requirements, extraction, baseline, scoring) are built; screening, evaluation and the report are not built yet. `docs/progress.md` has the task-level status. Check the repository before assuming a file exists.
 
 ## Read before you change anything
 
@@ -22,6 +22,7 @@ Do not load every document. Read this file, then only what your task needs.
 | REST rules, auth, buckets, NATS, config keys, flows | `docs/design/04-platform-integration-design.md` (cited as `PI x.y`) and `api/openapi.yaml` |
 | Parsing, passages, Qdrant, agent graphs, grounding, quality | `docs/design/05-ai-pipeline-design.md` (cited as `AI x.y`) |
 | Order of work, what is in scope for a phase | `docs/roadmap-plan.md` |
+| What is done, what is left, issues met and their fixes, open gaps | `docs/progress.md` (decisions are numbered in `docs/decisions.md`) |
 
 Find a section by its number or heading, for example `grep -n "^### 5.3" docs/design/04-platform-integration-design.md`. Find a requirement by its ID, for example `grep -rn "UX-EVA-12" docs/design`.
 
@@ -119,6 +120,7 @@ Per component: `cd backend && ./gradlew test integrationTest spotlessApply`, `cd
 - Name the requirement IDs (`UX-REQ-12`) or screens (`PG-11`) a change serves in the commit message or pull request description.
 - Contract first: change `openapi.yaml` or a message model before the code that uses it. Update the design document section in the same change if behaviour changes.
 - If a decision is open, build on the documented default, record the assumption, and keep it easy to change. The open questions with defaults are in `docs/design/03-data-model-design.md` (Open data questions), `04-...` and `05-...` (section 8) and `02-...` (Open design questions).
+- Keep `docs/progress.md` current: when a milestone lands, update the status of its work items, add a row for any issue that cost real time (symptom, cause, fix, the test that guards it), and add or close open gaps, in the same commit. Record decisions and assumptions in `docs/decisions.md` and refer to them by number.
 - **Stop and ask** before: changing a row-level security policy or a status-change trigger; adding a table that holds member decisions; changing a prompt, model or retrieval setting without an evaluation run; anything that deletes or overwrites stored evidence; adding a network path from a worker to the database; weakening a rule in the list above.
 
 ## Glossary

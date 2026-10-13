@@ -27,12 +27,14 @@ The plan names the requirement IDs served, the contract files that change first,
 
 ## Order of work for a change
 
+0. Read the status in `docs/progress.md` (done, remaining, open gaps, issues already met) before planning, so work is not repeated and known gaps are not rediscovered.
 1. Find the requirement and screen IDs and read the relevant section.
 2. Change the contract first (`api/openapi.yaml` or the message model), then regenerate.
 3. Write the failing test, then the code.
 4. Run the narrowest test suite that covers the change, then the wider one. Report which you ran and what passed. If a command from the table in `AGENTS.md` does not exist yet, say so rather than guessing one.
 5. Update the design document section if behaviour changed.
-6. Commit with the requirement IDs in the message.
+6. Update `docs/progress.md` (task status, issues and fixes, open gaps) and `docs/decisions.md` (new decisions by number).
+7. Commit with the requirement IDs in the message.
 
 ## Checks to run mentally before finishing
 
