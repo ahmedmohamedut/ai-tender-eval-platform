@@ -1,0 +1,13 @@
+Some of your answer was rejected because the checks below failed. Fix it using only the passages
+shown. Every quote must be copied word for word from the passage it names.
+
+Problems:
+{problems}
+
+Passages:
+{passages}
+
+Your previous answer:
+{previous}
+
+Give the corrected answer as JSON in the same schema.

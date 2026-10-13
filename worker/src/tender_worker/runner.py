@@ -20,6 +20,7 @@ from nats.errors import TimeoutError as NatsTimeout
 from nats.js.errors import APIError, KeyNotFoundError
 
 from tender_worker.consumers import (
+    AGENT_EXTRACTION,
     INGEST_COMMANDS,
     INGEST_UPLOADED,
     ROLE_CONSUMERS,
@@ -30,6 +31,7 @@ from tender_worker.handlers import (
     Context,
     DeadLetter,
     handle_command,
+    handle_extraction,
     handle_uploaded,
 )
 from tender_worker.health import HealthServer
@@ -208,6 +210,10 @@ class Runner:
                 page_min_chars=s.INGEST_PAGE_MIN_CHARS,
                 max_textless_share=s.INGEST_MAX_TEXTLESS_SHARE,
             )
+        agent = None
+        cancelled_check = None
+        if s.WORKER_ROLE == "agent":
+            agent, cancelled_check = await self._agent_deps(js, store, worker, publisher)
         ctx = Context(
             role=s.WORKER_ROLE,
             worker=worker,
@@ -215,6 +221,8 @@ class Runner:
             store=store,
             bucket_documents=s.S3_BUCKET_DOCUMENTS,
             pipeline=pipeline,
+            agent=agent,
+            cancelled=cancelled_check,
         )
         slots = asyncio.Semaphore(self._concurrency())
         tasks = [
@@ -233,6 +241,80 @@ class Runner:
         if pool is not None:
             pool.shutdown(wait=False, cancel_futures=True)
         await nc.drain()
+
+    async def _agent_deps(self, js, store, worker, publisher):
+        """The agent role's collaborators; None without a configured model endpoint."""
+        s = self.settings
+        if not (s.LLM_BASE_URL and s.LLM_MODEL_EXTRACTION and s.LLM_API_KEY):
+            log.warning("no model endpoint configured; extraction commands are not run")
+            return None, None
+        from tender_worker.agent.extraction import ExtractionSettings
+        from tender_worker.agent.llm import Breaker, OpenAiCompatible
+        from tender_worker.agent.retrieval import QdrantPassageSource
+        from tender_worker.agent.runtime import AgentDeps
+        from tender_worker.ingest.index import EmbeddingClient
+
+        control = await js.key_value("JOB_CONTROL")
+
+        class NatsKv:
+            async def get(self, key: str) -> bytes | None:
+                try:
+                    entry = await control.get(key)
+                except KeyNotFoundError:
+                    return None
+                return entry.value
+
+            async def put(self, key: str, value: bytes) -> None:
+                await control.put(key, value)
+
+        async def cancelled(job_id) -> bool:
+            return await NatsKv().get(f"cancel.{job_id}") is not None
+
+        embeddings = EmbeddingClient(
+            base_url=s.EMBEDDING_BASE_URL or "",
+            model=s.EMBEDDING_MODEL or "",
+            api_key=s.EMBEDDING_API_KEY.get_secret_value() if s.EMBEDDING_API_KEY else "",
+            dimensions=s.EMBEDDING_DIMENSIONS or 0,
+            batch_size=s.EMBEDDING_BATCH_SIZE,
+            timeout=s.DEP_TIMEOUT_SECONDS,
+        )
+        llm = OpenAiCompatible(
+            base_url=s.LLM_BASE_URL,
+            api_key=s.LLM_API_KEY.get_secret_value(),
+            model=s.LLM_MODEL_EXTRACTION,
+            temperature=s.LLM_TEMPERATURE,
+            max_tokens=s.LLM_MAX_OUTPUT_TOKENS,
+            timeout=s.LLM_TIMEOUT_SECONDS,
+            max_concurrency=s.LLM_MAX_CONCURRENCY,
+            structured_output=s.LLM_STRUCTURED_OUTPUT,
+            breaker=Breaker(give_up_seconds=s.LLM_OUTAGE_GIVE_UP_SECONDS),
+        )
+        deps = AgentDeps(
+            publisher=publisher,
+            kv=NatsKv(),
+            blobs=store,
+            source=QdrantPassageSource(
+                s.QDRANT_URL,
+                s.QDRANT_API_KEY.get_secret_value(),
+                s.QDRANT_COLLECTION,
+                timeout=s.DEP_TIMEOUT_SECONDS,
+            ),
+            llm=llm,
+            embed=embeddings.embed,
+            worker=worker,
+            bucket_jobs=s.S3_BUCKET_JOBS,
+            model_name=s.LLM_MODEL_EXTRACTION,
+            model_version=s.LLM_MODEL_VERSION,
+            settings=ExtractionSettings(
+                window_chars=s.EXTRACTION_WINDOW_CHARS,
+                overlap_passages=s.EXTRACTION_WINDOW_OVERLAP_PASSAGES,
+                dedup_threshold=s.DEDUP_SIMILARITY_THRESHOLD,
+                max_repairs=s.GROUNDING_MAX_REPAIR_ATTEMPTS,
+            ),
+            batch_max_items=s.RESULT_BATCH_MAX_ITEMS,
+            cancel_check_seconds=s.CANCEL_CHECK_SECONDS,
+        )
+        return deps, cancelled
 
     def _concurrency(self) -> int:
         s = self.settings
@@ -284,8 +366,12 @@ class Runner:
                 await handle_command(
                     ctx, msg.data, headers.get("Tender-Schema"), deliveries, traceparent
                 )
+            elif spec is AGENT_EXTRACTION:
+                await handle_extraction(
+                    ctx, msg.data, headers.get("Tender-Schema"), deliveries, traceparent
+                )
             else:
-                # The agent graphs do not exist yet; commands for them are not consumed.
+                # The pre-check and evaluation graphs arrive with Phases 4 and 5.
                 log.info("agent command seen", extra={"durable": spec.durable})
             await msg.ack()
         except DeadLetter as exc:

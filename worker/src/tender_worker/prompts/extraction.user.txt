@@ -1,0 +1,7 @@
+Categories (id: name):
+{categories}
+
+Passages:
+{passages}
+
+Extract the requirements.

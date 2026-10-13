@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
@@ -16,6 +17,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from tender_worker.agent.runtime import AgentDeps, BadInput, run_extraction
 from tender_worker.ingest.pipeline import DocumentRef, IngestPipeline
 from tender_worker.keys import (
     ORIGINAL_KEY,
@@ -67,6 +69,9 @@ class Context:
     bucket_documents: str
     # The real ingest pipeline. Without one (tests of the scaffold) the walking skeleton answers.
     pipeline: IngestPipeline | None = None
+    # The agent role's dependencies; without them an agent command is acknowledged and left.
+    agent: AgentDeps | None = None
+    cancelled: Callable[[UUID], Awaitable[bool]] | None = None
 
 
 def new_traceparent() -> str:
@@ -211,3 +216,29 @@ async def handle_command(
         _status_headers(msg_id, traceparent),
         msg_id,
     )
+
+
+async def handle_extraction(
+    ctx: Context,
+    body: bytes,
+    schema_header: str | None,
+    deliveries: int,
+    traceparent: str | None,
+) -> None:
+    """documents.analysis.requested.requirement_extraction (PI 5.4)."""
+    check_schema(schema_header, SCHEMA_COMMAND)
+    try:
+        command = Command.model_validate_json(body)
+    except ValidationError as exc:
+        raise DeadLetter("invalid command body") from exc
+    if command.job_type != "requirement_extraction":
+        raise DeadLetter(f"unknown job type {command.job_type}")
+    if ctx.agent is None or ctx.cancelled is None:
+        log.info("extraction command seen; no model endpoint is configured")
+        return
+    try:
+        await run_extraction(
+            ctx.agent, command, deliveries, traceparent or new_traceparent(), ctx.cancelled
+        )
+    except BadInput as exc:
+        raise DeadLetter(str(exc)) from exc

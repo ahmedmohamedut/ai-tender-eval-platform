@@ -52,6 +52,23 @@ class Settings(BaseSettings):
     EMBEDDING_BATCH_SIZE: int = Field(default=64, ge=1)
     QDRANT_UPSERT_BATCH_SIZE: int = Field(default=128, ge=1)
 
+    LLM_BASE_URL: str | None = None
+    LLM_API_KEY: SecretStr | None = None
+    LLM_MODEL_EXTRACTION: str | None = None
+    LLM_MODEL_VERSION: str = "unknown"
+    LLM_TEMPERATURE: float = Field(default=0.0, ge=0, le=2)
+    LLM_MAX_OUTPUT_TOKENS: int = Field(default=1500, ge=64)
+    LLM_TIMEOUT_SECONDS: int = Field(default=120, ge=5)
+    LLM_MAX_CONCURRENCY: int = Field(default=8, ge=1)
+    LLM_STRUCTURED_OUTPUT: Literal["function_calling", "json_schema"] = "json_schema"
+    LLM_OUTAGE_GIVE_UP_SECONDS: int = Field(default=600, ge=1)
+    EXTRACTION_WINDOW_CHARS: int = Field(default=8000, ge=500)
+    EXTRACTION_WINDOW_OVERLAP_PASSAGES: int = Field(default=2, ge=0)
+    DEDUP_SIMILARITY_THRESHOLD: float = Field(default=0.85, ge=0, le=1)
+    GROUNDING_MAX_REPAIR_ATTEMPTS: int = Field(default=1, ge=0, le=3)
+    RESULT_BATCH_MAX_ITEMS: int = Field(default=50, ge=1, le=50)
+    CANCEL_CHECK_SECONDS: int = Field(default=10, ge=1)
+
     HEALTH_PORT: int = 8080
     SHUTDOWN_GRACE_SECONDS: int = 45
     DEP_TIMEOUT_SECONDS: int = 30
@@ -66,6 +83,10 @@ class Settings(BaseSettings):
             for name in ("EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_DIMENSIONS"):
                 if not getattr(self, name):
                     raise ValueError(f"{name} is required for the ingest role")
+        # The agent role starts without a model endpoint only in the scaffold test setups; a
+        # configured endpoint needs all its parts.
+        if self.LLM_BASE_URL and not (self.LLM_MODEL_EXTRACTION and self.LLM_API_KEY):
+            raise ValueError("LLM_MODEL_EXTRACTION and LLM_API_KEY are required with LLM_BASE_URL")
         return self
 
     @property
