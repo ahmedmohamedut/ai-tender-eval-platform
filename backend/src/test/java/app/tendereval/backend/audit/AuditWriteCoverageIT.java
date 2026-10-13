@@ -1273,6 +1273,116 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isNotFound();
           }
         });
+    m.put(
+        "confirmBaseline",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+
+          {
+            TestUsers.sql("UPDATE tenders SET status = 'requirements' WHERE id = ?", t);
+          }
+
+          @Override
+          public int success() {
+            TestUsers.sql(
+                "INSERT INTO requirements (tender_id, text, category_id, importance, origin,"
+                    + " source_item_id, review_state) VALUES (?, 'The supplier shall log.', ?, 'mandatory',"
+                    + " 'ai', ?, 'reviewed')",
+                t,
+                category(),
+                UUID.randomUUID());
+            web.post()
+                .uri("/tenders/" + t + "/baselines")
+                .header("Authorization", "Bearer " + tokenFor(chair()))
+                .header("Idempotency-Key", "cover-" + UUID.randomUUID())
+                .exchange()
+                .expectStatus()
+                .isCreated();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            // a confirmed list is not confirmed twice: nothing left to confirm is refused
+            web.post()
+                .uri("/tenders/" + UUID.randomUUID() + "/baselines")
+                .header("Authorization", "Bearer " + tokenFor(chair()))
+                .header("Idempotency-Key", "cover-" + UUID.randomUUID())
+                .exchange()
+                .expectStatus()
+                .is4xxClientError();
+          }
+        });
+    m.put(
+        "reopenBaseline",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+
+          {
+            TestUsers.sql("UPDATE tenders SET status = 'requirements' WHERE id = ?", t);
+            TestUsers.sql("UPDATE tenders SET status = 'evaluation' WHERE id = ?", t);
+            TestUsers.sql(
+                "INSERT INTO baselines (tender_id, version_no, requirement_count, confirmed_by)"
+                    + " VALUES (?, 1, 0, ?)",
+                t,
+                chair().id());
+          }
+
+          @Override
+          public int success() {
+            asChair("POST", "/tenders/" + t + "/baselines/current/reopen")
+                .bodyValue(Map.of("reason", "A scope change from the sponsor"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tenders/" + t + "/baselines/current/reopen")
+                .bodyValue(Map.of("reason", "A scope change from the sponsor"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(409); // nothing confirmed is left to reopen
+          }
+        });
+    m.put(
+        "putScoringModel",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+
+          private org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec put(
+              String etag, int fully) {
+            return web.put()
+                .uri("/tenders/" + t + "/scoring-model")
+                .header("Authorization", "Bearer " + tokenFor(chair()))
+                .header("If-Match", etag)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(
+                    Map.of(
+                        "points_fully",
+                        fully,
+                        "points_partially",
+                        1,
+                        "points_non",
+                        0,
+                        "weights",
+                        List.of()))
+                .exchange();
+          }
+
+          @Override
+          public int success() {
+            put("\"0\"", 2).expectStatus().isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            put("\"0\"", 3).expectStatus().isEqualTo(412);
+          }
+        });
     return m;
   }
 
