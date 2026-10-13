@@ -1,8 +1,19 @@
 import { useEffect, useRef, useState } from "react";
+import { Field } from "../components/ui";
 import { Link, useParams, useSearchParams } from "react-router";
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { Button, ErrorNotice, Loading } from "../components/ui";
+import {
+  Button,
+  ConfirmDialog,
+  ErrorNotice,
+  Loading,
+  StatusChip,
+  useAnnounce,
+} from "../components/ui";
+import { useSession } from "../app/Session";
+import { usePush } from "../lib/usePush";
+import { ApiError } from "../lib/api";
 import { unwrap, useApi } from "../lib/api";
 import { getApiBase } from "../lib/base";
 import { getAccessToken } from "../lib/token";
@@ -54,6 +65,28 @@ export function Viewer() {
       : "/tenders";
   const backLabel =
     origin.state.status === "ready" ? "Back to tender documents" : "Back to tenders";
+
+  const { me } = useSession();
+  const announce = useAnnounce();
+  const isMember = me.user.role === "member";
+  const tenderId = origin.state.status === "ready" ? origin.state.data.tenderId : null;
+  const coverage = useAsync(
+    () =>
+      tenderId && isMember
+        ? unwrap(
+            api.GET("/tenders/{tenderId}/extractions/coverage", {
+              params: { path: { tenderId }, query: { document_version_id: versionId } },
+            }),
+          )
+        : Promise.resolve(null),
+    [api, tenderId, versionId, isMember],
+  );
+  usePush(tenderId ?? undefined, coverage.reload, ["job.updated", "requirements.changed"]);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
+  const [confirmExtract, setConfirmExtract] = useState(false);
+  const [overlap, setOverlap] = useState(false);
 
   const passage = useAsync(
     () =>
@@ -126,6 +159,55 @@ export function Viewer() {
     setPage(Math.min(Math.max(1, n), count));
   }
 
+  const from = rangeFrom ? Number(rangeFrom) : null;
+  const to = rangeTo ? Number(rangeTo) : null;
+  const rangeOk =
+    (from === null && to === null) ||
+    (from !== null && from >= 1 && from <= count && (to === null || (to >= from && to <= count)));
+  const selectedPages = [...picked].reduce((n, id) => {
+    const sec = sections.find((x) => x.id === id);
+    return n + (sec ? sec.end_page - sec.start_page + 1 : 0);
+  }, 0);
+  const hasSelection = picked.size > 0 || from !== null;
+
+  async function startExtraction(acknowledge: boolean) {
+    try {
+      await unwrap(
+        api.POST("/tenders/{tenderId}/extractions", {
+          params: {
+            path: { tenderId: tenderId! },
+            header: { "Idempotency-Key": crypto.randomUUID() },
+          },
+          body: {
+            scope: [
+              {
+                document_version_id: versionId!,
+                section_ids: [...picked],
+                page_from: from,
+                page_to: to,
+              },
+            ],
+            acknowledge_overlap: acknowledge,
+          },
+        }),
+      );
+      announce("Extraction started. You can leave this page; it continues in the background.");
+      setConfirmExtract(false);
+      setOverlap(false);
+      setPicked(new Set());
+      setRangeFrom("");
+      setRangeTo("");
+      coverage.reload();
+    } catch (e) {
+      setConfirmExtract(false);
+      if (e instanceof ApiError && e.code === "job_overlap") {
+        setOverlap(true);
+      } else {
+        announce(e instanceof Error ? e.message : "The extraction could not be started");
+      }
+    }
+  }
+
   return (
     <div className="viewer">
       <h1 className="visually-hidden">Document viewer</h1>
@@ -172,18 +254,106 @@ export function Viewer() {
             ))}
           </ol>
         )}
+        {isMember && (
+          <section aria-label="Extract requirements" className="card">
+            <h2>Extract requirements</h2>
+            <p className="help">
+              Tick sections or give a page range. {picked.size} section(s)
+              {selectedPages ? `, ${selectedPages} pages` : ""} selected.
+            </p>
+            <Field label="From page">
+              {({ id }) => (
+                <input
+                  id={id}
+                  type="number"
+                  min={1}
+                  max={count}
+                  value={rangeFrom}
+                  onChange={(e) => setRangeFrom(e.target.value)}
+                />
+              )}
+            </Field>
+            <Field label="To page" error={rangeOk ? undefined : "Use pages inside the document"}>
+              {({ id, describedBy, invalid }) => (
+                <input
+                  id={id}
+                  aria-describedby={describedBy}
+                  aria-invalid={invalid}
+                  type="number"
+                  min={1}
+                  max={count}
+                  value={rangeTo}
+                  onChange={(e) => setRangeTo(e.target.value)}
+                />
+              )}
+            </Field>
+            <Button
+              variant="primary"
+              disabledReason={
+                !hasSelection
+                  ? "Choose sections or pages first"
+                  : !rangeOk
+                    ? "Fix the page range"
+                    : undefined
+              }
+              onClick={() => setConfirmExtract(true)}
+            >
+              Start extraction
+            </Button>
+            <Button
+              onClick={() => {
+                setPicked(new Set());
+                setRangeFrom("");
+                setRangeTo("");
+              }}
+            >
+              Clear selection
+            </Button>
+          </section>
+        )}
         <nav aria-label="Contents">
           {sections.length === 0 ? (
             <p className="help">This document has no outline. Use the page controls.</p>
           ) : (
             <ul className="outline">
-              {sections.map((s) => (
-                <li key={s.id} style={{ paddingLeft: (s.level - 1) * 12 }}>
-                  <button type="button" className="linklike" onClick={() => go(s.start_page)}>
-                    {s.title}
-                  </button>
-                </li>
-              ))}
+              {sections.map((s) => {
+                const cov =
+                  coverage.state.status === "ready" && coverage.state.data
+                    ? coverage.state.data.items.find((c) => c.section_id === s.id)
+                    : undefined;
+                return (
+                  <li key={s.id} style={{ paddingLeft: (s.level - 1) * 12 }}>
+                    {isMember && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Extract from ${s.title}`}
+                        checked={picked.has(s.id)}
+                        onChange={(e) => {
+                          const next = new Set(picked);
+                          if (e.target.checked) next.add(s.id);
+                          else next.delete(s.id);
+                          setPicked(next);
+                        }}
+                      />
+                    )}{" "}
+                    <button type="button" className="linklike" onClick={() => go(s.start_page)}>
+                      {s.title}
+                    </button>
+                    {cov && (
+                      <>
+                        {" "}
+                        <StatusChip
+                          label={cov.status === "running" ? "Running" : "Extracted"}
+                          tone={cov.status === "running" ? "info" : "success"}
+                        />
+                        <span className="visually-hidden">
+                          {cov.by ? ` by ${cov.by.display_name}` : ""}
+                        </span>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </nav>
@@ -202,6 +372,24 @@ export function Viewer() {
           <Button onClick={() => setZoom((z) => Math.max(0.6, z - 0.2))}>Zoom out</Button>
           <Button onClick={() => setZoom((z) => Math.min(3, z + 0.2))}>Zoom in</Button>
         </div>
+        <ConfirmDialog
+          open={confirmExtract}
+          onOpenChange={setConfirmExtract}
+          title="Start extraction"
+          description={`Extract requirements from ${picked.size} section(s)${
+            from !== null ? `, pages ${from} to ${to ?? count}` : ""
+          }. The AI proposes; you review every requirement before it counts.`}
+          confirmLabel="Start extraction"
+          onConfirm={() => void startExtraction(false)}
+        />
+        <ConfirmDialog
+          open={overlap}
+          onOpenChange={setOverlap}
+          title="Someone is already extracting here"
+          description="Part of this selection is being extracted by another member. Extracting again may propose duplicates, which are flagged."
+          confirmLabel="Extract anyway"
+          onConfirm={() => void startExtraction(true)}
+        />
         {current !== null && (
           <PdfPage
             versionId={versionId!}

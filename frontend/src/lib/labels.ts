@@ -32,7 +32,7 @@ export const userStatusLabel: Record<UserStatus, string> = {
   deactivated: "Deactivated",
 };
 
-export type Tone = "neutral" | "success" | "warning" | "error" | "info";
+export type Tone = "neutral" | "success" | "warning" | "error" | "info" | "ai";
 
 export const tenderStatusTone: Record<TenderStatus, Tone> = {
   draft: "neutral",
@@ -137,4 +137,44 @@ export const failureText: Record<string, string> = {
   index_unavailable: "The search index did not answer. Try again in a few minutes.",
   timeout: "Processing took longer than allowed. Try again.",
   other: "Processing failed for a reason the platform could not name. Ask an administrator.",
+};
+
+/** Requirements and baseline vocabulary (02-ux-design, Content design). */
+export const reviewStateLabel: Record<string, string> = {
+  unreviewed: "Not reviewed",
+  reviewed: "Reviewed",
+  confirmed: "Confirmed",
+};
+
+export const reviewStateTone: Record<string, Tone> = {
+  unreviewed: "neutral",
+  reviewed: "info",
+  confirmed: "success",
+};
+
+export const importanceLabel: Record<string, string> = {
+  mandatory: "Mandatory",
+  optional: "Optional",
+};
+
+export const originLabel: Record<string, string> = { ai: "AI", manual: "Manual" };
+
+export const flagLabel: Record<string, string> = {
+  possible_duplicate: "Possible duplicate",
+  compound: "Compound requirement",
+  low_confidence: "Low confidence",
+  conflict: "Conflict with another source",
+};
+
+export const deleteReasonLabel: Record<string, string> = {
+  duplicate: "Duplicate of another requirement",
+  out_of_scope: "Out of scope",
+  not_a_requirement: "Not a requirement",
+  other: "Other reason",
+};
+
+export const baselineStatusLabel: Record<string, string> = {
+  confirmed: "Confirmed",
+  reopened: "Reopened",
+  superseded: "Superseded",
 };

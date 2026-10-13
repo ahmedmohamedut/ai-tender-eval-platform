@@ -91,6 +91,7 @@ export function Field({
 }
 
 const ICONS: Record<Tone, string> = {
+  ai: "✦",
   neutral: "○",
   success: "✓",
   warning: "◐",
@@ -195,6 +196,90 @@ export function ConfirmDialog({
               className={`btn ${danger ? "danger" : "primary"}`}
               disabled={busy}
               onClick={onConfirm}
+            >
+              {confirmLabel}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+/** A justification note (T7): the action, the note, its minimum length and a disabled reason. */
+export function NoteDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  confirmLabel,
+  minLength,
+  onConfirm,
+  busy,
+  danger,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  minLength: number;
+  onConfirm: (note: string) => void;
+  busy?: boolean;
+  danger?: boolean;
+  children?: ReactNode;
+}) {
+  const [note, setNote] = useState("");
+  const id = useId();
+  const short = note.trim().length < minLength;
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) setNote("");
+        onOpenChange(o);
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="dialog">
+          <Dialog.Title asChild>
+            <h2>{title}</h2>
+          </Dialog.Title>
+          <Dialog.Description>{description}</Dialog.Description>
+          {children}
+          <div className="field">
+            <label htmlFor={id}>Note (required)</label>
+            <textarea
+              id={id}
+              rows={3}
+              value={note}
+              aria-describedby={`${id}-help`}
+              onChange={(e) => setNote(e.target.value)}
+            />
+            <span id={`${id}-help`} className="help">
+              {short
+                ? `At least ${minLength} characters, so the history says why. ${note.trim().length} so far.`
+                : "The note is kept in the history."}
+            </span>
+          </div>
+          <div className="dialog-actions">
+            <Dialog.Close asChild>
+              <button type="button" className="btn">
+                Cancel
+              </button>
+            </Dialog.Close>
+            <button
+              type="button"
+              className={`btn ${danger ? "danger" : "primary"}`}
+              disabled={busy || short}
+              aria-disabled={busy || short}
+              onClick={() => {
+                if (!short) {
+                  onConfirm(note.trim());
+                }
+              }}
             >
               {confirmLabel}
             </button>

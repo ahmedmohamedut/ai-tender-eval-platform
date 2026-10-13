@@ -12,7 +12,7 @@ export function TenderHeader({
   active,
 }: {
   tender: Tender;
-  active: "overview" | "progress" | "documents" | "vendors";
+  active: "overview" | "progress" | "documents" | "vendors" | "requirements";
 }) {
   const { me } = useSession();
   const isAdmin = me.user.role === "admin";
@@ -74,7 +74,12 @@ export function TenderHeader({
           </NavLink>
         </li>
         <li>
-          <span aria-disabled="true">Requirements</span>
+          <NavLink
+            to={`/tenders/${tender.id}/requirements`}
+            aria-current={active === "requirements" ? "page" : undefined}
+          >
+            Requirements
+          </NavLink>
         </li>
         <li>
           <NavLink
