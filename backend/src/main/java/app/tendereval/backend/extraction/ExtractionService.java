@@ -66,6 +66,68 @@ public class ExtractionService {
     if (in.getScope() == null || in.getScope().isEmpty()) {
       return Mono.error(ApiException.invalid("scope", "required", "Choose what to extract from"));
     }
+    return gate(db, tenderId)
+        .then(validate(db, tenderId, in.getScope()))
+        .flatMap(
+            items ->
+                overlap(db, tenderId, items, Boolean.TRUE.equals(in.getAcknowledgeOverlap()))
+                    .then(create(db, actor, tenderId, items, null)));
+  }
+
+  /**
+   * Retry of a failed or cancelled extraction (UX-JOB-05): a new job over the same scope that
+   * points back to the first. The same stage and baseline rules as a start apply.
+   */
+  public Mono<Job> retry(DatabaseClient db, CurrentUser actor, UUID jobId) {
+    return db.sql("SELECT tender_id, job_type FROM jobs WHERE id = :j")
+        .bind("j", jobId)
+        .map(
+            (r, m) ->
+                new Object[] {r.get("tender_id", UUID.class), r.get("job_type", String.class)})
+        .one()
+        .switchIfEmpty(Mono.error(ApiException.notFound("job")))
+        .flatMap(
+            row -> {
+              UUID tenderId = (UUID) row[0];
+              if (!"requirement_extraction".equals(row[1])) {
+                return Mono.<Job>error(
+                    ApiException.conflict("not_retryable", "This job type cannot be retried here"));
+              }
+              return jobs.get(db, jobId)
+                  .flatMap(
+                      job -> {
+                        if (!Boolean.TRUE.equals(job.getCanRetry())) {
+                          return Mono.<Job>error(
+                              ApiException.conflict("not_retryable", "This job cannot be retried"));
+                        }
+                        return gate(db, tenderId)
+                            .then(scopeOf(db, jobId))
+                            .flatMap(
+                                items ->
+                                    overlap(db, tenderId, items, false)
+                                        .then(create(db, actor, tenderId, items, jobId)));
+                      });
+            });
+  }
+
+  private Mono<List<Item>> scopeOf(DatabaseClient db, UUID jobId) {
+    return db.sql(
+            "SELECT document_version_id, section_id, page_from, page_to FROM job_scope_items"
+                + " WHERE job_id = :j")
+        .bind("j", jobId)
+        .map(
+            (r, m) ->
+                new Item(
+                    r.get("document_version_id", UUID.class),
+                    r.get("section_id", UUID.class),
+                    r.get("page_from", Integer.class),
+                    r.get("page_to", Integer.class)))
+        .all()
+        .collectList();
+  }
+
+  /** The tender must be open to the committee, writable and without a confirmed baseline. */
+  private Mono<Void> gate(DatabaseClient db, UUID tenderId) {
     return db.sql(
             "SELECT status, archived_at, app_baseline_locked(id) AS locked,"
                 + " app_is_member_of(id) AS member FROM tenders WHERE id = :t AND deleted_at IS NULL")
@@ -83,34 +145,26 @@ public class ExtractionService {
         .flatMap(
             t -> {
               if (t[1] != null) {
-                return Mono.<Job>error(
+                return Mono.<Void>error(
                     ApiException.conflict("tender_archived", "Archived tenders are read-only"));
               }
               if (!Boolean.TRUE.equals(t[3])) {
-                return Mono.<Job>error(
+                return Mono.<Void>error(
                     ApiException.forbidden(
                         "forbidden", "Only the committee extracts requirements"));
               }
               if (Boolean.TRUE.equals(t[2])) {
-                return Mono.<Job>error(
+                return Mono.<Void>error(
                     ApiException.conflict(
                         "baseline_locked",
                         "The baseline is confirmed. Reopen it to extract again"));
               }
               if (!"requirements".equals(t[0])) {
-                return Mono.<Job>error(
+                return Mono.<Void>error(
                     ApiException.conflict(
                         "wrong_stage", "Requirements are extracted once the tender is open"));
               }
-              return validate(db, tenderId, in.getScope())
-                  .flatMap(
-                      items ->
-                          overlap(
-                                  db,
-                                  tenderId,
-                                  items,
-                                  Boolean.TRUE.equals(in.getAcknowledgeOverlap()))
-                              .then(create(db, actor, tenderId, items)));
+              return Mono.<Void>empty();
             });
   }
 
@@ -270,12 +324,17 @@ public class ExtractionService {
             });
   }
 
-  private Mono<Job> create(DatabaseClient db, CurrentUser actor, UUID tenderId, List<Item> items) {
-    return db.sql(
-            "INSERT INTO jobs (tender_id, job_type, target_type, target_id, started_by)"
-                + " VALUES (:t, 'requirement_extraction', 'tender', :t, :u) RETURNING id")
-        .bind("t", tenderId)
-        .bind("u", actor.id())
+  private Mono<Job> create(
+      DatabaseClient db, CurrentUser actor, UUID tenderId, List<Item> items, UUID retryOf) {
+    DatabaseClient.GenericExecuteSpec insert =
+        db.sql(
+                "INSERT INTO jobs (tender_id, job_type, target_type, target_id, started_by,"
+                    + " retry_of_job_id) VALUES (:t, 'requirement_extraction', 'tender', :t, :u,"
+                    + " :r) RETURNING id")
+            .bind("t", tenderId)
+            .bind("u", actor.id());
+    insert = retryOf == null ? insert.bindNull("r", UUID.class) : insert.bind("r", retryOf);
+    return insert
         .map((r, m) -> r.get("id", UUID.class))
         .one()
         .flatMap(

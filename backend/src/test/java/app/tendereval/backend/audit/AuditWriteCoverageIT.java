@@ -1433,6 +1433,70 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isEqualTo(422);
           }
         });
+    m.put(
+        "retryJob",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+          UUID failed;
+
+          {
+            TestUsers.sql("UPDATE tenders SET status = 'requirements' WHERE id = ?", t);
+            UUID doc =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO documents (tender_id, doc_type, title) VALUES (?, 'rfp', 'RFP')"
+                            + " RETURNING id",
+                        t);
+            UUID v = UUID.randomUUID();
+            TestUsers.sql(
+                "INSERT INTO document_versions (id, document_id, version_no, file_name, file_format,"
+                    + " size_bytes, sha256, storage_key, status, uploaded_by) VALUES (?, ?, 1, 'a.pdf',"
+                    + " 'pdf', 10, repeat('a', 64), ?, 'uploading', ?)",
+                v,
+                doc,
+                "originals/%s/%s/%s.pdf".formatted(t, doc, v),
+                admin().id());
+            TestUsers.sql("UPDATE document_versions SET status = 'processing' WHERE id = ?", v);
+            TestUsers.sql(
+                "UPDATE document_versions SET status = 'ready', page_count = 5 WHERE id = ?", v);
+            failed =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO jobs (tender_id, job_type, target_type, target_id, started_by)"
+                            + " VALUES (?, 'requirement_extraction', 'tender', ?, ?) RETURNING id",
+                        t,
+                        t,
+                        chair().id());
+            TestUsers.sql(
+                "INSERT INTO job_scope_items (job_id, document_version_id) VALUES (?, ?)",
+                failed,
+                v);
+            TestUsers.sql("UPDATE jobs SET status = 'running' WHERE id = ?", failed);
+            TestUsers.sql(
+                "UPDATE jobs SET status = 'failed', failure_code = 'llm_unavailable',"
+                    + " finished_at = now() WHERE id = ?",
+                failed);
+          }
+
+          @Override
+          public int success() {
+            asChair("POST", "/jobs/" + failed + "/retry")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .exchange()
+                .expectStatus()
+                .isAccepted();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/jobs/" + UUID.randomUUID() + "/retry")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+          }
+        });
     return m;
   }
 

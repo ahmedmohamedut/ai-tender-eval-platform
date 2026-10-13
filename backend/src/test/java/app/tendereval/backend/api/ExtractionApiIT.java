@@ -140,6 +140,70 @@ class ExtractionApiIT extends AbstractApiIT {
   }
 
   @Test
+  void aFailedExtractionIsRetriedOverTheSameScopeAndPointsBack() throws Exception {
+    World w = world("requirements");
+    String job =
+        JsonPath.read(
+            new String(
+                start(w, w.member(), scope(w, w.s1()), "r-" + UUID.randomUUID())
+                    .expectStatus()
+                    .isAccepted()
+                    .expectBody()
+                    .returnResult()
+                    .getResponseBody()),
+            "$.id");
+    TestUsers.sql("UPDATE jobs SET status = 'running' WHERE id = ?::uuid", job);
+    // a running job cannot be retried
+    web.post()
+        .uri("/jobs/" + job + "/retry")
+        .header("Authorization", "Bearer " + tokenFor(w.member()))
+        .header("Idempotency-Key", "r-" + UUID.randomUUID())
+        .exchange()
+        .expectStatus()
+        .isEqualTo(409);
+    TestUsers.sql(
+        "UPDATE jobs SET status = 'failed', failure_code = 'llm_unavailable', finished_at = now()"
+            + " WHERE id = ?::uuid",
+        job);
+    clearInvocations(js);
+    byte[] out =
+        web.post()
+            .uri("/jobs/" + job + "/retry")
+            .header("Authorization", "Bearer " + tokenFor(w.member()))
+            .header("Idempotency-Key", "r-" + UUID.randomUUID())
+            .exchange()
+            .expectStatus()
+            .isAccepted()
+            .expectBody()
+            .jsonPath("$.retry_of_job_id")
+            .isEqualTo(job)
+            .jsonPath("$.status")
+            .isEqualTo("queued")
+            .returnResult()
+            .getResponseBody();
+    String again = JsonPath.read(new String(out), "$.id");
+    assertThat(again).isNotEqualTo(job);
+    assertThat(
+            TestUsers.scalar(
+                "SELECT count(*) FROM job_scope_items WHERE job_id = ?::uuid AND section_id = ?",
+                again,
+                w.s1()))
+        .isEqualTo(1L);
+    ArgumentCaptor<Message> sent = ArgumentCaptor.forClass(Message.class);
+    verify(js, atLeastOnce()).publish(sent.capture(), any(PublishOptions.class));
+    assertThat(sent.getAllValues()).anyMatch(x -> new String(x.getData()).contains(again));
+    // the observer-style outsider cannot retry someone else's job
+    TestUser outsider = TestUsers.create("member");
+    web.post()
+        .uri("/jobs/" + job + "/retry")
+        .header("Authorization", "Bearer " + tokenFor(outsider))
+        .header("Idempotency-Key", "r-" + UUID.randomUUID())
+        .exchange()
+        .expectStatus()
+        .isNotFound();
+  }
+
+  @Test
   void theRulesOfTheTenderStageAndTheScopeAreEnforced() {
     World draft = world("draft");
     start(draft, draft.member(), scope(draft, draft.s1()), "k-" + UUID.randomUUID())

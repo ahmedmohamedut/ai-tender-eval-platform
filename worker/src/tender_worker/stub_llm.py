@@ -9,6 +9,7 @@ Run with `python -m tender_worker.stub_llm`.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -82,6 +83,7 @@ class Control:
     def __init__(self) -> None:
         self.mode = os.environ.get("STUB_LLM_MODE", "ok")
         self.status = int(os.environ.get("STUB_LLM_FAIL_STATUS", "503"))
+        self.delay_ms = int(os.environ.get("STUB_LLM_DELAY_MS", "0"))
         self.calls = 0
 
 
@@ -92,6 +94,8 @@ def app() -> web.Application:
     async def chat(request: web.Request) -> web.Response:
         control.calls += 1
         body = await request.json()
+        if control.delay_ms:
+            await asyncio.sleep(control.delay_ms / 1000)
         if control.mode == "fail":
             return web.json_response({"error": {"message": "stub outage"}}, status=control.status)
         messages = body.get("messages", [])
@@ -148,7 +152,10 @@ def app() -> web.Application:
         data = await request.json()
         control.mode = data.get("mode", control.mode)
         control.status = int(data.get("status", control.status))
-        return web.json_response({"mode": control.mode, "status": control.status})
+        control.delay_ms = int(data.get("delay_ms", control.delay_ms))
+        return web.json_response(
+            {"mode": control.mode, "status": control.status, "delay_ms": control.delay_ms}
+        )
 
     async def models(_: web.Request) -> web.Response:
         return web.json_response(
