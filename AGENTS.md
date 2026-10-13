@@ -72,6 +72,7 @@ Run from the repository root. Each command below exists and was run (see `docs/d
 | --- | --- |
 | Start the whole local environment (realm imported, buckets, streams, consumers, KV bucket, database roles and migrations ready; applications built and started). Returns only when every service is healthy. | `make up` |
 | Start only the dependencies, without backend and workers | `make up-infra` |
+| Rebuild and recreate only the application containers (frontend build, backend, workers and the embedding stub); dependencies and all volumes stay. Narrower: `make rebuild-backend`, `make rebuild-workers`, `make rebuild-frontend` | `make rebuild-apps` |
 | Stop it | `make down` |
 | Stop it and delete local volumes | `make clean` |
 | Create or repair the development users member01, member02 and observer01 (run by `make up`; development only) | `make seed-dev-users` |

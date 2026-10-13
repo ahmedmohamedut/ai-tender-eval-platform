@@ -21,10 +21,18 @@ sql() { docker exec -e PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" "${PROJECT}-pos
 nats_() { docker run --rm --network "$NET" natsio/nats-box:latest nats --server nats://nats:4222 "$@"; }
 QUEUED_WAIT="${DRILL_QUEUED_TIMEOUT_SECONDS:-${WATCHDOG_QUEUED_TIMEOUT_SECONDS:-120}}"
 
-out=$(python3 -I infra/scripts/signin_check.py --print-token) || { echo "$out"; echo "FAIL sign-in"; exit 1; }
-TOKEN=$(printf '%s\n' "$out" | sed -n 's/^TOKEN=//p')
-AUTH="Authorization: Bearer $TOKEN"
-DIR=$(mktemp -d); trap 'rm -rf "$DIR"; docker start "${PROJECT}-qdrant-1" "${PROJECT}-worker-ingest-1" >/dev/null 2>&1' EXIT
+# Access tokens are short-lived and the drills run for many minutes: fetch a fresh one when due.
+TOKEN_FILE=$(mktemp)
+auth() {  # runs in subshells, so the token is cached in a file
+  local now; now=$(date +%s)
+  if [ ! -s "$TOKEN_FILE" ] || [ $((now - $(stat -c %Y "$TOKEN_FILE"))) -gt 90 ]; then
+    local out
+    out=$(python3 -I infra/scripts/signin_check.py --print-token) || { echo "FAIL sign-in" >&2; exit 1; }
+    printf '%s\n' "$out" | sed -n 's/^TOKEN=//p' > "$TOKEN_FILE"
+  fi
+  printf 'Authorization: Bearer %s' "$(cat "$TOKEN_FILE")"
+}
+DIR=$(mktemp -d); trap 'rm -rf "$DIR" "$TOKEN_FILE"; docker start "${PROJECT}-qdrant-1" "${PROJECT}-worker-ingest-1" >/dev/null 2>&1' EXIT
 (cd worker && uv run python tests/fixtures/generate.py "$DIR" 300) >/dev/null || { echo "FAIL fixtures"; exit 1; }
 (cd worker && uv run python - "$DIR" <<'PY'
 import sys; sys.path.insert(0, "tests")
@@ -39,13 +47,13 @@ PY
 
 chair=$(sql "select id from users where email='member01@example.test'")
 new_tender() {
-  curl -s -H "$AUTH" -H 'Content-Type: application/json' -X POST "$GW/tenders" \
+  curl -s -H "$(auth)" -H 'Content-Type: application/json' -X POST "$GW/tenders" \
     -d "{\"name\":\"Drill $1 $(date +%s)\",\"chair_id\":\"$chair\",\"member_ids\":[\"$chair\"]}" | jq -r .id
 }
 upload() { # tender file -> version id
-  curl -s -H "$AUTH" -F "doc_type=other" -F "title=$2" -F "file=@$DIR/$2" "$GW/tenders/$1/documents" | jq -r .current_version.id
+  curl -s -H "$(auth)" -F "doc_type=other" -F "title=$2" -F "file=@$DIR/$2" "$GW/tenders/$1/documents" | jq -r .current_version.id
 }
-status_of() { curl -s -H "$AUTH" "$GW/document-versions/$1" | jq -r '[.status, (.failure_reason // "")] | join(":")'; }
+status_of() { curl -s -H "$(auth)" "$GW/document-versions/$1" | jq -r '[.status, (.failure_reason // "")] | join(":")'; }
 wait_for() { # version wanted-prefix seconds
   local end=$((SECONDS + $3)) s=""
   while [ $SECONDS -lt $end ]; do
@@ -93,7 +101,7 @@ else bad "Qdrant down: still '$s'"; fi
 docker start "${PROJECT}-qdrant-1" >/dev/null
 for _ in $(seq 1 60); do curl -sf -H "api-key: $QDRANT_API_KEY" "http://localhost:${QDRANT_PORT:-16333}/readyz" >/dev/null && break; sleep 1; done
 before=$(docker logs "${PROJECT}-worker-ingest-1" 2>&1 | grep -c "manifest found, parse skipped")
-curl -s -o /dev/null -H "$AUTH" -X POST "$GW/document-versions/$v/retry"
+curl -s -o /dev/null -H "$(auth)" -X POST "$GW/document-versions/$v/retry"
 if s=$(wait_for "$v" ready 180); then
   after=$(docker logs "${PROJECT}-worker-ingest-1" 2>&1 | grep -c "manifest found, parse skipped")
   [ "$after" -gt "$before" ] && ok "retry after the outage: ready, the manifest was found and nothing was parsed again" || bad "retry parsed again (skipped $before -> $after)"

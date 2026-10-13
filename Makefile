@@ -3,6 +3,7 @@ SHELL := /bin/bash
 COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profile apps
 
 .PHONY: up up-infra down clean ps logs env verify-env smoke-ingest drills \
+	rebuild-apps rebuild-backend rebuild-workers rebuild-frontend \
 	seed-dev-users api contracts contracts-check lint lint-worker lint-backend lint-frontend lint-api \
 	test e2e test-unit test-integration test-slice test-worker test-backend test-frontend deps
 
@@ -26,6 +27,27 @@ up-infra: .env
 	@infra/scripts/preflight.sh
 	docker compose --env-file .env -f infra/compose/compose.yaml up -d
 	@infra/scripts/wait-healthy.sh
+
+## Rebuild and recreate only application containers; Keycloak, Postgres, RustFS, Qdrant, OpenBao
+## and every volume are left alone (unlike `make clean`, which deletes all local data).
+## Flyway runs on backend start, so new migrations apply to the existing database.
+rebuild-backend: .env
+	$(COMPOSE) build backend
+	$(COMPOSE) up -d --no-deps --force-recreate backend
+	@infra/scripts/wait-healthy.sh
+
+## The ingest and agent workers and the development embedding stub share one image.
+rebuild-workers: .env
+	$(COMPOSE) build worker-ingest
+	$(COMPOSE) up -d --no-deps --force-recreate embedding-stub worker-ingest worker-agent
+	@infra/scripts/wait-healthy.sh
+
+## The SPA is a static build served by the gateway from frontend/dist: no restart needed.
+rebuild-frontend: frontend/src/api/generated/schema.d.ts
+	cd frontend && npm run --silent build
+
+rebuild-apps: rebuild-frontend rebuild-backend rebuild-workers
+	@$(COMPOSE) ps --format 'table {{.Service}}\t{{.Status}}'
 
 down:
 	$(COMPOSE) down
