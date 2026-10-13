@@ -66,6 +66,50 @@ class AuditWriteCoverageIT extends AbstractApiIT {
     return chairUser;
   }
 
+  private UUID reqTender;
+
+  private UUID reqTender() {
+    if (reqTender == null) {
+      reqTender = Fixtures.tender(admin(), chair());
+    }
+    return reqTender;
+  }
+
+  private UUID category() {
+    return (UUID)
+        TestUsers.scalar(
+            "INSERT INTO requirement_categories (name) VALUES (?) RETURNING id",
+            "Cover " + UUID.randomUUID());
+  }
+
+  private UUID requirementRow() {
+    return (UUID)
+        TestUsers.scalar(
+            "INSERT INTO requirements (tender_id, text, category_id, importance, origin, source_item_id)"
+                + " VALUES (?, 'The supplier shall keep audit logs.', ?, 'mandatory', 'ai', ?) RETURNING id",
+            reqTender(),
+            category(),
+            UUID.randomUUID());
+  }
+
+  private String reqEtag(UUID id) {
+    return web.get()
+        .uri("/requirements/" + id)
+        .header("Authorization", "Bearer " + tokenFor(chair()))
+        .exchange()
+        .expectBody()
+        .returnResult()
+        .getResponseHeaders()
+        .getETag();
+  }
+
+  private org.springframework.test.web.reactive.server.WebTestClient.RequestBodySpec asChair(
+      String method, String uri) {
+    var spec = "PATCH".equals(method) ? web.patch().uri(uri) : web.post().uri(uri);
+    return spec.header("Authorization", "Bearer " + tokenFor(chair()))
+        .contentType(MediaType.APPLICATION_JSON);
+  }
+
   private UUID finished() {
     UUID t = Fixtures.tender(admin(), TestUsers.create("member"));
     for (String st : List.of("requirements", "evaluation", "consolidation", "finalized")) {
@@ -920,6 +964,313 @@ class AuditWriteCoverageIT extends AbstractApiIT {
           @Override
           public void refused() {
             send("%PDF-1.7\nproposal".getBytes(), "sideways").expectStatus().isEqualTo(422);
+          }
+        });
+    m.put(
+        "createRequirement",
+        simple(
+            () ->
+                asChair("POST", "/tenders/" + reqTender() + "/requirements")
+                    .bodyValue(
+                        Map.of(
+                            "text", "The supplier shall provide an exit plan.",
+                            "category_id", category(),
+                            "importance", "mandatory",
+                            "acceptance_criteria", ""))
+                    .exchange()
+                    .expectStatus()
+                    .isCreated(),
+            () ->
+                asChair("POST", "/tenders/" + reqTender() + "/requirements")
+                    .bodyValue(
+                        Map.of(
+                            "text", " ",
+                            "category_id", category(),
+                            "importance", "mandatory",
+                            "acceptance_criteria", ""))
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(422)));
+    m.put(
+        "updateRequirement",
+        new Scenario() {
+          UUID id = requirementRow();
+
+          @Override
+          public int success() {
+            asChair("PATCH", "/requirements/" + id)
+                .header("If-Match", reqEtag(id))
+                .bodyValue(Map.of("note", "Reworded for clarity", "text", "Logs shall be kept."))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("PATCH", "/requirements/" + id)
+                .header("If-Match", "\"999\"")
+                .bodyValue(Map.of("note", "Reworded for clarity", "text", "Other."))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(412);
+          }
+        });
+    m.put(
+        "deleteRequirement",
+        simple(
+            () ->
+                asChair("POST", "/requirements/" + requirementRow() + "/delete")
+                    .bodyValue(Map.of("reason", "out_of_scope", "note", "Not for this tender"))
+                    .exchange()
+                    .expectStatus()
+                    .isOk(),
+            () ->
+                asChair("POST", "/requirements/" + requirementRow() + "/delete")
+                    .bodyValue(Map.of("reason", "duplicate", "note", "Same as the other"))
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(422)));
+    m.put(
+        "restoreRequirement",
+        new Scenario() {
+          UUID id = requirementRow();
+
+          {
+            TestUsers.sql(
+                "UPDATE requirements SET deleted_at = now(), delete_reason = 'other' WHERE id = ?",
+                id);
+          }
+
+          @Override
+          public int success() {
+            asChair("POST", "/requirements/" + id + "/restore")
+                .bodyValue(Map.of("note", "Needed after all"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/requirements/" + id + "/restore")
+                .bodyValue(Map.of("note", "Needed after all"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(409); // not deleted any more
+          }
+        });
+    m.put(
+        "markRequirementReviewed",
+        new Scenario() {
+          UUID id = requirementRow();
+
+          @Override
+          public int success() {
+            asChair("POST", "/requirements/" + id + "/review").exchange().expectStatus().isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/requirements/" + UUID.randomUUID() + "/review")
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+          }
+        });
+    m.put(
+        "resolveRequirementFlag",
+        new Scenario() {
+          UUID id = requirementRow();
+          UUID flag =
+              (UUID)
+                  TestUsers.scalar(
+                      "INSERT INTO requirement_flags (requirement_id, flag_type) VALUES (?, 'compound') RETURNING id",
+                      id);
+
+          @Override
+          public int success() {
+            asChair("POST", "/requirements/" + id + "/flags/" + flag + "/resolve")
+                .bodyValue(Map.of("note", "Checked"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/requirements/" + id + "/flags/" + flag + "/resolve")
+                .bodyValue(Map.of("note", "Checked"))
+                .exchange()
+                .expectStatus()
+                .isNotFound(); // already resolved
+          }
+        });
+    m.put(
+        "bulkUpdateRequirements",
+        new Scenario() {
+          @Override
+          public int success() {
+            asChair("POST", "/tenders/" + reqTender() + "/requirements/bulk")
+                .bodyValue(
+                    Map.of(
+                        "ids", List.of(requirementRow(), requirementRow()),
+                        "action", "mark_reviewed",
+                        "note", "Reviewed together"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 2; // one event per row
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tenders/" + reqTender() + "/requirements/bulk")
+                .bodyValue(
+                    Map.of(
+                        "ids",
+                        List.of(requirementRow()),
+                        "action",
+                        "change_category",
+                        "note",
+                        "Moving them"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "mergeRequirements",
+        new Scenario() {
+          @Override
+          public int success() {
+            asChair("POST", "/tenders/" + reqTender() + "/requirements/merge")
+                .bodyValue(
+                    Map.of(
+                        "requirement_ids", List.of(requirementRow(), requirementRow()),
+                        "result",
+                            Map.of(
+                                "text", "Merged obligation.",
+                                "category_id", category(),
+                                "importance", "mandatory",
+                                "acceptance_criteria", ""),
+                        "note", "One obligation"))
+                .exchange()
+                .expectStatus()
+                .isCreated();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tenders/" + reqTender() + "/requirements/merge")
+                .bodyValue(
+                    Map.of(
+                        "requirement_ids", List.of(requirementRow()),
+                        "result",
+                            Map.of(
+                                "text", "Merged obligation.",
+                                "category_id", category(),
+                                "importance", "mandatory",
+                                "acceptance_criteria", ""),
+                        "note", "One obligation"))
+                .exchange()
+                .expectStatus()
+                .is4xxClientError();
+          }
+        });
+    m.put(
+        "splitRequirement",
+        new Scenario() {
+          private Map<String, Object> part(String text) {
+            return Map.of(
+                "text",
+                text,
+                "category_id",
+                category(),
+                "importance",
+                "mandatory",
+                "acceptance_criteria",
+                "");
+          }
+
+          @Override
+          public int success() {
+            asChair("POST", "/requirements/" + requirementRow() + "/split")
+                .bodyValue(
+                    Map.of(
+                        "parts",
+                        List.of(part("First duty."), part("Second duty.")),
+                        "note",
+                        "Two duties"))
+                .exchange()
+                .expectStatus()
+                .isCreated();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/requirements/" + requirementRow() + "/split")
+                .bodyValue(Map.of("parts", List.of(part("Only one.")), "note", "One part"))
+                .exchange()
+                .expectStatus()
+                .is4xxClientError();
+          }
+        });
+    m.put(
+        "createCategory",
+        simple(
+            () ->
+                web.post()
+                    .uri("/categories")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("name", "Audit " + UUID.randomUUID()))
+                    .exchange()
+                    .expectStatus()
+                    .isCreated(),
+            () ->
+                web.post()
+                    .uri("/categories")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("name", " "))
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(422)));
+    m.put(
+        "updateCategory",
+        new Scenario() {
+          UUID id = category();
+
+          @Override
+          public int success() {
+            web.patch()
+                .uri("/categories/" + id)
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("name", "Renamed " + UUID.randomUUID()))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            web.patch()
+                .uri("/categories/" + UUID.randomUUID())
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("name", "Nope"))
+                .exchange()
+                .expectStatus()
+                .isNotFound();
           }
         });
     return m;
