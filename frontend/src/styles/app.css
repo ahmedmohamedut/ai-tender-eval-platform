@@ -529,3 +529,32 @@ progress {
   grid-column: 1 / -1;
   margin: 0;
 }
+
+/* A result message: top centre, under the header, on top of the page, gone after a few seconds. */
+.toast {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 14px;
+  background: var(--surface, #fff);
+  color: var(--text, inherit);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent, #1f5fbf);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.15);
+}
+.toast-close {
+  background: none;
+  border: 0;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  padding: 0 4px;
+}

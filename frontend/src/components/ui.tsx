@@ -3,7 +3,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useId,
+  useRef,
   useState,
   type ButtonHTMLAttributes,
   type ReactNode,
@@ -208,28 +210,56 @@ export function ConfirmDialog({
 type Announce = (message: string) => void;
 const AnnounceContext = createContext<Announce>(() => undefined);
 
+/** How long a result message stays on screen (WCAG 2.2.1: it can also be dismissed). */
+export const TOAST_MS = 6000;
+
 export function AnnounceProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState("");
+  const timers = useRef<{
+    show?: ReturnType<typeof setTimeout>;
+    hide?: ReturnType<typeof setTimeout>;
+  }>({});
+  const clear = useCallback(() => {
+    clearTimeout(timers.current.show);
+    clearTimeout(timers.current.hide);
+    setMessage("");
+  }, []);
   const announce = useCallback((m: string) => {
+    clearTimeout(timers.current.show);
+    clearTimeout(timers.current.hide);
     setMessage("");
     // Re-set on the next tick so the same message is read twice.
-    setTimeout(() => setMessage(m), 20);
+    timers.current.show = setTimeout(() => {
+      setMessage(m);
+      timers.current.hide = setTimeout(() => setMessage(""), TOAST_MS);
+    }, 20);
   }, []);
+  useEffect(
+    () => () => {
+      clearTimeout(timers.current.show);
+      clearTimeout(timers.current.hide);
+    },
+    [],
+  );
   return (
     <AnnounceContext.Provider value={announce}>
       {children}
-      <div role="status" aria-live="polite" className="visually-hidden">
-        {message}
+      {/* One polite live region: it is also the visible message, at the top under the header. */}
+      <div role="status" aria-live="polite" className={message ? "toast" : "visually-hidden"}>
+        {message && (
+          <>
+            <span>{message}</span>
+            <button
+              type="button"
+              className="toast-close"
+              onClick={clear}
+              aria-label="Dismiss message"
+            >
+              ×
+            </button>
+          </>
+        )}
       </div>
-      {message && (
-        <div
-          className="card"
-          style={{ position: "fixed", right: 16, bottom: 16, margin: 0, maxWidth: 360 }}
-          aria-hidden="true"
-        >
-          {message}
-        </div>
-      )}
     </AnnounceContext.Provider>
   );
 }

@@ -304,3 +304,44 @@ describe("push stream and viewer helpers", () => {
     ]);
   });
 });
+
+describe("result messages", () => {
+  it("shows a message at the top, announces it, and removes it after a few seconds", async () => {
+    const { act, render } = await import("@testing-library/react");
+    const { AnnounceProvider, TOAST_MS, useAnnounce } = await import("../components/ui");
+    const { vi } = await import("vitest");
+    vi.useFakeTimers();
+    function Trigger() {
+      const announce = useAnnounce();
+      return (
+        <button type="button" onClick={() => announce("Tender saved.")}>
+          save
+        </button>
+      );
+    }
+    const view = render(
+      <AnnounceProvider>
+        <Trigger />
+      </AnnounceProvider>,
+    );
+    act(() => view.getByText("save").click());
+    act(() => {
+      vi.advanceTimersByTime(30);
+    });
+    const status = view.getByRole("status");
+    expect(status).toHaveTextContent("Tender saved.");
+    expect(status.className).toContain("toast");
+    act(() => {
+      vi.advanceTimersByTime(TOAST_MS + 50);
+    });
+    expect(view.getByRole("status")).toHaveTextContent("");
+    // and it can be dismissed at once
+    act(() => view.getByText("save").click());
+    act(() => {
+      vi.advanceTimersByTime(30);
+    });
+    act(() => view.getByRole("button", { name: "Dismiss message" }).click());
+    expect(view.getByRole("status")).toHaveTextContent("");
+    vi.useRealTimers();
+  });
+});
