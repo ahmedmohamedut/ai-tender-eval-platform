@@ -83,7 +83,14 @@ class SchemaIT {
    * Moves listed in the data model's "Allowed status changes" table, for the tables built so far.
    */
   static Set<String> documentedTransitions() throws Exception {
-    Set<String> tables = Set.of("tenders", "document_versions", "proposal_versions", "jobs");
+    Set<String> tables =
+        Set.of(
+            "tenders",
+            "document_versions",
+            "proposal_versions",
+            "jobs",
+            "requirements",
+            "baselines");
     Map<String, Set<String>> statuses = new LinkedHashMap<>();
     Set<String> moves = new LinkedHashSet<>();
     List<String> lines =
