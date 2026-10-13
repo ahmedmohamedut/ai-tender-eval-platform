@@ -34,3 +34,5 @@ frontend/src/api/generated/
 *.log
 .DS_Store
 .claude/settings.local.json
+frontend/playwright-report/
+frontend/test-results/

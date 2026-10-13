@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "react-oidc-context";
+import { useNavigate } from "react-router";
 import { ApiError, unwrap, type ApiClient } from "../lib/api";
 import { idleState, shouldRenewToken, type IdleState } from "../lib/idle";
 import { Loading } from "../components/ui";
@@ -50,11 +51,29 @@ export function SessionProvider({ api, children }: { api: ApiClient; children: R
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [version, setVersion] = useState(0);
 
+  const navigate = useNavigate();
+
+  // The memory-only session is gone after a reload: sign in again through the Keycloak session
+  // and come back to the page the person was on, not to the home page.
   useEffect(() => {
     if (!auth.isLoading && !auth.isAuthenticated && !auth.error) {
-      void auth.signinRedirect();
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      void auth.signinRedirect({ state: { returnTo } });
     }
   }, [auth]);
+
+  // Once per sign-in: the state is kept by the library for the whole session, and following it
+  // again on every navigation would bounce the person back to where they came in.
+  const returnTo = (auth.user?.state as { returnTo?: string } | undefined)?.returnTo;
+  const followed = useRef(false);
+  useEffect(() => {
+    if (auth.isAuthenticated && !followed.current) {
+      followed.current = true;
+      if (returnTo && returnTo !== "/") {
+        navigate(returnTo, { replace: true });
+      }
+    }
+  }, [auth.isAuthenticated, returnTo, navigate]);
 
   useEffect(() => {
     if (!auth.isAuthenticated) {

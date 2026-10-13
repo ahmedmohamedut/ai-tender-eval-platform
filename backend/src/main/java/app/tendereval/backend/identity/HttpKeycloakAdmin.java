@@ -64,8 +64,9 @@ public class HttpKeycloakAdmin implements KeycloakAdmin {
 
   private WebClient.RequestBodySpec request(
       org.springframework.http.HttpMethod method, String path, String bearer) {
+    // A URI, not a string: a string is a template and would encode %3A a second time.
     return http.method(method)
-        .uri(adminBase + path)
+        .uri(java.net.URI.create(adminBase + path))
         .headers(h -> h.setBearerAuth(bearer))
         .contentType(MediaType.APPLICATION_JSON);
   }
@@ -89,10 +90,18 @@ public class HttpKeycloakAdmin implements KeycloakAdmin {
             e -> unavailable("The identity provider did not answer in time"));
   }
 
+  private static final org.slf4j.Logger log =
+      org.slf4j.LoggerFactory.getLogger(HttpKeycloakAdmin.class);
+
   private Throwable translate(Throwable e) {
     if (e instanceof ApiException) {
       return e;
     }
+    // Type and status only: a response body or a message could carry an address or a name.
+    log.warn(
+        "identity provider call failed: {}{}",
+        e.getClass().getSimpleName(),
+        e instanceof WebClientResponseException r ? " status=" + r.getStatusCode().value() : "");
     if (e instanceof WebClientResponseException r) {
       HttpStatusCode s = r.getStatusCode();
       if (s.value() == 409) {

@@ -14,7 +14,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "api": "openapi-typescript ../api/openapi.yaml -o src/api/generated/schema.d.ts",
-    "api:lint": "redocly lint ../api/openapi.yaml --max-problems 0"
+    "api:lint": "redocly lint ../api/openapi.yaml --max-problems 0",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.3.0",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@eslint/js": "9.39.1",
+    "@playwright/test": "1.64.0",
     "@redocly/cli": "2.62.1",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",

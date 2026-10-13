@@ -4,7 +4,7 @@ COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profil
 
 .PHONY: up up-infra down clean ps logs env verify-env \
 	seed-dev-users api contracts contracts-check lint lint-worker lint-backend lint-frontend lint-api \
-	test test-unit test-integration test-slice test-worker test-backend test-frontend deps
+	test e2e test-unit test-integration test-slice test-worker test-backend test-frontend deps
 
 .env:
 	cp .env.example .env
@@ -127,3 +127,8 @@ test-slice: up
 
 ## Everything, in order.
 test: test-unit test-integration test-slice
+
+## Browser journeys against the running stack (Phase 1 exit criterion). Starts it if needed.
+## Needs Chromium once: cd frontend && npx playwright install chromium
+e2e: up
+	cd frontend && set -a && . ../.env && set +a && npx playwright test

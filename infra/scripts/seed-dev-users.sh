@@ -50,6 +50,19 @@ seed() { # short_name display_name platform_role realm_role
   echo "seeded $user ($role): $created"
 }
 
+# `seed-dev-users.sh --one <short_name> "<Display Name>" <admin|member|observer>` seeds one more
+# user, for example the administrator the browser tests sign in as.
+if [ "${1:-}" = "--one" ]; then
+  case "$4" in
+    admin) realm_role=procurement_admin ;;
+    member) realm_role=committee_member ;;
+    observer) realm_role=observer ;;
+    *) echo "role must be admin, member or observer" >&2; exit 2 ;;
+  esac
+  seed "$2" "$3" "$4" "$realm_role"
+  exit 0
+fi
+
 seed member01   "Member 01"   member   committee_member
 seed member02   "Member 02"   member   committee_member
 seed observer01 "Observer 01" observer observer

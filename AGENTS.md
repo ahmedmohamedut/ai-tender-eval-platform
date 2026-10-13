@@ -80,6 +80,7 @@ Run from the repository root. Each command below exists and was run (see `docs/d
 | Unit tests only (no Docker) | `make test-unit` |
 | Integration tests only (PostgreSQL, NATS, RustFS containers) | `make test-integration` |
 | Walking slice only (starts the environment if needed) | `make test-slice` |
+| Browser journeys against the running stack (Playwright; needs `npx playwright install chromium` once) | `make e2e` |
 | Lint and format check everything, including schema drift | `make lint` |
 | Lint the OpenAPI file; generate and compile the server interfaces; generate the typed client | `make api` |
 | Export JSON Schemas from the Pydantic message models and test the backend against them | `make contracts` |
