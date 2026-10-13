@@ -11,8 +11,11 @@ import urllib.error, urllib.parse, urllib.request
 
 KC = os.environ["KEYCLOAK_PUBLIC_URL"].rstrip("/")
 SPA = os.environ["SPA_BASE_URL"].rstrip("/")
-EMAIL = os.environ["BOOTSTRAP_ADMIN_EMAIL"]
-TEMP = os.environ["BOOTSTRAP_ADMIN_TEMP_PASSWORD"]
+# SIGNIN_USER and SIGNIN_PASSWORD sign in any user with a known password (the seed users);
+# without them the bootstrap administrator is used, with the temporary-password flow.
+OTHER = os.environ.get("SIGNIN_USER")
+EMAIL = OTHER or os.environ["BOOTSTRAP_ADMIN_EMAIL"]
+TEMP = os.environ["SIGNIN_PASSWORD"] if OTHER else os.environ["BOOTSTRAP_ADMIN_TEMP_PASSWORD"]
 NEW = os.environ.get("BOOTSTRAP_ADMIN_NEW_PASSWORD", "dev-Changed-Password-1x")
 REALM = f"{KC}/realms/tender-eval/protocol/openid-connect"
 REDIRECT = SPA + "/"
@@ -77,9 +80,9 @@ def run(password):
     return None
 
 
-token = run(NEW) or run(TEMP)
+token = run(TEMP) if OTHER else (run(NEW) or run(TEMP))
 if not token:
-    sys.exit("sign-in failed for the bootstrap administrator")
+    sys.exit(f"sign-in failed for {EMAIL}")
 claims = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
 aud = claims.get("aud")
 aud = [aud] if isinstance(aud, str) else aud
@@ -87,7 +90,7 @@ checks = {
     "iss": claims.get("iss") == f"{KC}/realms/tender-eval",
     "aud contains tender-api": "tender-api" in (aud or []),
     "azp is tender-spa": claims.get("azp") == "tender-spa",
-    "exactly one role": claims.get("roles") == ["procurement_admin"],
+    "exactly one role": len(claims.get("roles") or []) == 1,
 }
 if "--print-token" in sys.argv:
     # Development only: lets scripts call the API as the bootstrap administrator.

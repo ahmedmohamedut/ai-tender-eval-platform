@@ -74,6 +74,7 @@ Run from the repository root. Each command below exists and was run (see `docs/d
 | Start only the dependencies, without backend and workers | `make up-infra` |
 | Stop it | `make down` |
 | Stop it and delete local volumes | `make clean` |
+| Create or repair the development users member01, member02 and observer01 (run by `make up`; development only) | `make seed-dev-users` |
 | Check the provisioned environment (roles, buckets, streams, consumers, secret paths, gateway limits, bootstrap sign-in) | `make verify-env` |
 | Run every test suite: unit, integration (Docker), walking slice | `make test` |
 | Unit tests only (no Docker) | `make test-unit` |

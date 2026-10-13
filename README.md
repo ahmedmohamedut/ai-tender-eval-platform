@@ -100,6 +100,14 @@ make down
 | http://localhost:19001 | RustFS console |
 | http://localhost:16006 | Phoenix |
 
+Development users, created by `make up` (`make seed-dev-users` repeats it safely). Sign in with the email:
+
+| Email | Role | Password |
+| --- | --- | --- |
+| `admin@example.test` | Administrator | `BOOTSTRAP_ADMIN_TEMP_PASSWORD` from `.env`; Keycloak asks you to change it |
+| `member01@example.test`, `member02@example.test` | Committee member | `DEV_SEED_USER_PASSWORD` from `.env` |
+| `observer01@example.test` | Observer | `DEV_SEED_USER_PASSWORD` from `.env` |
+
 All values in `.env.example` are throwaway development values. Host ports are non-standard on purpose; change them in `.env`.
 
 Other commands: `make lint`, `make api` (lint the contract, generate server interfaces and the typed client), `make contracts` (export message schemas), `make up-infra` (dependencies only), `make clean` (delete local data). The full list is in [`AGENTS.md`](AGENTS.md).

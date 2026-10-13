@@ -3,7 +3,7 @@ SHELL := /bin/bash
 COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profile apps
 
 .PHONY: up up-infra down clean ps logs env verify-env \
-	api contracts contracts-check lint lint-worker lint-backend lint-frontend lint-api \
+	seed-dev-users api contracts contracts-check lint lint-worker lint-backend lint-frontend lint-api \
 	test test-unit test-integration test-slice test-worker test-backend test-frontend deps
 
 .env:
@@ -18,6 +18,7 @@ up: .env frontend/src/api/generated/schema.d.ts
 	cd frontend && npm run --silent build
 	$(COMPOSE) up -d --build
 	@infra/scripts/wait-healthy.sh
+	@infra/scripts/seed-dev-users.sh
 	@$(COMPOSE) ps --format 'table {{.Service}}\t{{.Status}}'
 
 ## Dependencies only (no application containers).
@@ -38,6 +39,11 @@ ps:
 
 logs:
 	$(COMPOSE) logs -f --tail=100 $(SERVICE)
+
+## Development users member01, member02, observer01 (password DEV_SEED_USER_PASSWORD).
+seed-dev-users: .env
+	@infra/scripts/preflight.sh
+	@infra/scripts/seed-dev-users.sh
 
 ## Check the provisioned environment (buckets, streams, roles, sign-in ...).
 verify-env: .env
