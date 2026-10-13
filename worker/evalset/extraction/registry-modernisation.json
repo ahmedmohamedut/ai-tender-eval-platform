@@ -1,0 +1,193 @@
+{
+ "name": "registry-modernisation",
+ "title": "Registry modernisation RFP (synthetic)",
+ "categories": [
+  {
+   "id": "e68e3561-51d0-5825-8a15-d0321e675d77",
+   "name": "Security"
+  },
+  {
+   "id": "cf84c9dd-fd77-5737-9d9d-6ae2dc3900b0",
+   "name": "Hosting"
+  },
+  {
+   "id": "c880225e-2670-5144-b941-8c5fb2c2dd9d",
+   "name": "Support"
+  },
+  {
+   "id": "07390cee-836f-594c-9c07-fb0427693a22",
+   "name": "Reporting"
+  }
+ ],
+ "passages": [
+  {
+   "id": "5c95e24a-a1ee-559a-ba99-420362296355",
+   "page_no": 1,
+   "ordinal": 1,
+   "text": "Background. The ministry operates a regional registry of vehicles and operators."
+  },
+  {
+   "id": "e3d29405-3850-5a08-a782-f8eb70b14792",
+   "page_no": 1,
+   "ordinal": 2,
+   "text": "The vendor shall migrate the existing registry database without loss of records."
+  },
+  {
+   "id": "d086df6d-5077-5987-99e8-eac08b5eb2b5",
+   "page_no": 1,
+   "ordinal": 3,
+   "text": "The vendor must provide a test environment that mirrors production."
+  },
+  {
+   "id": "078b5352-fc50-5563-9e99-df9dcbb9982f",
+   "page_no": 1,
+   "ordinal": 4,
+   "text": "The vendor shall train at least twelve ministry staff before go-live."
+  },
+  {
+   "id": "7c82dab0-ddc0-526e-b9df-fb147573e0bf",
+   "page_no": 1,
+   "ordinal": 5,
+   "text": "The current system was introduced in 2012 and is hosted on premises."
+  },
+  {
+   "id": "14deffca-46d9-5e96-a681-b2e96c2c5360",
+   "page_no": 2,
+   "ordinal": 6,
+   "text": "User interfaces shall meet WCAG 2.1 level AA."
+  },
+  {
+   "id": "314048bf-18c7-51bd-b794-9b7ab9d9cb20",
+   "page_no": 2,
+   "ordinal": 7,
+   "text": "The vendor should provide documentation in English and in the national language."
+  },
+  {
+   "id": "8900d5de-f9c6-5c41-9fe4-c33d343e3afe",
+   "page_no": 2,
+   "ordinal": 8,
+   "text": "The vendor shall make the system available to citizens through a public web portal."
+  },
+  {
+   "id": "13203e12-3e09-52f8-a107-553d8fd9bf90",
+   "page_no": 2,
+   "ordinal": 9,
+   "text": "Questions about this document must be sent to the contact person named on page one."
+  },
+  {
+   "id": "f4331c04-b5f4-55c7-a46f-09cee2e4d83c",
+   "page_no": 2,
+   "ordinal": 10,
+   "text": "Personal data shall be processed only within the national territory."
+  },
+  {
+   "id": "623c34e1-7484-5ffb-9e74-ea4606d93f5e",
+   "page_no": 2,
+   "ordinal": 11,
+   "text": "The vendor must report any personal data breach to the ministry within 24 hours."
+  },
+  {
+   "id": "40c00f62-1217-5767-91fe-8f711bf41665",
+   "page_no": 3,
+   "ordinal": 12,
+   "text": "The vendor shall provide a maintenance window plan agreed in advance with the ministry."
+  },
+  {
+   "id": "d8b21188-9b7b-5de0-b654-71d619907893",
+   "page_no": 3,
+   "ordinal": 13,
+   "text": "The vendor must provide a maintenance window plan agreed in advance with the ministry."
+  },
+  {
+   "id": "8ad6d4af-136b-562d-9857-95b0afff3748",
+   "page_no": 3,
+   "ordinal": 14,
+   "text": "Payment will be made within thirty days of an approved invoice."
+  },
+  {
+   "id": "8831e252-f56d-56e1-98a8-cf3c97f8f30f",
+   "page_no": 3,
+   "ordinal": 15,
+   "text": "The vendor shall deliver weekly progress reports during implementation."
+  }
+ ],
+ "expected": [
+  {
+   "passage_id": "e3d29405-3850-5a08-a782-f8eb70b14792",
+   "importance": "mandatory",
+   "text": "The vendor shall migrate the existing registry database without loss of records.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "d086df6d-5077-5987-99e8-eac08b5eb2b5",
+   "importance": "mandatory",
+   "text": "The vendor must provide a test environment that mirrors production.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "078b5352-fc50-5563-9e99-df9dcbb9982f",
+   "importance": "mandatory",
+   "text": "The vendor shall train at least twelve ministry staff before go-live.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "14deffca-46d9-5e96-a681-b2e96c2c5360",
+   "importance": "mandatory",
+   "text": "User interfaces shall meet WCAG 2.1 level AA.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "314048bf-18c7-51bd-b794-9b7ab9d9cb20",
+   "importance": "optional",
+   "text": "The vendor should provide documentation in English and in the national language.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "8900d5de-f9c6-5c41-9fe4-c33d343e3afe",
+   "importance": "mandatory",
+   "text": "The vendor shall make the system available to citizens through a public web portal.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "f4331c04-b5f4-55c7-a46f-09cee2e4d83c",
+   "importance": "mandatory",
+   "text": "Personal data shall be processed only within the national territory.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "623c34e1-7484-5ffb-9e74-ea4606d93f5e",
+   "importance": "mandatory",
+   "text": "The vendor must report any personal data breach to the ministry within 24 hours.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "40c00f62-1217-5767-91fe-8f711bf41665",
+   "importance": "mandatory",
+   "text": "The vendor shall provide a maintenance window plan agreed in advance with the ministry.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "d8b21188-9b7b-5de0-b654-71d619907893",
+   "importance": "mandatory",
+   "text": "The vendor must provide a maintenance window plan agreed in advance with the ministry.",
+   "duplicate_of": "40c00f62-1217-5767-91fe-8f711bf41665",
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "8831e252-f56d-56e1-98a8-cf3c97f8f30f",
+   "importance": "mandatory",
+   "text": "The vendor shall deliver weekly progress reports during implementation.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  }
+ ]
+}

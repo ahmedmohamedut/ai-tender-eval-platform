@@ -8,7 +8,7 @@ AI Tender Evaluation Platform. A procurement committee uploads an RFP and vendor
 
 Components: React SPA, Spring Boot reactive REST API (the only writer of business data), PostgreSQL with row-level security, Keycloak, OpenBao, RustFS (S3), NATS JetStream, one Python worker image in two roles (`ingest`, `agent`), Qdrant, Arize Phoenix.
 
-Status: design complete; Phase 0 (scaffold), Phase 1 (platform spine: identity, tenders, committees, audit, row-level security, SPA shell) and Phase 2 (documents, vendors and proposals, ingestion, index, viewer, job center, push) are built; requirements, screening, evaluation and the report are not built yet. Check the repository before assuming a file exists.
+Status: design complete; Phase 0 (scaffold), Phase 1 (platform spine: identity, tenders, committees, audit, row-level security, SPA shell) and Phase 2 (documents, vendors and proposals, ingestion, index, viewer, job center, push) are built; Phase 3 (requirements, extraction, baseline, scoring) is built on the backend and the worker, its screens are in progress; screening, evaluation and the report are not built yet. Check the repository before assuming a file exists.
 
 ## Read before you change anything
 
@@ -88,7 +88,8 @@ Run from the repository root. Each command below exists and was run (see `docs/d
 | Real upload to ready through the gateway, DOCX conversion and the three file-cause failures (synthetic documents) | `make smoke-ingest` |
 | Failure drills of the worker and the message loop (several minutes; restarts workers and Qdrant) | `make drills` |
 | Backlog of every consumer and the dead-letter stream | `infra/scripts/consumer-lag.sh` |
-| Run the AI evaluation set | `make eval` (not yet: no evaluation set exists) |
+| Run the extraction evaluation set on synthetic documents (stub in-process; `EVAL_ARGS="--base-url URL --model NAME --write"` for a model, results into `docs/releases/`) | `make eval` |
+| Real extraction, review, baseline confirm, reopen and version 2 on the running stack | `infra/scripts/extraction-smoke.sh` |
 
 Per component: `cd backend && ./gradlew test integrationTest spotlessApply`, `cd worker && uv run pytest` (add `-m integration` for the container tests) and `cd frontend && npm test`. Generated code (`backend/build/generated`, `frontend/src/api/generated`) is never committed. Ports on the host are in `.env` (copied from `.env.example` by `make up`).
 

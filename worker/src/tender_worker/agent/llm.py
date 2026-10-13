@@ -92,7 +92,7 @@ class OpenAiCompatible:
         api_key: str,
         model: str,
         temperature: float = 0.0,
-        max_tokens: int = 1500,
+        max_tokens: int = 4096,
         timeout: float = 120.0,
         max_concurrency: int = 8,
         structured_output: str = "json_schema",
@@ -158,7 +158,13 @@ class OpenAiCompatible:
                 last = exc
             except Exception as exc:  # noqa: BLE001 - 429, 5xx, timeouts and connection errors
                 last = exc
-                self.breaker.failure()
+                if type(exc).__name__ in (
+                    "LengthFinishReasonError",
+                    "ContentFilterFinishReasonError",
+                ):
+                    pass  # the endpoint answered; the answer was cut or refused: not an outage
+                else:
+                    self.breaker.failure()
             if attempt + 1 < self._retries:
                 delay = min(self._cap, self._base * (2**attempt)) * (0.8 + 0.4 * random.random())
                 await self._sleep(delay)

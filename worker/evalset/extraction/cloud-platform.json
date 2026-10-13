@@ -1,0 +1,270 @@
+{
+ "name": "cloud-platform",
+ "title": "Cloud platform RFP (synthetic)",
+ "categories": [
+  {
+   "id": "e68e3561-51d0-5825-8a15-d0321e675d77",
+   "name": "Security"
+  },
+  {
+   "id": "cf84c9dd-fd77-5737-9d9d-6ae2dc3900b0",
+   "name": "Hosting"
+  },
+  {
+   "id": "c880225e-2670-5144-b941-8c5fb2c2dd9d",
+   "name": "Support"
+  },
+  {
+   "id": "07390cee-836f-594c-9c07-fb0427693a22",
+   "name": "Reporting"
+  }
+ ],
+ "passages": [
+  {
+   "id": "ebd9dbad-1fbf-5a12-ac34-eba92f038478",
+   "page_no": 1,
+   "ordinal": 1,
+   "text": "1. Introduction. The authority is procuring a managed cloud platform for its internal systems."
+  },
+  {
+   "id": "db4efba6-6ff2-570e-9a9b-461c71634916",
+   "page_no": 1,
+   "ordinal": 2,
+   "text": "The evaluation committee will score proposals against the criteria in section 9."
+  },
+  {
+   "id": "0929c219-d73a-5310-88cf-c02c7c7f55d2",
+   "page_no": 1,
+   "ordinal": 3,
+   "text": "The supplier shall host all production data in data centres located within the European Union."
+  },
+  {
+   "id": "95fb2b4a-cf68-53e0-9e56-0e7701d0d9e8",
+   "page_no": 1,
+   "ordinal": 4,
+   "text": "The supplier shall encrypt all customer data at rest using AES-256 or an equivalent algorithm."
+  },
+  {
+   "id": "75f48fd3-ffc7-5c67-8eea-149ae3f509e9",
+   "page_no": 1,
+   "ordinal": 5,
+   "text": "All data in transit must be protected with TLS 1.2 or later."
+  },
+  {
+   "id": "3a8bd061-41f5-5f77-93bb-85bce1001f9b",
+   "page_no": 2,
+   "ordinal": 6,
+   "text": "The platform shall provide single sign-on using SAML 2.0 or OpenID Connect."
+  },
+  {
+   "id": "e50c5cf1-db0e-5159-a76f-09f758a82301",
+   "page_no": 2,
+   "ordinal": 7,
+   "text": "Definitions. 'Service' means the managed platform described in this document."
+  },
+  {
+   "id": "501d239a-6de5-5d16-9d41-0c5fce7b820e",
+   "page_no": 2,
+   "ordinal": 8,
+   "text": "The supplier must provide role based access control for every administrative function."
+  },
+  {
+   "id": "37e03b05-66ab-598b-9db0-0d281921eee2",
+   "page_no": 2,
+   "ordinal": 9,
+   "text": "Every administrative action shall be written to an immutable audit log that is retained for 24 months."
+  },
+  {
+   "id": "fa955ac6-0bbb-5e2b-acc6-b21de976c392",
+   "page_no": 2,
+   "ordinal": 10,
+   "text": "The supplier should provide a documented data export in an open format on request."
+  },
+  {
+   "id": "8471f94b-51c2-50d4-a26d-6b9e03f084b0",
+   "page_no": 2,
+   "ordinal": 11,
+   "text": "The authority reserves the right to cancel the procurement at any time without liability."
+  },
+  {
+   "id": "2820853c-f072-57c4-805c-dec130d43b1a",
+   "page_no": 3,
+   "ordinal": 12,
+   "text": "Service availability shall be at least 99.9 percent measured per calendar month."
+  },
+  {
+   "id": "03a5a4a4-44ff-5abc-a1b9-6c7dfcbae84d",
+   "page_no": 3,
+   "ordinal": 13,
+   "text": "The supplier shall provide telephone support from 08:00 to 18:00 on every working day."
+  },
+  {
+   "id": "4acf74ae-c1e8-548b-bd4a-a41076b0fcf9",
+   "page_no": 3,
+   "ordinal": 14,
+   "text": "Critical incidents must be acknowledged within 30 minutes."
+  },
+  {
+   "id": "2bf07ddc-541b-5e4f-8fcd-85f6024cec51",
+   "page_no": 3,
+   "ordinal": 15,
+   "text": "The supplier shall deliver a monthly service report covering availability and incidents."
+  },
+  {
+   "id": "cbe275a4-70b8-5af3-a62b-058a6954eb75",
+   "page_no": 3,
+   "ordinal": 16,
+   "text": "Proposals must be submitted electronically before the closing date stated on the cover page."
+  },
+  {
+   "id": "5819666b-c370-528f-881e-33f6cbae9191",
+   "page_no": 3,
+   "ordinal": 17,
+   "text": "The supplier may offer an additional sandbox environment at no extra charge."
+  },
+  {
+   "id": "8058b47d-426c-5b0f-86c2-f7db1e2a8296",
+   "page_no": 4,
+   "ordinal": 18,
+   "text": "The supplier shall encrypt all customer data at rest using AES-256."
+  },
+  {
+   "id": "d3c61103-a0b2-583e-9df1-011665bff738",
+   "page_no": 4,
+   "ordinal": 19,
+   "text": "Service availability shall be at least 99.5 percent measured per calendar month."
+  },
+  {
+   "id": "fce601e5-477b-50dd-8be3-6769dfc04307",
+   "page_no": 4,
+   "ordinal": 20,
+   "text": "Annex A lists the sites that will use the platform during the first year."
+  },
+  {
+   "id": "e581595b-4f5d-528d-8326-cd7f0a37a781",
+   "page_no": 4,
+   "ordinal": 21,
+   "text": "The supplier shall support restoration of any backup within four hours."
+  },
+  {
+   "id": "9a0902cf-91c9-5f2b-91d6-3cb3c5f7605a",
+   "page_no": 4,
+   "ordinal": 22,
+   "text": "The supplier shall perform a penetration test at least once a year and share a summary with the authority."
+  }
+ ],
+ "expected": [
+  {
+   "passage_id": "0929c219-d73a-5310-88cf-c02c7c7f55d2",
+   "importance": "mandatory",
+   "text": "The supplier shall host all production data in data centres located within the European Union.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "95fb2b4a-cf68-53e0-9e56-0e7701d0d9e8",
+   "importance": "mandatory",
+   "text": "The supplier shall encrypt all customer data at rest using AES-256 or an equivalent algorithm.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "75f48fd3-ffc7-5c67-8eea-149ae3f509e9",
+   "importance": "mandatory",
+   "text": "All data in transit must be protected with TLS 1.2 or later.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "3a8bd061-41f5-5f77-93bb-85bce1001f9b",
+   "importance": "mandatory",
+   "text": "The platform shall provide single sign-on using SAML 2.0 or OpenID Connect.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "501d239a-6de5-5d16-9d41-0c5fce7b820e",
+   "importance": "mandatory",
+   "text": "The supplier must provide role based access control for every administrative function.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "37e03b05-66ab-598b-9db0-0d281921eee2",
+   "importance": "mandatory",
+   "text": "Every administrative action shall be written to an immutable audit log that is retained for 24 months.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "fa955ac6-0bbb-5e2b-acc6-b21de976c392",
+   "importance": "optional",
+   "text": "The supplier should provide a documented data export in an open format on request.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "2820853c-f072-57c4-805c-dec130d43b1a",
+   "importance": "mandatory",
+   "text": "Service availability shall be at least 99.9 percent measured per calendar month.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "03a5a4a4-44ff-5abc-a1b9-6c7dfcbae84d",
+   "importance": "mandatory",
+   "text": "The supplier shall provide telephone support from 08:00 to 18:00 on every working day.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "4acf74ae-c1e8-548b-bd4a-a41076b0fcf9",
+   "importance": "mandatory",
+   "text": "Critical incidents must be acknowledged within 30 minutes.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "2bf07ddc-541b-5e4f-8fcd-85f6024cec51",
+   "importance": "mandatory",
+   "text": "The supplier shall deliver a monthly service report covering availability and incidents.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "5819666b-c370-528f-881e-33f6cbae9191",
+   "importance": "optional",
+   "text": "The supplier may offer an additional sandbox environment at no extra charge.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "8058b47d-426c-5b0f-86c2-f7db1e2a8296",
+   "importance": "mandatory",
+   "text": "The supplier shall encrypt all customer data at rest using AES-256.",
+   "duplicate_of": "95fb2b4a-cf68-53e0-9e56-0e7701d0d9e8",
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "d3c61103-a0b2-583e-9df1-011665bff738",
+   "importance": "mandatory",
+   "text": "Service availability shall be at least 99.5 percent measured per calendar month.",
+   "duplicate_of": null,
+   "conflicts_with": "2820853c-f072-57c4-805c-dec130d43b1a"
+  },
+  {
+   "passage_id": "e581595b-4f5d-528d-8326-cd7f0a37a781",
+   "importance": "mandatory",
+   "text": "The supplier shall support restoration of any backup within four hours.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  },
+  {
+   "passage_id": "9a0902cf-91c9-5f2b-91d6-3cb3c5f7605a",
+   "importance": "mandatory",
+   "text": "The supplier shall perform a penetration test at least once a year and share a summary with the authority.",
+   "duplicate_of": null,
+   "conflicts_with": null
+  }
+ ]
+}

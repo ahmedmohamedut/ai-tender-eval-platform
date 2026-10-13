@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profile apps
 
-.PHONY: up up-infra down clean ps logs env verify-env smoke-ingest drills \
+.PHONY: up up-infra down clean ps logs env verify-env smoke-ingest drills eval \
 	rebuild-apps rebuild-backend rebuild-workers rebuild-frontend \
 	seed-dev-users api contracts contracts-check lint lint-worker lint-backend lint-frontend lint-api \
 	test e2e test-unit test-integration test-slice test-worker test-backend test-frontend deps
@@ -146,6 +146,11 @@ test-integration: worker/.venv
 ## Starts the environment if it is not running.
 test-slice: up
 	infra/scripts/walking-slice.sh
+
+# The extraction evaluation set (synthetic documents). Without arguments the rule-based stub runs
+# in-process, which checks the harness. For a model: make eval EVAL_ARGS="--base-url URL --model NAME --write"
+eval:
+	cd worker && uv run python -m tender_worker.evalrun extraction $(EVAL_ARGS)
 
 # Real upload through the gateway to ready (and the three file causes): synthetic documents only.
 smoke-ingest: up

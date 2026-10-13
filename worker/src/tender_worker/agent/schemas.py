@@ -17,7 +17,9 @@ class Candidate(BaseModel):
     importance: Literal["mandatory", "optional"] = "mandatory"
     acceptance_criteria: list[str] = Field(default_factory=list, max_length=20)
     category_id: str | None = None
-    sources: list[SourceRef] = Field(default_factory=list, max_length=10)
+    # Required in the schema: without it a model may leave the key out, and a requirement
+    # without a source is never shown (rule 6).
+    sources: list[SourceRef] = Field(max_length=10)
     several_obligations: bool = False
     certainty: Literal["high", "medium", "low"] = "medium"
 
