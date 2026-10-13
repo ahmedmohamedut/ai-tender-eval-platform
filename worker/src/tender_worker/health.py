@@ -7,6 +7,8 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 
+from tender_worker import metrics
+
 log = logging.getLogger(__name__)
 
 Check = Callable[[], Awaitable[bool]]
@@ -36,6 +38,15 @@ class HealthServer:
         try:
             line = await asyncio.wait_for(reader.readline(), timeout=5)
             path = line.decode(errors="replace").split(" ")[1] if line else ""
+            if path == "/metrics":
+                text = metrics.render().encode()
+                writer.write(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/plain; version=0.0.4\r\n"
+                    + f"Content-Length: {len(text)}\r\nConnection: close\r\n\r\n".encode()
+                    + text
+                )
+                await writer.drain()
+                return
             status, body = await self._route(path)
             payload = json.dumps(body).encode()
             writer.write(

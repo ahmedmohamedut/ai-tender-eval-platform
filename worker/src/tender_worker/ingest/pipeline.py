@@ -14,6 +14,7 @@ import hashlib
 import json
 import logging
 import random
+import time
 from collections.abc import Awaitable, Callable
 from concurrent.futures import Executor
 from concurrent.futures.process import BrokenProcessPool
@@ -22,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
+from tender_worker import metrics
 from tender_worker.ingest.convert import docx_to_pdf, has_tracked_changes
 from tender_worker.ingest.model import IngestFailure, ParseResult, Warning_
 from tender_worker.ingest.pdf import parse_pdf
@@ -273,6 +275,15 @@ class IngestPipeline:
     new_executor: Callable[[], Executor] | None = None
 
     async def run(self, ref: DocumentRef, deliveries: int, traceparent: str) -> None:
+        started = time.monotonic()
+        metrics.gauge_add("ingest_documents_in_flight", 1)
+        try:
+            await self._run(ref, deliveries, traceparent)
+        finally:
+            metrics.gauge_add("ingest_documents_in_flight", -1)
+            metrics.observe("ingest_document", time.monotonic() - started)
+
+    async def _run(self, ref: DocumentRef, deliveries: int, traceparent: str) -> None:
         emitter = Emitter(ref, self.publisher, self.worker, deliveries, traceparent)
         steps = (
             ["fetch"]
@@ -320,12 +331,15 @@ class IngestPipeline:
             )
             await emitter.result(files)
             await emitter.completed(files.counts, warnings)
+            metrics.inc("ingest_documents_total", outcome="completed")
+            metrics.inc("ingest_passages_total", float(files.counts["passages"]))
         except IngestFailure as failure:
             log.warning(
                 "document failed",
                 extra={"version": str(ref.version_id), "code": failure.code},
             )
             await emitter.failed(failure)
+            metrics.inc("ingest_documents_total", outcome=failure.code)
 
     async def _read_manifest(self, ref: DocumentRef) -> dict | None:
         if not await with_retries(

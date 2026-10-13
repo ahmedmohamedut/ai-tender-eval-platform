@@ -33,3 +33,26 @@ async def test_healthz_and_readyz():
         assert (await get(server.port, "/nope"))[0].endswith("404 Not Found")
     finally:
         await server.stop()
+
+
+async def test_metrics_are_served_as_prometheus_text_without_names():
+    from tender_worker import metrics
+
+    metrics.reset()
+    metrics.inc("ingest_documents_total", outcome="completed")
+    metrics.inc("ingest_documents_total", outcome="password_protected")
+    metrics.observe("ingest_document", 1.5)
+    server = HealthServer(0, {})
+    await server.start()
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", server.port)
+        writer.write(b"GET /metrics HTTP/1.1\r\n\r\n")
+        await writer.drain()
+        raw = (await reader.read()).decode()
+        writer.close()
+    finally:
+        await server.stop()
+    assert "200 OK" in raw and "text/plain" in raw
+    assert 'ingest_documents_total{outcome="completed"} 1' in raw
+    assert 'ingest_documents_total{outcome="password_protected"} 1' in raw
+    assert "ingest_document_seconds_count 1" in raw
