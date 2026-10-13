@@ -36,3 +36,4 @@ frontend/src/api/generated/
 .claude/settings.local.json
 frontend/playwright-report/
 frontend/test-results/
+frontend/.vitest/
