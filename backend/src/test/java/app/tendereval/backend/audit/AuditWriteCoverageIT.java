@@ -1383,6 +1383,56 @@ class AuditWriteCoverageIT extends AbstractApiIT {
             put("\"0\"", 3).expectStatus().isEqualTo(412);
           }
         });
+    m.put(
+        "startExtraction",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+          UUID v;
+
+          {
+            TestUsers.sql("UPDATE tenders SET status = 'requirements' WHERE id = ?", t);
+            UUID doc =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO documents (tender_id, doc_type, title) VALUES (?, 'rfp', 'RFP')"
+                            + " RETURNING id",
+                        t);
+            v = UUID.randomUUID();
+            TestUsers.sql(
+                "INSERT INTO document_versions (id, document_id, version_no, file_name, file_format,"
+                    + " size_bytes, sha256, storage_key, status, uploaded_by) VALUES (?, ?, 1, 'a.pdf',"
+                    + " 'pdf', 10, repeat('a', 64), ?, 'uploading', ?)",
+                v,
+                doc,
+                "originals/%s/%s/%s.pdf".formatted(t, doc, v),
+                admin().id());
+            TestUsers.sql("UPDATE document_versions SET status = 'processing' WHERE id = ?", v);
+            TestUsers.sql(
+                "UPDATE document_versions SET status = 'ready', page_count = 5 WHERE id = ?", v);
+          }
+
+          @Override
+          public int success() {
+            asChair("POST", "/tenders/" + t + "/extractions")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .bodyValue(Map.of("scope", List.of(Map.of("document_version_id", v))))
+                .exchange()
+                .expectStatus()
+                .isAccepted();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tenders/" + t + "/extractions")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .bodyValue(
+                    Map.of("scope", List.of(Map.of("document_version_id", UUID.randomUUID()))))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
     return m;
   }
 

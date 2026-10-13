@@ -65,6 +65,20 @@ public class ObjectStorage {
         .map(r -> r.uploadId());
   }
 
+  /** A small object in one request (job inputs). */
+  public Mono<Void> putBytes(String bucket, String key, byte[] data, String contentType) {
+    return Mono.fromFuture(
+            s3.putObject(
+                software.amazon.awssdk.services.s3.model.PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .contentType(contentType)
+                    .contentLength((long) data.length)
+                    .build(),
+                AsyncRequestBody.fromBytes(data)))
+        .then();
+  }
+
   /** Part numbers start at 1. Returns the part's ETag. */
   public Mono<CompletedPart> uploadPart(
       String bucket, String key, String uploadId, int partNumber, byte[] data) {

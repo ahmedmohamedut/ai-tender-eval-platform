@@ -27,8 +27,14 @@ public class JobDispatcher {
   private final CommandPublisher publisher;
   private final AppProperties props;
   private final JsonMapper json = JsonMapper.builder().build();
+  private final app.tendereval.backend.storage.ObjectStorage storage;
 
-  public JobDispatcher(IngestDb db, CommandPublisher publisher, AppProperties props) {
+  public JobDispatcher(
+      IngestDb db,
+      CommandPublisher publisher,
+      AppProperties props,
+      app.tendereval.backend.storage.ObjectStorage storage) {
+    this.storage = storage;
     this.db = db;
     this.publisher = publisher;
     this.props = props;
@@ -90,5 +96,134 @@ public class JobDispatcher {
                 log.warn(
                     "command not published job={} error={}", jobId, e.getClass().getSimpleName()))
         .onErrorResume(e -> Mono.empty());
+  }
+
+  /**
+   * The command of an extraction job (PI 5.4): scope, categories and the requirements that exist,
+   * inline up to 64 KB and otherwise a file in {@code tender-jobs} named by {@code input_ref}.
+   */
+  public Mono<Void> publishExtraction(UUID jobId) {
+    return db.inTransaction(
+            c ->
+                c.sql(
+                        "SELECT tender_id, started_by FROM jobs WHERE id = :id AND status = 'queued'"
+                            + " AND job_type = 'requirement_extraction'")
+                    .bind("id", jobId)
+                    .map(
+                        (r, m) ->
+                            new UUID[] {
+                              r.get("tender_id", UUID.class), r.get("started_by", UUID.class)
+                            })
+                    .one()
+                    .flatMap(
+                        j ->
+                            Mono.zip(
+                                    c.sql(
+                                            "SELECT i.document_version_id, i.section_id, i.page_from,"
+                                                + " i.page_to FROM job_scope_items i WHERE i.job_id = :j"
+                                                + " ORDER BY i.created_at, i.id")
+                                        .bind("j", jobId)
+                                        .map(
+                                            (r, m) -> {
+                                              Map<String, Object> o = new LinkedHashMap<>();
+                                              o.put(
+                                                  "document_version_id",
+                                                  r.get("document_version_id", UUID.class)
+                                                      .toString());
+                                              UUID s = r.get("section_id", UUID.class);
+                                              o.put("section_id", s == null ? null : s.toString());
+                                              o.put("page_from", r.get("page_from", Integer.class));
+                                              o.put("page_to", r.get("page_to", Integer.class));
+                                              return o;
+                                            })
+                                        .all()
+                                        .collectList(),
+                                    c.sql(
+                                            "SELECT id, name FROM requirement_categories WHERE is_active"
+                                                + " ORDER BY sort_order, name")
+                                        .map(
+                                            (r, m) ->
+                                                Map.<String, Object>of(
+                                                    "id", r.get("id", UUID.class).toString(),
+                                                    "name", r.get("name", String.class)))
+                                        .all()
+                                        .collectList(),
+                                    c.sql(
+                                            "SELECT id, display_no, text FROM requirements WHERE tender_id = :t"
+                                                + " AND deleted_at IS NULL ORDER BY display_no")
+                                        .bind("t", j[0])
+                                        .map(
+                                            (r, m) ->
+                                                Map.<String, Object>of(
+                                                    "id", r.get("id", UUID.class).toString(),
+                                                    "number", r.get("display_no", String.class),
+                                                    "text", r.get("text", String.class)))
+                                        .all()
+                                        .collectList())
+                                .flatMap(
+                                    t -> {
+                                      Map<String, Object> input = new LinkedHashMap<>();
+                                      input.put("scope", t.getT1());
+                                      input.put("categories", t.getT2());
+                                      input.put("existing_requirements", t.getT3());
+                                      return c.sql(
+                                              "UPDATE jobs SET command_published_at = now() WHERE id = :id")
+                                          .bind("id", jobId)
+                                          .fetch()
+                                          .rowsUpdated()
+                                          .thenReturn(new Object[] {j, input});
+                                    })))
+        .flatMap(
+            row -> {
+              UUID[] j = (UUID[]) row[0];
+              @SuppressWarnings("unchecked")
+              Map<String, Object> input = (Map<String, Object>) row[1];
+              String inline = json.writeValueAsString(input);
+              Map<String, Object> body = new LinkedHashMap<>();
+              body.put("job_id", jobId.toString());
+              body.put("job_type", "requirement_extraction");
+              body.put("tender_id", j[0].toString());
+              body.put("target", Map.of("type", "tender", "id", j[0].toString()));
+              body.put("requested_by", j[1] == null ? null : j[1].toString());
+              body.put("attempt", 1);
+              body.put("created_at", Instant.now().toString());
+              Mono<Void> stored = Mono.empty();
+              if (inline.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 64 * 1024) {
+                body.put("input", input);
+              } else {
+                byte[] data = inline.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                String key = "inputs/%s/%s.json".formatted(j[0], jobId);
+                String sha = java.util.HexFormat.of().formatHex(sha256(data));
+                body.put(
+                    "input_ref", Map.of("bucket", props.s3BucketJobs(), "key", key, "sha256", sha));
+                stored = storage.putBytes(props.s3BucketJobs(), key, data, "application/json");
+              }
+              String msgId = "job:" + jobId + ":cmd:" + (Instant.now().getEpochSecond() / 60);
+              return stored.then(
+                  publisher
+                      .publish(
+                          Subjects.command("requirement_extraction"),
+                          json.writeValueAsString(body),
+                          msgId,
+                          app.tendereval.backend.web.TraceIds.newTraceparent(
+                              app.tendereval.backend.web.TraceIds.newTraceId()),
+                          Subjects.SCHEMA_COMMAND)
+                      .then());
+            })
+        .doOnError(
+            e ->
+                log.warn(
+                    "extraction command not published job={} error={}",
+                    jobId,
+                    e.getClass().getSimpleName()))
+        .onErrorResume(e -> Mono.empty());
+  }
+
+  private static byte[] sha256(byte[] data) {
+    try {
+      return java.security.MessageDigest.getInstance("SHA-256").digest(data);
+    } catch (java.security.NoSuchAlgorithmException e) {
+      throw new IllegalStateException(e);
+    }
   }
 }

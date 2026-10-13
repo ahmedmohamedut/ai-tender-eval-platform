@@ -208,6 +208,7 @@ public class JobProcessor {
             : Mono.empty();
     return start
         .then(ensureSteps(c, job.id(), m.steps()))
+        .then(ensureRun(c, job, m))
         .then(markSteps(c, job.id(), m.step(), false))
         .then(updateProgress(c, job.id(), m))
         .then(
@@ -221,6 +222,46 @@ public class JobProcessor {
                             .build())
                     .thenReturn(Outcome.ack("applied"))
                 : Mono.just(Outcome.ack("applied")));
+  }
+
+  /** The first message of an AI job carries the run record (PI 5.5): one ai_runs row per job. */
+  private Mono<Void> ensureRun(DatabaseClient c, JobRow job, StatusMessage m) {
+    if (m.modelName() == null || m.promptVersion() == null) {
+      return Mono.empty();
+    }
+    String type =
+        switch (job.jobType()) {
+          case "requirement_extraction" -> "extraction";
+          case "screening_precheck" -> "precheck";
+          default -> "evaluation";
+        };
+    DatabaseClient.GenericExecuteSpec spec =
+        c.sql(
+                "INSERT INTO ai_runs (job_id, run_type, model_name, model_version, prompt_version,"
+                    + " input_scope) VALUES (:j, :t, :m, :v, :p, CAST(:s AS jsonb))"
+                    + " ON CONFLICT (job_id) DO NOTHING")
+            .bind("j", job.id())
+            .bind("t", type)
+            .bind("m", m.modelName())
+            .bind("p", m.promptVersion())
+            .bind("s", m.inputScopeJson() == null ? "{}" : m.inputScopeJson());
+    spec =
+        m.modelVersion() == null
+            ? spec.bindNull("v", String.class)
+            : spec.bind("v", m.modelVersion());
+    return spec.fetch().rowsUpdated().then();
+  }
+
+  private Mono<Void> finishRun(DatabaseClient c, UUID jobId, String outcome, int warnings) {
+    return c.sql(
+            "UPDATE ai_runs SET finished_at = now(), outcome = :o, warning_count = :w"
+                + " WHERE job_id = :j AND finished_at IS NULL")
+        .bind("o", outcome)
+        .bind("w", warnings)
+        .bind("j", jobId)
+        .fetch()
+        .rowsUpdated()
+        .then();
   }
 
   private Mono<Void> updateProgress(DatabaseClient c, UUID id, StatusMessage m) {
@@ -298,7 +339,9 @@ public class JobProcessor {
     Mono<Boolean> stored =
         "document_processing".equals(job.jobType())
             ? parsedRowsMatch(c, job.targetId(), m)
-            : Mono.just(true);
+            : "requirement_extraction".equals(job.jobType())
+                ? requirementsStored(c, job.id(), m)
+                : Mono.just(true);
     return stored.flatMap(
         ok -> {
           if (!ok) {
@@ -310,6 +353,10 @@ public class JobProcessor {
               .then(
                   "document_processing".equals(job.jobType()) ? versionReady(c, job) : Mono.empty())
               .then(
+                  "completed_with_warnings".equals(m.state())
+                      ? finishRun(c, job.id(), "partial", warningCount(m))
+                      : finishRun(c, job.id(), "succeeded", 0))
+              .then(
                   audit.recordSystem(
                       c,
                       AuditEntry.of("job_status_changed", "job", job.id())
@@ -318,6 +365,26 @@ public class JobProcessor {
                           .build()))
               .thenReturn(Outcome.ack("applied"));
         });
+  }
+
+  private static int warningCount(StatusMessage m) {
+    return m.warningsJson() == null ? 0 : m.warningsJson().split("\\{").length - 1;
+  }
+
+  /** Extraction completes when the stored requirements of the run equal what the worker counted. */
+  private Mono<Boolean> requirementsStored(DatabaseClient c, UUID jobId, StatusMessage m) {
+    if (m.resultParts() == null || m.counts() == null || !m.counts().containsKey("requirements")) {
+      return Mono.just(false);
+    }
+    if (m.counts().get("requirements") == 0) {
+      return Mono.just(true);
+    }
+    return c.sql(
+            "SELECT count(*) AS n FROM requirements r JOIN ai_runs a ON a.id = r.extraction_ai_run_id"
+                + " WHERE a.job_id = :j")
+        .bind("j", jobId)
+        .map((r, md) -> r.get("n", Long.class) == m.counts().get("requirements").longValue())
+        .one();
   }
 
   private Mono<Boolean> parsedRowsMatch(DatabaseClient c, UUID versionId, StatusMessage m) {
@@ -373,6 +440,7 @@ public class JobProcessor {
       DatabaseClient c, JobRow job, String code, String message, StatusMessage m) {
     return toRunning(c, job)
         .then(markFailedStep(c, job.id()))
+        .then(finishRun(c, job.id(), "failed", 0))
         .then(finishJob(c, job.id(), "failed", code, message, m))
         .then(
             "document_processing".equals(job.jobType())

@@ -78,6 +78,26 @@ public class JobTimers {
         .flatMapMany(Flux::fromIterable)
         // publish() moves command_published_at, so the same job is not picked again at once
         .concatMap(dispatcher::publish)
+        .then(republishQueuedExtractions());
+  }
+
+  Mono<Void> republishQueuedExtractions() {
+    return db.inTransaction(
+            c ->
+                c.sql(
+                        "SELECT j.id FROM jobs j WHERE j.job_type = 'requirement_extraction'"
+                            + " AND j.status = 'queued'"
+                            + " AND greatest(j.queued_at, coalesce(j.command_published_at,"
+                            + " j.queued_at)) < now() - (CAST(:s AS double precision) * interval '1 second')"
+                            + " ORDER BY j.queued_at LIMIT "
+                            + BATCH
+                            + " FOR UPDATE OF j SKIP LOCKED")
+                    .bind("s", (double) props.watchdogQueuedTimeoutSeconds())
+                    .map((r, m) -> r.get("id", UUID.class))
+                    .all()
+                    .collectList())
+        .flatMapMany(Flux::fromIterable)
+        .concatMap(dispatcher::publishExtraction)
         .then();
   }
 

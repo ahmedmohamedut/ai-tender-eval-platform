@@ -60,6 +60,7 @@ app:
   s3-secret-key: ${S3_SECRET_KEY}
   s3-bucket-documents: ${S3_BUCKET_DOCUMENTS:tender-documents}
   s3-bucket-derived: ${S3_BUCKET_DERIVED:tender-derived}
+  s3-bucket-jobs: ${S3_BUCKET_JOBS:tender-jobs}
   s3-multipart-part-mb: ${S3_MULTIPART_PART_MB:8}
   db-ingest-username: ${DB_INGEST_USERNAME}
   db-ingest-password: ${DB_INGEST_PASSWORD}

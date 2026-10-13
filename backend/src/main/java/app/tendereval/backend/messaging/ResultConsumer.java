@@ -25,17 +25,20 @@ public class ResultConsumer extends AnalysisConsumer {
   private final StatusStore store;
   private final ParsedResultProcessor parsed;
   private final JobProcessor jobs;
+  private final app.tendereval.backend.jobs.RequirementResultProcessor requirements;
 
   public ResultConsumer(
       JetStream js,
       JetStreamManagement jsm,
       StatusStore store,
       ParsedResultProcessor parsed,
-      JobProcessor jobs) {
+      JobProcessor jobs,
+      app.tendereval.backend.jobs.RequirementResultProcessor requirements) {
     super(js, jsm, DURABLE, configuration());
     this.store = store;
     this.parsed = parsed;
     this.jobs = jobs;
+    this.requirements = requirements;
   }
 
   public static ConsumerConfiguration configuration() {
@@ -67,7 +70,10 @@ public class ResultConsumer extends AnalysisConsumer {
     if ("parsed".equals(kind)) {
       return parsed.apply(body).block(Duration.ofSeconds(120));
     }
-    // Requirement, grade and pre-check batches arrive with Phases 3 to 5.
+    if ("requirements".equals(kind)) {
+      return requirements.apply(body).block(Duration.ofSeconds(120));
+    }
+    // Grade and pre-check batches arrive with Phases 4 and 5.
     return Outcome.deadLetter("no handler for result kind " + kind);
   }
 

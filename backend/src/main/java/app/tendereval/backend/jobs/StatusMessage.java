@@ -23,7 +23,11 @@ public record StatusMessage(
     Map<String, Integer> counts,
     String warningsJson,
     String failureCode,
-    String failureMessage) {
+    String failureMessage,
+    String modelName,
+    String modelVersion,
+    String promptVersion,
+    String inputScopeJson) {
 
   public static final java.util.Set<String> STATES =
       java.util.Set.of("running", "completed", "completed_with_warnings", "failed", "cancelled");
@@ -79,7 +83,13 @@ public record StatusMessage(
         counts,
         warnings == null || warnings.isNull() ? null : warnings.toString(),
         failure == null ? null : text(failure, "code"),
-        failure == null ? null : text(failure, "message"));
+        failure == null ? null : text(failure, "message"),
+        body.get("run") == null ? null : text(body.get("run"), "model_name"),
+        body.get("run") == null ? null : text(body.get("run"), "model_version"),
+        body.get("run") == null ? null : text(body.get("run"), "prompt_version"),
+        body.get("run") == null || body.get("run").get("input_scope") == null
+            ? null
+            : body.get("run").get("input_scope").toString());
   }
 
   private static String required(JsonNode n, String f) {
