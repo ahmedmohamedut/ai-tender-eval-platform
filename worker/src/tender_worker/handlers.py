@@ -12,10 +12,17 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
+from uuid import UUID
 
 from pydantic import ValidationError
 
-from tender_worker.keys import MalformedEvent, UploadedDocument, parse_upload_event
+from tender_worker.ingest.pipeline import DocumentRef, IngestPipeline
+from tender_worker.keys import (
+    ORIGINAL_KEY,
+    MalformedEvent,
+    UploadedDocument,
+    parse_upload_event,
+)
 from tender_worker.messages import (
     SCHEMA_COMMAND,
     SCHEMA_STATUS,
@@ -58,6 +65,8 @@ class Context:
     publisher: Publisher
     store: ObjectStore
     bucket_documents: str
+    # The real ingest pipeline. Without one (tests of the scaffold) the walking skeleton answers.
+    pipeline: IngestPipeline | None = None
 
 
 def new_traceparent() -> str:
@@ -100,6 +109,17 @@ async def handle_uploaded(
 async def _announce_upload(
     ctx: Context, doc: UploadedDocument, deliveries: int, traceparent: str | None
 ) -> None:
+    if ctx.pipeline is not None:
+        ref = DocumentRef(
+            tender_id=doc.tender_id,
+            version_id=doc.document_version_id,
+            job_id=None,
+            file_format=doc.file_format,
+            source_bucket=ctx.bucket_documents,
+            source_key=doc.key,
+        )
+        await ctx.pipeline.run(ref, deliveries, traceparent or new_traceparent())
+        return
     head = await ctx.store.head(ctx.bucket_documents, doc.key)
     # seq restarts at 1000 x deliveries so far + 1 after a redelivery (AI 2.3).
     seq = (deliveries - 1) * 1000 + 1
@@ -154,6 +174,21 @@ async def handle_command(
         raise DeadLetter("invalid command body") from exc
     if command.job_type != "document_processing":
         raise DeadLetter(f"unknown job type {command.job_type}")
+
+    if ctx.pipeline is not None and command.input_ref is not None:
+        match = ORIGINAL_KEY.match(command.input_ref.key)
+        if match is None or UUID(match.group(3)) != command.target.id:
+            raise DeadLetter("input key does not match the target")
+        ref = DocumentRef(
+            tender_id=command.tender_id,
+            version_id=command.target.id,
+            job_id=command.job_id,
+            file_format=match.group(4),
+            source_bucket=command.input_ref.bucket,
+            source_key=command.input_ref.key,
+        )
+        await ctx.pipeline.run(ref, deliveries, traceparent or new_traceparent())
+        return
 
     seq = (deliveries - 1) * 1000 + 1
     status = Status(

@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import multiprocessing
 import signal
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 
 import aioboto3
@@ -15,7 +17,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from nats.aio.msg import Msg
 from nats.errors import TimeoutError as NatsTimeout
-from nats.js.errors import APIError
+from nats.js.errors import APIError, KeyNotFoundError
 
 from tender_worker.consumers import (
     INGEST_COMMANDS,
@@ -31,6 +33,7 @@ from tender_worker.handlers import (
     handle_uploaded,
 )
 from tender_worker.health import HealthServer
+from tender_worker.ingest.pipeline import IngestPipeline, NoIndex
 from tender_worker.messages import WorkerInfo
 from tender_worker.settings import Settings
 
@@ -69,6 +72,18 @@ class S3Store:
                     return None
                 raise
             return int(resp["ContentLength"]), resp["ETag"].strip('"')
+
+    async def get(self, bucket: str, key: str) -> bytes:
+        async with self._client() as client:
+            resp = await client.get_object(Bucket=bucket, Key=key)
+            return await resp["Body"].read()
+
+    async def put(self, bucket: str, key: str, data: bytes, content_type: str) -> None:
+        async with self._client() as client:
+            await client.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
+
+    async def exists(self, bucket: str, key: str) -> bool:
+        return await self.head(bucket, key) is not None
 
     async def bucket_reachable(self, bucket: str) -> bool:
         async with self._client() as client:
@@ -129,12 +144,49 @@ class Runner:
         await health.start()
         log.info("started", extra={"health_port": health.port, "version": s.service_version})
 
+        worker = WorkerInfo(id=s.WORKER_ID, version=s.service_version)
+        publisher = JetStreamPublisher(js)
+        pool = None
+        pipeline = None
+        if s.WORKER_ROLE == "ingest":
+            # CPU-bound parsing runs in spawned processes, never on the event loop (AI 2.7).
+            def make_pool() -> ProcessPoolExecutor:
+                return ProcessPoolExecutor(
+                    max_workers=s.INGEST_CONCURRENCY,
+                    mp_context=multiprocessing.get_context("spawn"),
+                )
+
+            pool = make_pool()
+            control = await js.key_value("JOB_CONTROL")
+
+            async def cancelled(job_id) -> bool:
+                try:
+                    await control.get(f"cancel.{job_id}")
+                    return True
+                except KeyNotFoundError:
+                    return False
+
+            pipeline = IngestPipeline(
+                blobs=store,
+                publisher=publisher,
+                worker=worker,
+                bucket_derived=s.S3_BUCKET_DERIVED,
+                executor=pool,
+                new_executor=make_pool,
+                indexer=NoIndex(),
+                cancelled=cancelled,
+                parse_timeout=s.INGEST_PARSE_TIMEOUT_SECONDS,
+                convert_timeout=s.INGEST_CONVERT_TIMEOUT_SECONDS,
+                page_min_chars=s.INGEST_PAGE_MIN_CHARS,
+                max_textless_share=s.INGEST_MAX_TEXTLESS_SHARE,
+            )
         ctx = Context(
             role=s.WORKER_ROLE,
-            worker=WorkerInfo(id=s.WORKER_ID, version=s.service_version),
-            publisher=JetStreamPublisher(js),
+            worker=worker,
+            publisher=publisher,
             store=store,
             bucket_documents=s.S3_BUCKET_DOCUMENTS,
+            pipeline=pipeline,
         )
         slots = asyncio.Semaphore(self._concurrency())
         tasks = [
@@ -150,6 +202,8 @@ class Runner:
         for task in pending:
             task.cancel()
         await health.stop()
+        if pool is not None:
+            pool.shutdown(wait=False, cancel_futures=True)
         await nc.drain()
 
     def _concurrency(self) -> int:

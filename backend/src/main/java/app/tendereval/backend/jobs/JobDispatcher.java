@@ -38,7 +38,7 @@ public class JobDispatcher {
     return db.inTransaction(
             c ->
                 c.sql(
-                        "SELECT j.tender_id, j.job_type, j.target_id, j.started_by, v.storage_key"
+                        "SELECT j.tender_id, j.job_type, j.target_id, j.started_by, v.storage_key, v.sha256"
                             + " FROM jobs j JOIN document_versions v ON v.id = j.target_id"
                             + " WHERE j.id = :id AND j.status = 'queued'"
                             + " AND j.job_type = 'document_processing'")
@@ -49,7 +49,8 @@ public class JobDispatcher {
                               r.get("tender_id", UUID.class),
                               r.get("target_id", UUID.class),
                               r.get("started_by", UUID.class),
-                              r.get("storage_key", String.class)
+                              r.get("storage_key", String.class),
+                              r.get("sha256", String.class)
                             })
                     .one()
                     .flatMap(
@@ -69,7 +70,9 @@ public class JobDispatcher {
               body.put("requested_by", row[2] == null ? null : row[2].toString());
               body.put("attempt", 1);
               body.put("created_at", Instant.now().toString());
-              body.put("input_ref", Map.of("bucket", props.s3BucketDocuments(), "key", row[3]));
+              body.put(
+                  "input_ref",
+                  Map.of("bucket", props.s3BucketDocuments(), "key", row[3], "sha256", row[4]));
               // A new id per minute: the stream's two-minute window must not swallow a republish.
               String msgId = "job:" + jobId + ":cmd:" + (Instant.now().getEpochSecond() / 60);
               return publisher

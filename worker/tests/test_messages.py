@@ -66,3 +66,35 @@ def test_four_models_are_registered():
     assert sorted(MESSAGE_MODELS) == ["command", "push_event", "result_batch", "status"]
     for model in MESSAGE_MODELS.values():
         json.dumps(model.model_json_schema())
+
+
+def test_a_parsed_result_must_name_its_files_and_nothing_else_may():
+    import pytest
+    from pydantic import ValidationError
+
+    from tender_worker.messages import ResultBatch
+
+    base = {
+        "job_type": "document_processing",
+        "tender_id": "0193a7a0-0000-7000-8000-000000000002",
+        "target": {"type": "document_version", "id": "0193a7a0-0000-7000-8000-000000000003"},
+        "part_no": 1,
+        "final": True,
+        "emitted_at": "2026-10-13T09:00:00Z",
+        "worker": {"id": "w", "version": "0"},
+    }
+    with pytest.raises(ValidationError):
+        ResultBatch.model_validate({**base, "kind": "parsed"})
+    files = {
+        "pages": "p",
+        "sections": "s",
+        "passages": "q",
+        "rendered_pdf": "r",
+        "manifest": "m",
+        "page_count": 1,
+        "counts": {"pages": 1},
+        "source_sha256": "a" * 64,
+    }
+    assert ResultBatch.model_validate({**base, "kind": "parsed", "parsed": files}).job_id is None
+    with pytest.raises(ValidationError):
+        ResultBatch.model_validate({**base, "kind": "grades", "parsed": files})

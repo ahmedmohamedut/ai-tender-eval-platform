@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: SecretStr
 
     INGEST_CONCURRENCY: int = Field(default=2, ge=1)
+    INGEST_PARSE_TIMEOUT_SECONDS: int = Field(default=600, ge=10)
+    INGEST_CONVERT_TIMEOUT_SECONDS: int = Field(default=300, ge=10)
+    INGEST_PAGE_MIN_CHARS: int = Field(default=20, ge=1)
+    INGEST_MAX_TEXTLESS_SHARE: float = Field(default=0.5, ge=0, le=1)
     AGENT_CONCURRENCY_EVALUATION: int = Field(default=2, ge=1)
     AGENT_CONCURRENCY_EXTRACTION: int = Field(default=1, ge=1)
     AGENT_CONCURRENCY_PRECHECK: int = Field(default=1, ge=1)

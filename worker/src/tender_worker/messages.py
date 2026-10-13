@@ -139,9 +139,12 @@ class ParsedFiles(_Message):
 
 
 class ResultBatch(_Message):
-    """Body of documents.analysis.result.{job_type} (PI 5.6): at most 50 items."""
+    """Body of documents.analysis.result.{job_type} (PI 5.6): at most 50 items.
 
-    job_id: UUID
+    ``job_id`` is null only for a document run started by an upload event (as in Status).
+    """
+
+    job_id: UUID | None = None
     job_type: JobType
     tender_id: UUID
     target: Target

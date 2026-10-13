@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profile apps
 
-.PHONY: up up-infra down clean ps logs env verify-env \
+.PHONY: up up-infra down clean ps logs env verify-env smoke-ingest \
 	seed-dev-users api contracts contracts-check lint lint-worker lint-backend lint-frontend lint-api \
 	test e2e test-unit test-integration test-slice test-worker test-backend test-frontend deps
 
@@ -124,6 +124,10 @@ test-integration: worker/.venv
 ## Starts the environment if it is not running.
 test-slice: up
 	infra/scripts/walking-slice.sh
+
+# Real upload through the gateway to ready (and the three file causes): synthetic documents only.
+smoke-ingest: up
+	infra/scripts/ingest-smoke.sh
 
 ## Everything, in order.
 test: test-unit test-integration test-slice

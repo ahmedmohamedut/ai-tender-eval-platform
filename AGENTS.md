@@ -84,6 +84,7 @@ Run from the repository root. Each command below exists and was run (see `docs/d
 | Lint and format check everything, including schema drift | `make lint` |
 | Lint the OpenAPI file; generate and compile the server interfaces; generate the typed client | `make api` |
 | Export JSON Schemas from the Pydantic message models and test the backend against them | `make contracts` |
+| Real upload to ready through the gateway, DOCX conversion and the three file-cause failures (synthetic documents) | `make smoke-ingest` |
 | Run the AI evaluation set | `make eval` (not yet: no evaluation set exists) |
 
 Per component: `cd backend && ./gradlew test integrationTest spotlessApply`, `cd worker && uv run pytest` (add `-m integration` for the container tests) and `cd frontend && npm test`. Generated code (`backend/build/generated`, `frontend/src/api/generated`) is never committed. Ports on the host are in `.env` (copied from `.env.example` by `make up`).

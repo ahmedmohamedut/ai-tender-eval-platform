@@ -115,7 +115,22 @@ public class JobProcessor {
                         + " AND j.job_type = 'document_processing'"
                         + " AND j.status IN ('failed', 'cancelled'))")
                 .fetch()
-                .rowsUpdated());
+                .rowsUpdated()
+                // A completed job whose version was still uploading when the status arrived (the
+                // worker is faster than the upload's last write): ready now.
+                .flatMap(
+                    failed ->
+                        c.sql(
+                                "UPDATE document_versions v SET status = 'ready', failure_reason = NULL,"
+                                    + " page_count = (SELECT count(*) FROM document_pages p"
+                                    + " WHERE p.document_version_id = v.id)"
+                                    + " WHERE v.status = 'processing' AND v.deleted_at IS NULL"
+                                    + " AND EXISTS (SELECT 1 FROM jobs j WHERE j.target_id = v.id"
+                                    + " AND j.job_type = 'document_processing'"
+                                    + " AND j.status IN ('completed', 'completed_with_warnings'))")
+                            .fetch()
+                            .rowsUpdated()
+                            .map(ready -> failed + ready)));
   }
 
   // ---- status messages

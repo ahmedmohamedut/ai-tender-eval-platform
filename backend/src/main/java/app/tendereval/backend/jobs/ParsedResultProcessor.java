@@ -47,7 +47,9 @@ public class ParsedResultProcessor {
     UUID versionId;
     JsonNode parsed;
     try {
-      jobId = UUID.fromString(StatusMessage.text(body, "job_id"));
+      String id = StatusMessage.text(body, "job_id");
+      // null only for a run started by an upload event: the one open job of the target is used
+      jobId = id == null ? null : UUID.fromString(id);
       tenderId = UUID.fromString(StatusMessage.text(body, "tender_id"));
       versionId = UUID.fromString(StatusMessage.text(body.get("target"), "id"));
       parsed = body.get("parsed");
@@ -76,8 +78,12 @@ public class ParsedResultProcessor {
                 c.sql(
                         "SELECT j.status AS job_status, j.tender_id, j.target_id, v.sha256"
                             + " FROM jobs j JOIN document_versions v ON v.id = j.target_id"
-                            + " WHERE j.id = :id AND j.job_type = 'document_processing'")
-                    .bind("id", jobId)
+                            + " WHERE j.job_type = 'document_processing' AND "
+                            + (jobId != null
+                                ? "j.id = :id"
+                                : "j.target_id = :target AND j.status IN ('queued', 'running')")
+                            + " ORDER BY j.queued_at DESC LIMIT 1")
+                    .bind(jobId != null ? "id" : "target", jobId != null ? jobId : versionId)
                     .map(
                         (r, m) ->
                             new String[] {

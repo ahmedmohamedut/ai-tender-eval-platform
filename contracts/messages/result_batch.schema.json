@@ -98,7 +98,7 @@
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Body of documents.analysis.result.{job_type} (PI 5.6): at most 50 items.",
+  "description": "Body of documents.analysis.result.{job_type} (PI 5.6): at most 50 items.\n\n``job_id`` is null only for a document run started by an upload event (as in Status).",
   "properties": {
     "emitted_at": {
       "format": "date-time",
@@ -119,9 +119,17 @@
       "type": "array"
     },
     "job_id": {
-      "format": "uuid",
-      "title": "Job Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Id"
     },
     "job_type": {
       "enum": [
@@ -172,7 +180,6 @@
     }
   },
   "required": [
-    "job_id",
     "job_type",
     "tender_id",
     "target",

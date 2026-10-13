@@ -18,7 +18,8 @@ import aioboto3
 import nats
 import pytest
 from botocore.config import Config
-from nats.js.api import StreamConfig
+from fixtures import synthetic
+from nats.js.api import KeyValueConfig, StreamConfig
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
 
@@ -132,8 +133,10 @@ async def test_ingest_consumes_upload_event_and_duplicates_have_no_second_effect
     for f in sorted(INFRA_STREAMS.glob("*.json")):
         await js.add_stream(_stream_config(f))
 
+    await js.create_key_value(config=KeyValueConfig(bucket="JOB_CONTROL"))
     async with _s3_client(stack["s3"]) as s3:
         await s3.create_bucket(Bucket="tender-documents")
+        await s3.create_bucket(Bucket="tender-derived")
         await s3.put_bucket_notification_configuration(
             Bucket="tender-documents",
             NotificationConfiguration={
@@ -172,14 +175,25 @@ async def test_ingest_consumes_upload_event_and_duplicates_have_no_second_effect
 
         # 1. A real upload: RustFS publishes documents.uploaded, the worker HEADs the object
         #    and publishes one status with a deterministic Nats-Msg-Id.
-        await s3.put_object(Bucket="tender-documents", Key=key, Body=b"%PDF-1.7 test")
-        got = await _statuses(js, 1)
-        assert [m for m, _ in got] == [f"dv:{version}:s:1"]
-        body = got[0][1]
-        assert body["state"] == "completed"
+        await s3.put_object(Bucket="tender-documents", Key=key, Body=synthetic.make_rfp(3))
+        # fetch, parse, write, index (running) and the completion: five numbered statuses
+        got = await _statuses(js, 5, timeout=60)
+        assert [m for m, _ in got] == [f"dv:{version}:s:{n}" for n in range(1, 6)]
+        body = got[-1][1]
+        assert body["state"] in ("completed", "completed_with_warnings")
         assert body["target"] == {"type": "document_version", "id": version}
         assert body["tender_id"] == tender
+        assert body["result_parts"] == 1 and body["counts"]["pages"] == 3
         assert "job_id" not in body
+        # The files and, last, the manifest are in tender-derived.
+        manifest = await s3.get_object(
+            Bucket="tender-derived", Key=f"parsed/{tender}/{version}/manifest.json"
+        )
+        assert json.loads(await manifest["Body"].read())["page_count"] == 3
+        result = await js.get_last_msg(
+            "ANALYSIS_EVENTS", "documents.analysis.result.document_processing"
+        )
+        assert json.loads(result.data)["parsed"]["counts"]["pages"] == 3
 
         # 2. The same event delivered again (RustFS may emit duplicates). It is handled again
         #    and publishes the same Nats-Msg-Id, which JetStream drops: still one status.
@@ -200,7 +214,7 @@ async def test_ingest_consumes_upload_event_and_duplicates_have_no_second_effect
         await js.publish("documents.uploaded", event)
         await asyncio.sleep(3)
         info = await js.stream_info("ANALYSIS_EVENTS")
-        assert info.state.messages == 1, "a duplicate delivery produced a second status"
+        assert info.state.messages == 6, "a duplicate delivery produced a second status"
 
         # 3. The same Nats-Msg-Id published twice is stored once by JetStream itself.
         first = await js.publish("documents.uploaded", b"{}", headers={"Nats-Msg-Id": "dup-1"})
@@ -220,7 +234,7 @@ async def test_ingest_consumes_upload_event_and_duplicates_have_no_second_effect
         }
         await js.publish("documents.uploaded", json.dumps(other).encode())
         await asyncio.sleep(2)
-        assert (await js.stream_info("ANALYSIS_EVENTS")).state.messages == 1
+        assert (await js.stream_info("ANALYSIS_EVENTS")).state.messages == 6
 
         # 5. Unreadable body goes to the dead-letter stream with its reason (PI 5.8).
         await js.publish("documents.uploaded", b"not json")
