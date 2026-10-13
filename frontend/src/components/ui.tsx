@@ -211,7 +211,7 @@ type Announce = (message: string) => void;
 const AnnounceContext = createContext<Announce>(() => undefined);
 
 /** How long a result message stays on screen (WCAG 2.2.1: it can also be dismissed). */
-export const TOAST_MS = 6000;
+export const TOAST_MS = 3000;
 
 export function AnnounceProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState("");
