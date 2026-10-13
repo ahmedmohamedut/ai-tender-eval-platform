@@ -54,7 +54,7 @@ val openApiOutput = layout.buildDirectory.dir("generated/openapi")
 // binding (`@RequestPart`) reads the whole body first, so they are implemented by hand with
 // `Flux<PartEvent>` (docs/decisions.md). The generator reads a build-time copy of the contract in
 // which they are marked x-internal; api/openapi.yaml itself is untouched and still defines them.
-val streamingOperations = listOf("uploadDocument", "uploadDocumentVersion")
+val streamingOperations = listOf("uploadDocument", "uploadDocumentVersion", "streamEvents")
 val generatorSpec = layout.buildDirectory.file("openapi-for-generator/openapi.yaml")
 
 val prepareGeneratorSpec = tasks.register("prepareGeneratorSpec") {

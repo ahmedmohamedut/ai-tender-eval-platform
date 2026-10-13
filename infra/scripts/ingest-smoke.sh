@@ -25,6 +25,12 @@ tender=$(curl -s -H "$AUTH" -H 'Content-Type: application/json' -X POST "$GW/ten
   -d "{\"name\":\"Ingest smoke $(date +%s)\",\"chair_id\":\"$chair\",\"member_ids\":[\"$chair\"]}" | jq -r .id)
 [ -n "$tender" ] && [ "$tender" != null ] && ok "tender $tender" || { bad "tender not created"; exit 1; }
 
+# the push stream of this tender, read through the gateway while the documents are processed
+EVENTS="$DIR/events.txt"
+curl -sN -H "$AUTH" "$GW/events?tender_id=$tender" > "$EVENTS" 2>/dev/null &
+EVENTS_PID=$!
+trap 'kill $EVENTS_PID 2>/dev/null; rm -rf "$DIR"' EXIT
+
 # upload <type> <file> [title] -> prints "<document_id> <version_id>"
 upload() {
   curl -s -H "$AUTH" -F "doc_type=$1" -F "title=${3:-$2}" -F "file=@$DIR/$2" "$GW/tenders/$tender/documents" \
@@ -72,6 +78,11 @@ expect_failed() {
 expect_failed protected.pdf password_protected
 expect_failed textless.pdf no_selectable_text
 expect_failed corrupt.pdf unsupported_format
+
+sleep 2; kill $EVENTS_PID 2>/dev/null
+grep -q '^event: \?job.updated' "$EVENTS" && ok "push stream delivered job.updated" || bad "no job.updated on the stream"
+grep -q '^event: \?document.updated' "$EVENTS" && ok "push stream delivered document.updated" || bad "no document.updated on the stream"
+grep -qE '^id: ?[0-9]+$' "$EVENTS" && ok "events carry their stream sequence as id" || bad "no numeric event id"
 
 echo
 echo "$PASS passed, $FAIL failed"
