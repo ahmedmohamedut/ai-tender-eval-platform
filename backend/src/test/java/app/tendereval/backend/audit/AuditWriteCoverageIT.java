@@ -478,6 +478,177 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                     .exchange()
                     .expectStatus()
                     .isEqualTo(422)));
+    m.put(
+        "uploadDocument",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+
+          private org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec send(
+              String name, byte[] data) {
+            var b = new org.springframework.http.client.MultipartBodyBuilder();
+            b.part("doc_type", "other");
+            b.part(
+                "file",
+                new org.springframework.core.io.ByteArrayResource(data) {
+                  @Override
+                  public String getFilename() {
+                    return name;
+                  }
+                });
+            return web.post()
+                .uri("/tenders/" + t + "/documents")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .body(
+                    org.springframework.web.reactive.function.BodyInserters.fromMultipartData(
+                        b.build()))
+                .exchange();
+          }
+
+          @Override
+          public int success() {
+            send("a.pdf", "%PDF-1.7\nsynthetic".getBytes()).expectStatus().isCreated();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            send("a.pdf", "not a pdf at all".getBytes()).expectStatus().isEqualTo(415);
+          }
+        });
+    m.put(
+        "uploadDocumentVersion",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+          String doc;
+
+          private org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec send(
+              String path, String name, byte[] data) {
+            var b = new org.springframework.http.client.MultipartBodyBuilder();
+            if (path.endsWith("/documents")) {
+              b.part("doc_type", "other");
+            }
+            b.part(
+                "file",
+                new org.springframework.core.io.ByteArrayResource(data) {
+                  @Override
+                  public String getFilename() {
+                    return name;
+                  }
+                });
+            return web.post()
+                .uri(path)
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .body(
+                    org.springframework.web.reactive.function.BodyInserters.fromMultipartData(
+                        b.build()))
+                .exchange();
+          }
+
+          private void prepare() {
+            byte[] body =
+                send("/tenders/" + t + "/documents", "a.pdf", "%PDF-1.7\nfirst".getBytes())
+                    .expectStatus()
+                    .isCreated()
+                    .expectBody()
+                    .returnResult()
+                    .getResponseBody();
+            doc = com.jayway.jsonpath.JsonPath.read(new String(body), "$.id");
+          }
+
+          {
+            prepare();
+          }
+
+          @Override
+          public int success() {
+            send("/documents/" + doc + "/versions", "b.pdf", "%PDF-1.7\nsecond".getBytes())
+                .expectStatus()
+                .isCreated();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            send("/documents/" + doc + "/versions", "b.pdf", "plain text".getBytes())
+                .expectStatus()
+                .isEqualTo(415);
+          }
+        });
+    m.put(
+        "decideDocumentImpact",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+          String v2;
+
+          {
+            prepare();
+          }
+
+          private String upload(String path) {
+            var b = new org.springframework.http.client.MultipartBodyBuilder();
+            if (path.endsWith("/documents")) {
+              b.part("doc_type", "other");
+            }
+            b.part(
+                "file",
+                new org.springframework.core.io.ByteArrayResource(
+                    "%PDF-1.7\nsynthetic".getBytes()) {
+                  @Override
+                  public String getFilename() {
+                    return "a.pdf";
+                  }
+                });
+            byte[] body =
+                web.post()
+                    .uri(path)
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .body(
+                        org.springframework.web.reactive.function.BodyInserters.fromMultipartData(
+                            b.build()))
+                    .exchange()
+                    .expectStatus()
+                    .isCreated()
+                    .expectBody()
+                    .returnResult()
+                    .getResponseBody();
+            return new String(body);
+          }
+
+          private void prepare() {
+            if (v2 == null) {
+              String doc =
+                  com.jayway.jsonpath.JsonPath.read(upload("/tenders/" + t + "/documents"), "$.id");
+              v2 =
+                  com.jayway.jsonpath.JsonPath.read(
+                      upload("/documents/" + doc + "/versions"), "$.id");
+            }
+          }
+
+          @Override
+          public int success() {
+            web.post()
+                .uri("/document-versions/" + v2 + "/impact-decision")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("choice", "keep"))
+                .exchange()
+                .expectStatus()
+                .isNoContent();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            web.post()
+                .uri("/document-versions/" + UUID.randomUUID() + "/impact-decision")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("choice", "keep"))
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+          }
+        });
     return m;
   }
 
@@ -571,6 +742,9 @@ class AuditWriteCoverageIT extends AbstractApiIT {
         }
       }
     }
+    // Hand-written streaming handlers are not part of the generated interfaces.
+    writes.add("uploadDocument");
+    writes.add("uploadDocumentVersion");
     // Each must be an operation of the contract.
     String spec = Files.readString(Path.of("..", "api", "openapi.yaml"));
     Set<String> known = new LinkedHashSet<>();

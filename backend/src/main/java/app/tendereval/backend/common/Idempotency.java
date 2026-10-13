@@ -93,6 +93,36 @@ public class Idempotency {
     return spec.fetch().rowsUpdated().then();
   }
 
+  /**
+   * The stored answer of an earlier request with this key, or empty. For flows that cannot claim
+   * first.
+   */
+  public <T> Mono<ResponseEntity<T>> lookup(
+      DatabaseClient db, UUID user, String key, String operation, String hash, Class<T> type) {
+    return replay(db, user, key, operation, hash, type);
+  }
+
+  /** Remembers a finished answer. A concurrent twin loses quietly (ON CONFLICT DO NOTHING). */
+  public <T> Mono<Void> remember(
+      DatabaseClient db,
+      UUID user,
+      String key,
+      String operation,
+      String hash,
+      ResponseEntity<T> response) {
+    return db.sql(
+            "INSERT INTO idempotency_keys (user_id, idempotency_key, operation, request_hash)"
+                + " VALUES (:u, :k, :o, :h) ON CONFLICT (user_id, idempotency_key, operation)"
+                + " DO NOTHING RETURNING id")
+        .bind("u", user)
+        .bind("k", key)
+        .bind("o", operation)
+        .bind("h", hash)
+        .map((row, meta) -> row.get("id", UUID.class))
+        .one()
+        .flatMap(id -> store(db, id, response));
+  }
+
   private <T> Mono<ResponseEntity<T>> replay(
       DatabaseClient db, UUID user, String key, String operation, String hash, Class<T> type) {
     return db.sql(

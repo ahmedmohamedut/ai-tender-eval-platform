@@ -39,6 +39,9 @@ public class OpenBaoEnvironmentPostProcessor implements EnvironmentPostProcessor
     values.put("DB_APP_PASSWORD", require(db, "password", "db-app"));
     Map<String, String> kc = bao.readKv(MOUNT, BASE + "keycloak-admin");
     values.put("KEYCLOAK_ADMIN_CLIENT_SECRET", require(kc, "client_secret", "keycloak-admin"));
+    Map<String, String> s3 = bao.readKv(MOUNT, BASE + "rustfs");
+    values.put("S3_ACCESS_KEY", require(s3, "access_key", "rustfs"));
+    values.put("S3_SECRET_KEY", require(s3, "secret_key", "rustfs"));
 
     // Highest precedence: a stale value left in the environment must not win over the vault.
     env.getPropertySources().addFirst(new MapPropertySource("openbao", values));

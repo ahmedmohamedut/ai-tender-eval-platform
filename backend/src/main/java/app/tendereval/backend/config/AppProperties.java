@@ -29,4 +29,12 @@ public record AppProperties(
     @NotBlank String keycloakAdminBaseUrl,
     @NotBlank String keycloakAdminClientId,
     @NotBlank String keycloakAdminClientSecret,
-    int invitationLifespanSeconds) {}
+    int invitationLifespanSeconds,
+    @NotBlank String s3Endpoint,
+    String s3Region,
+    boolean s3PathStyle,
+    @NotBlank String s3AccessKey,
+    @NotBlank String s3SecretKey,
+    String s3BucketDocuments,
+    String s3BucketDerived,
+    int s3MultipartPartMb) {}

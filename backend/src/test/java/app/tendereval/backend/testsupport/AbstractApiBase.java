@@ -46,6 +46,10 @@ public abstract class AbstractApiBase {
     r.add("NATS_URL", () -> "nats://unused.test:4222");
     r.add("MANAGEMENT_PORT", () -> "0");
     r.add("BOOTSTRAP_ADMIN_EMAIL", () -> BOOTSTRAP_EMAIL);
+    StorageFixture.ensureStarted();
+    r.add("S3_ENDPOINT", StorageFixture::endpoint);
+    r.add("S3_ACCESS_KEY", () -> StorageFixture.ACCESS);
+    r.add("S3_SECRET_KEY", () -> StorageFixture.SECRET);
     r.add("KEYCLOAK_ADMIN_BASE_URL", () -> "http://keycloak.test/admin/realms/tender-eval");
     r.add("KEYCLOAK_ADMIN_CLIENT_SECRET", () -> "test-secret");
     // No stale answers in tests: a deactivation applies on the next request.

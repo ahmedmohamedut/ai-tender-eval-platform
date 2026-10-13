@@ -16,6 +16,8 @@ final class SqlErrors {
     for (Throwable t = ex; t != null; t = t.getCause()) {
       if (t instanceof R2dbcException r) {
         String state = r.getSqlState();
+        org.slf4j.LoggerFactory.getLogger(SqlErrors.class)
+            .warn("database error state={} message={}", state, r.getMessage());
         if (state == null) {
           return null;
         }

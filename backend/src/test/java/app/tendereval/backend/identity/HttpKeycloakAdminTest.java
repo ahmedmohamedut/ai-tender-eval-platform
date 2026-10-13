@@ -85,25 +85,8 @@ class HttpKeycloakAdminTest {
   private HttpKeycloakAdmin client() {
     String root = "http://127.0.0.1:" + server.getAddress().getPort();
     AppProperties props =
-        new AppProperties(
-            "http://localhost:18080",
-            "http://i",
-            "http://j",
-            "tender-api",
-            "tender-spa",
-            "nats://n",
-            false,
-            "",
-            30,
-            1800,
-            10,
-            120,
-            20,
-            10,
-            root + "/admin/realms/tender-eval",
-            "tender-backend-admin",
-            "s3cret",
-            259200);
+        app.tendereval.backend.testsupport.TestProps.withKeycloak(
+            root + "/admin/realms/tender-eval");
     return new HttpKeycloakAdmin(props);
   }
 

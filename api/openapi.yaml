@@ -5067,6 +5067,9 @@ components:
       - password_protected
       - no_selectable_text
       - unsupported_format
+      - source_unavailable
+      - index_unavailable
+      - timeout
       - other
     ProposalStatus:
       type: string

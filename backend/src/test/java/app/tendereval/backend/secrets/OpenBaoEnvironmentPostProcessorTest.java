@@ -53,6 +53,11 @@ class OpenBaoEnvironmentPostProcessorTest {
                 "{\"data\":{\"data\":{\"username\":\"tender_app\",\"password\":\"p-from-vault\"}}}");
           } else if (path.endsWith("/keycloak-admin")) {
             reply(ex, 200, "{\"data\":{\"data\":{\"client_secret\":\"kc-from-vault\"}}}");
+          } else if (path.endsWith("/rustfs")) {
+            reply(
+                ex,
+                200,
+                "{\"data\":{\"data\":{\"access_key\":\"ak-vault\",\"secret_key\":\"sk-vault\"}}}");
           } else {
             reply(ex, 403, "{\"errors\":[\"permission denied\"]}");
           }
@@ -101,7 +106,10 @@ class OpenBaoEnvironmentPostProcessorTest {
         .containsExactly(
             "login",
             "/v1/kv/data/tender-eval/backend/db-app|tok-abc",
-            "/v1/kv/data/tender-eval/backend/keycloak-admin|tok-abc");
+            "/v1/kv/data/tender-eval/backend/keycloak-admin|tok-abc",
+            "/v1/kv/data/tender-eval/backend/rustfs|tok-abc");
+    assertThat(env.getProperty("S3_ACCESS_KEY")).isEqualTo("ak-vault");
+    assertThat(env.getProperty("S3_SECRET_KEY")).isEqualTo("sk-vault");
   }
 
   @Test

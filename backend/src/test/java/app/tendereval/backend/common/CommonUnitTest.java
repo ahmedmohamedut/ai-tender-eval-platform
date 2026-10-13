@@ -128,25 +128,7 @@ class CommonUnitTest {
   }
 
   private static AppProperties props(int uploadsPerMinute) {
-    return new AppProperties(
-        "http://x",
-        "http://i",
-        "http://j",
-        "tender-api",
-        "tender-spa",
-        "nats://n",
-        false,
-        "",
-        30,
-        1800,
-        uploadsPerMinute,
-        120,
-        20,
-        10,
-        "http://kc/admin/realms/r",
-        "c",
-        "s",
-        259200);
+    return app.tendereval.backend.testsupport.TestProps.withUploadsPerMinute(uploadsPerMinute);
   }
 
   @Test

@@ -283,6 +283,11 @@ services:
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/tender-eval/protocol/openid-connect/certs
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
       NATS_URL: nats://nats:4222
+      S3_ENDPOINT: http://rustfs:9000
+      S3_REGION: ${S3_REGION}
+      S3_PATH_STYLE: ${S3_PATH_STYLE}
+      S3_BUCKET_DOCUMENTS: ${S3_BUCKET_DOCUMENTS}
+      S3_BUCKET_DERIVED: ${S3_BUCKET_DERIVED}
       KEYCLOAK_ADMIN_BASE_URL: http://keycloak:8080/admin/realms/tender-eval
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
       APP_DEV_ENDPOINTS: "true"

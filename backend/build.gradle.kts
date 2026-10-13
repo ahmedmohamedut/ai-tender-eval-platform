@@ -29,6 +29,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("io.nats:jnats:2.26.4")
+    implementation(platform("software.amazon.awssdk:bom:2.55.15"))
+    implementation("software.amazon.awssdk:s3")
+    implementation("software.amazon.awssdk:netty-nio-client")
 
     runtimeOnly("org.postgresql:r2dbc-postgresql")
     // JDBC driver: Flyway cannot run over R2DBC. Used for migrations only.
@@ -47,9 +50,33 @@ dependencies {
 // regenerates them, so the contract and the code cannot drift (implementation guide 4.1).
 val openApiOutput = layout.buildDirectory.dir("generated/openapi")
 
+// Two operations are multipart uploads that must stream into object storage. The generated
+// binding (`@RequestPart`) reads the whole body first, so they are implemented by hand with
+// `Flux<PartEvent>` (docs/decisions.md). The generator reads a build-time copy of the contract in
+// which they are marked x-internal; api/openapi.yaml itself is untouched and still defines them.
+val streamingOperations = listOf("uploadDocument", "uploadDocumentVersion")
+val generatorSpec = layout.buildDirectory.file("openapi-for-generator/openapi.yaml")
+
+val prepareGeneratorSpec = tasks.register("prepareGeneratorSpec") {
+    val source = rootProject.file("../api/openapi.yaml")
+    inputs.file(source)
+    outputs.file(generatorSpec)
+    doLast {
+        var text = source.readText()
+        streamingOperations.forEach { op ->
+            val marker = "operationId: $op\n"
+            check(text.contains(marker)) { "operation $op not found in the contract" }
+            val indent = Regex("( +)" + Regex.escape("operationId: $op") + "\n").find(text)!!.groupValues[1]
+            text = text.replace(marker, marker + indent + "x-internal: true\n")
+        }
+        generatorSpec.get().asFile.parentFile.mkdirs()
+        generatorSpec.get().asFile.writeText(text)
+    }
+}
+
 openApiGenerate {
     generatorName = "spring"
-    inputSpec = rootProject.file("../api/openapi.yaml").absolutePath
+    inputSpec = generatorSpec.get().asFile.absolutePath
     outputDir = openApiOutput.get().asFile.absolutePath
     apiPackage = "app.tendereval.backend.api"
     modelPackage = "app.tendereval.backend.api.model"
@@ -74,6 +101,10 @@ openApiGenerate {
 
 sourceSets.main {
     java.srcDir(openApiOutput.map { it.dir("src/main/java") })
+}
+
+tasks.openApiGenerate {
+    dependsOn(prepareGeneratorSpec)
 }
 
 tasks.compileJava {

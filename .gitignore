@@ -37,3 +37,4 @@ frontend/src/api/generated/
 frontend/playwright-report/
 frontend/test-results/
 frontend/.vitest/
+backend/bin/
