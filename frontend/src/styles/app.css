@@ -525,3 +525,7 @@ progress {
   list-style: none;
   padding-left: 0;
 }
+.viewer-back {
+  grid-column: 1 / -1;
+  margin: 0;
+}

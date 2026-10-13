@@ -185,6 +185,7 @@ describe("PG-03 Edit tender", () => {
     renderPage(
       <Routes>
         <Route path="/tenders/:tenderId/edit" element={<TenderForm />} />
+        <Route path="/tenders/:tenderId" element={<p>Tender overview page</p>} />
       </Routes>,
       { api, route: `/tenders/${TENDER.id}/edit` },
     );
@@ -193,12 +194,35 @@ describe("PG-03 Edit tender", () => {
     await userEvent.type(name, "Renamed");
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(api.PATCH).toHaveBeenCalled());
+    // saving returns to the overview the page was opened from
+    expect(await screen.findByText("Tender overview page")).toBeInTheDocument();
     expect(api.PATCH).toHaveBeenCalledWith(
       "/tenders/{tenderId}",
       expect.objectContaining({
         params: { path: { tenderId: TENDER.id }, header: { "If-Match": '"3"' } },
         body: expect.objectContaining({ name: "Renamed" }),
       }),
+    );
+  });
+});
+
+describe("PG-03 Edit tender, leaving without saving", () => {
+  it("offers a way back to the overview inside the page", async () => {
+    const api = fakeApi((call) => {
+      if (call === "GET /tenders/{tenderId}") return TENDER;
+      if (call === "GET /tenders/{tenderId}/readiness") return { ready: false, items: [] };
+      if (call === "GET /users/lookup") return { items: [] };
+      return undefined;
+    });
+    renderPage(
+      <Routes>
+        <Route path="/tenders/:tenderId/edit" element={<TenderForm />} />
+      </Routes>,
+      { api, route: `/tenders/${TENDER.id}/edit` },
+    );
+    expect(await screen.findByRole("link", { name: "Back to tender overview" })).toHaveAttribute(
+      "href",
+      `/tenders/${TENDER.id}`,
     );
   });
 });

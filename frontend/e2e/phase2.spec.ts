@@ -62,6 +62,12 @@ test("upload an RFP and a proposal, read them, and open a passage highlighted", 
   });
   expect(await axeViolations(admin.page), "Viewer").toEqual([]);
 
+  // ---- the page itself leads back to the tender's documents ------------------------------------------
+  await admin.page.getByRole("link", { name: "Back to tender documents" }).click();
+  await expect(admin.page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
+  await expect(admin.page).toHaveURL(new RegExp(`/tenders/${tenderId}/documents$`));
+  await admin.page.goBack();
+
   // ---- the file cannot be fetched as a download or by a storage address ---------------------------
   const token = await admin.page.evaluate(() =>
     Object.keys(sessionStorage).map((k) => sessionStorage.getItem(k)),

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { Button, ErrorNotice, Loading } from "../components/ui";
@@ -36,6 +36,25 @@ export function Viewer() {
       ),
     [api, versionId],
   );
+  // Where "back" goes: the documents of the tender this version belongs to.
+  const origin = useAsync(async () => {
+    const v = await unwrap(
+      api.GET("/document-versions/{documentVersionId}", {
+        params: { path: { documentVersionId: versionId! } },
+      }),
+    );
+    const d = await unwrap(
+      api.GET("/documents/{documentId}", { params: { path: { documentId: v.document_id } } }),
+    );
+    return { tenderId: d.tender_id, title: d.title };
+  }, [api, versionId]);
+  const back =
+    origin.state.status === "ready"
+      ? `/tenders/${origin.state.data.tenderId}/documents`
+      : "/tenders";
+  const backLabel =
+    origin.state.status === "ready" ? "Back to tender documents" : "Back to tenders";
+
   const passage = useAsync(
     () =>
       passageId
@@ -61,13 +80,35 @@ export function Viewer() {
         )
       : null);
 
+  const backLink = (
+    <p className="viewer-back">
+      <Link to={back} className="btn">
+        {backLabel}
+      </Link>
+    </p>
+  );
   if (pages.state.status === "loading" || outline.state.status === "loading") {
-    return <Loading label="Opening the document" />;
+    return (
+      <>
+        {backLink}
+        <Loading label="Opening the document" />
+      </>
+    );
   }
   if (pages.state.status === "error")
-    return <ErrorNotice error={pages.state.error} onRetry={pages.reload} />;
+    return (
+      <>
+        {backLink}
+        <ErrorNotice error={pages.state.error} onRetry={pages.reload} />
+      </>
+    );
   if (outline.state.status === "error")
-    return <ErrorNotice error={outline.state.error} onRetry={outline.reload} />;
+    return (
+      <>
+        {backLink}
+        <ErrorNotice error={outline.state.error} onRetry={outline.reload} />
+      </>
+    );
   const sections = outline.state.data.sections;
   const highlighted = passageState.status === "ready" ? passageState.data : null;
 
@@ -88,6 +129,14 @@ export function Viewer() {
   return (
     <div className="viewer">
       <h1 className="visually-hidden">Document viewer</h1>
+      <p className="viewer-back">
+        <Link to={back} className="btn">
+          {backLabel}
+        </Link>
+        {origin.state.status === "ready" && (
+          <span className="help"> {origin.state.data.title}</span>
+        )}
+      </p>
       <aside aria-label="Document navigation" className="viewer-side">
         <form
           role="search"

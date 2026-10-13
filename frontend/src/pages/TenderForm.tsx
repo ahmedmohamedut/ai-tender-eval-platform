@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import {
   Button,
   ConfirmDialog,
@@ -55,8 +55,9 @@ export function TenderForm() {
       tender={existing.state.data}
       onSaved={(t, message) => {
         announce(message);
-        if (!editing) navigate(`/tenders/${t.id}/edit`);
-        else existing.reload();
+        // A new tender goes on to its edit page (committee, readiness); a saved or opened one
+        // returns to the overview it was edited from.
+        navigate(editing ? `/tenders/${t.id}` : `/tenders/${t.id}/edit`);
       }}
       reload={existing.reload}
       api={api}
@@ -160,6 +161,11 @@ function TenderFormBody({
 
   return (
     <>
+      {tender && (
+        <p>
+          <Link to={`/tenders/${tender.id}`}>Back to tender overview</Link>
+        </p>
+      )}
       <h1>{tender ? "Edit tender" : "Create tender"}</h1>
       {failure && <ErrorNotice error={failure} onRetry={reload} />}
       <div
