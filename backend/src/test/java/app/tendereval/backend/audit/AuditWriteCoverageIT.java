@@ -753,6 +753,175 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isEqualTo(409);
           }
         });
+    m.put(
+        "createVendor",
+        simple(
+            () ->
+                web.post()
+                    .uri("/vendors")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("name", "Cover " + UUID.randomUUID()))
+                    .exchange()
+                    .expectStatus()
+                    .isCreated(),
+            () ->
+                web.post()
+                    .uri("/vendors")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("name", "  "))
+                    .exchange()
+                    .expectStatus()
+                    .isEqualTo(422)));
+    m.put(
+        "updateVendor",
+        new Scenario() {
+          String id;
+          String etag;
+
+          private void load() {
+            var r =
+                web.post()
+                    .uri("/vendors")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("name", "Edit " + UUID.randomUUID()))
+                    .exchange()
+                    .expectStatus()
+                    .isCreated()
+                    .expectBody()
+                    .returnResult();
+            id = com.jayway.jsonpath.JsonPath.read(new String(r.getResponseBody()), "$.id");
+            etag = r.getResponseHeaders().getETag();
+          }
+
+          {
+            load();
+          }
+
+          @Override
+          public int success() {
+            web.patch()
+                .uri("/vendors/" + id)
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .header("If-Match", etag)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("contact_person", "Someone"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            web.patch()
+                .uri("/vendors/" + id)
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .header("If-Match", "\"999\"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("contact_person", "Other"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(412);
+          }
+        });
+    m.put(
+        "addTenderVendor",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+
+          @Override
+          public int success() {
+            web.post()
+                .uri("/tenders/" + t + "/vendors")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of("new_vendor", Map.of("name", "Added " + UUID.randomUUID())))
+                .exchange()
+                .expectStatus()
+                .isCreated();
+            // the new vendor and its place in the tender are two events
+            return 2;
+          }
+
+          @Override
+          public void refused() {
+            web.post()
+                .uri("/tenders/" + t + "/vendors")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(Map.of())
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "uploadProposalVersion",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+          String tv;
+
+          {
+            var v =
+                web.post()
+                    .uri("/vendors")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("name", "Prop " + UUID.randomUUID()))
+                    .exchange()
+                    .expectBody()
+                    .returnResult();
+            String vendor =
+                com.jayway.jsonpath.JsonPath.read(new String(v.getResponseBody()), "$.id");
+            var r =
+                web.post()
+                    .uri("/tenders/" + t + "/vendors")
+                    .header("Authorization", "Bearer " + tokenFor(admin()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(Map.of("vendor_id", vendor))
+                    .exchange()
+                    .expectBody()
+                    .returnResult();
+            tv = com.jayway.jsonpath.JsonPath.read(new String(r.getResponseBody()), "$.id");
+          }
+
+          private org.springframework.test.web.reactive.server.WebTestClient.ResponseSpec send(
+              byte[] data, String role) {
+            var b = new org.springframework.http.client.MultipartBodyBuilder();
+            b.part("file_roles", role);
+            b.part(
+                "files",
+                new org.springframework.core.io.ByteArrayResource(data) {
+                  @Override
+                  public String getFilename() {
+                    return "p.pdf";
+                  }
+                });
+
+            return web.post()
+                .uri("/tender-vendors/" + tv + "/proposal-versions")
+                .header("Authorization", "Bearer " + tokenFor(admin()))
+                .body(
+                    org.springframework.web.reactive.function.BodyInserters.fromMultipartData(
+                        b.build()))
+                .exchange();
+          }
+
+          @Override
+          public int success() {
+            send("%PDF-1.7\nproposal".getBytes(), "main").expectStatus().isCreated();
+            // the file's own upload and the proposal version
+            return 2;
+          }
+
+          @Override
+          public void refused() {
+            send("%PDF-1.7\nproposal".getBytes(), "sideways").expectStatus().isEqualTo(422);
+          }
+        });
     return m;
   }
 
@@ -849,6 +1018,7 @@ class AuditWriteCoverageIT extends AbstractApiIT {
     // Hand-written streaming handlers are not part of the generated interfaces.
     writes.add("uploadDocument");
     writes.add("uploadDocumentVersion");
+    writes.add("uploadProposalVersion");
     // Each must be an operation of the contract.
     String spec = Files.readString(Path.of("..", "api", "openapi.yaml"));
     Set<String> known = new LinkedHashSet<>();

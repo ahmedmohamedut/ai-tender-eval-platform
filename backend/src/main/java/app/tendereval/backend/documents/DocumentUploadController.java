@@ -74,6 +74,10 @@ public class DocumentUploadController {
           } catch (IllegalArgumentException e) {
             throw ApiException.invalid("doc_type", "invalid", "Choose a valid document type");
           }
+          if (docType == DocType.PROPOSAL) {
+            throw ApiException.invalid(
+                "doc_type", "not_allowed", "Proposal files are uploaded for a vendor");
+          }
           UUID parent = uuidOrNull(fields.get("parent_document_id"), "parent_document_id");
           return new UploadService.Request(
               tenderId, null, docType, fields.get("title"), parent, null);

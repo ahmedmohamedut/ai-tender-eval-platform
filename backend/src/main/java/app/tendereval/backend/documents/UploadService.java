@@ -281,11 +281,6 @@ public class UploadService {
       UUID tenderId,
       String fileName,
       Format format) {
-    if (!TENDER_TYPES.contains(req.docType())) {
-      return Mono.error(
-          ApiException.invalid(
-              "doc_type", "not_allowed", "Proposal files are uploaded for a vendor"));
-    }
     Mono<Void> parentCheck =
         req.docType() == DocType.ADDENDUM
             ? (req.parentDocumentId() == null
