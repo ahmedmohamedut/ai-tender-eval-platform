@@ -6,7 +6,7 @@ A web platform that helps a procurement committee evaluate vendor proposals for 
 
 ## Status
 
-The design is complete. Phase 0 of the [roadmap](docs/roadmap-plan.md) is scaffolded: the local environment, the contract pipeline, CI and one walking slice (gateway, backend, PostgreSQL, NATS, worker) run. No business feature exists yet. What was assumed and what is still open is in [`docs/decisions.md`](docs/decisions.md).
+The design is complete. Phases 0 and 1 of the [roadmap](docs/roadmap-plan.md) are built: the local environment, the contract pipeline, CI, the platform spine (sign-in, users and invitations, tenders and committees, the Chair, audit, row-level security) and the first screens. Documents, requirements and evaluation are not built yet. What was assumed and what is still open is in [`docs/decisions.md`](docs/decisions.md).
 
 ## What it does
 

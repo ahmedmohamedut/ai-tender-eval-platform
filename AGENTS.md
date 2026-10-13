@@ -8,7 +8,7 @@ AI Tender Evaluation Platform. A procurement committee uploads an RFP and vendor
 
 Components: React SPA, Spring Boot reactive REST API (the only writer of business data), PostgreSQL with row-level security, Keycloak, OpenBao, RustFS (S3), NATS JetStream, one Python worker image in two roles (`ingest`, `agent`), Qdrant, Arize Phoenix.
 
-Status: design complete; Phase 0 scaffold in place (environment, contract pipeline, CI, walking slice); no business feature yet. Check the repository before assuming a file exists.
+Status: design complete; Phase 0 (scaffold) and Phase 1 (platform spine: identity, tenders, committees, audit, row-level security, SPA shell) are built and verified; documents, requirements and evaluation are not built yet. Check the repository before assuming a file exists.
 
 ## Read before you change anything
 
