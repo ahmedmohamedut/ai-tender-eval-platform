@@ -60,14 +60,14 @@ class Publisher(Protocol):
 
 
 class Indexer(Protocol):
-    async def index(self, ref: DocumentRef, passages: list[dict]) -> None:
+    async def index(self, ref: DocumentRef, passages: list[dict], sections: list[dict]) -> None:
         """Put the passages of one version into the search index; idempotent by passage id."""
 
 
 class NoIndex:
     """Used until the index exists (P2-4) and in tests that do not need one."""
 
-    async def index(self, ref: DocumentRef, passages: list[dict]) -> None:
+    async def index(self, ref: DocumentRef, passages: list[dict], sections: list[dict]) -> None:
         return None
 
 
@@ -297,12 +297,13 @@ class IngestPipeline:
             else:
                 log.info("manifest found, parse skipped", extra={"version": str(ref.version_id)})
                 warnings = [Warning_(**w) for w in manifest.get("warnings", [])]
-            passages = await self._read_passages(ref)
+            passages = await self._read_jsonl(ref, "passages")
+            sections = await self._read_jsonl(ref, "sections")
             if ref.job_id is not None and await self.cancelled(ref.job_id):
                 await emitter.cancelled()
                 return
             await emitter.running("index", 85)
-            await self.indexer.index(ref, passages)
+            await self.indexer.index(ref, passages, sections)
             files = ParsedFiles(
                 pages=f"{ref.parsed_prefix}/pages.jsonl",
                 sections=f"{ref.parsed_prefix}/sections.jsonl",
@@ -339,9 +340,9 @@ class IngestPipeline:
         except ValueError:
             return None  # a partly written manifest is no manifest
 
-    async def _read_passages(self, ref: DocumentRef) -> list[dict]:
+    async def _read_jsonl(self, ref: DocumentRef, name: str) -> list[dict]:
         raw = await with_retries(
-            lambda: self.blobs.get(self.bucket_derived, f"{ref.parsed_prefix}/passages.jsonl"),
+            lambda: self.blobs.get(self.bucket_derived, f"{ref.parsed_prefix}/{name}.jsonl"),
             sleep=self.sleep,
         )
         return [json.loads(line) for line in raw.decode().splitlines() if line.strip()]

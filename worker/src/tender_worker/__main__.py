@@ -16,4 +16,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "reindex":
+        from tender_worker.reindex import main as reindex_main
+
+        reindex_main(sys.argv[2:])
+    else:
+        main()

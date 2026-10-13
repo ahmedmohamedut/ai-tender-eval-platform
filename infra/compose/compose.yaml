@@ -309,6 +309,27 @@ services:
 
   # The workers share the default network only: they cannot resolve postgres,
   # keycloak or mailpit, which sit on the data network (AGENTS.md rule 3).
+  # A deterministic stand-in for the approved embedding endpoint (open question PI Q1). It is a
+  # hash, not a model, and is never used with real documents (AGENTS rule 15).
+  embedding-stub:
+    image: tender-eval/worker:dev
+    profiles: [apps]
+    entrypoint: ["python", "-m", "tender_worker.stub_embedding"]
+    environment:
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS}
+      PORT: "8000"
+    read_only: true
+    networks: [default]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   worker-ingest:
     profiles: [apps]
     build:
@@ -320,6 +341,7 @@ services:
       provision-nats: { condition: service_completed_successfully }
       provision-rustfs: { condition: service_completed_successfully }
       qdrant: { condition: service_healthy }
+      embedding-stub: { condition: service_healthy }
     environment:
       WORKER_ROLE: ingest
       WORKER_ID: worker-ingest-1
@@ -330,6 +352,10 @@ services:
       S3_SECRET_KEY: ${RUSTFS_SECRET_KEY}
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
+      EMBEDDING_BASE_URL: http://embedding-stub:8000/v1
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
       LOG_LEVEL: ${LOG_LEVEL}
     healthcheck: &worker-health
       test:
@@ -360,6 +386,10 @@ services:
       S3_SECRET_KEY: ${RUSTFS_SECRET_KEY}
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      EMBEDDING_BASE_URL: http://embedding-stub:8000/v1
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
       LOG_LEVEL: ${LOG_LEVEL}
     healthcheck: *worker-health
     read_only: true

@@ -10,6 +10,9 @@ REQUIRED = {
     "S3_SECRET_KEY": "test-secret",
     "QDRANT_URL": "http://localhost:6333",
     "QDRANT_API_KEY": "test-qdrant",
+    "EMBEDDING_BASE_URL": "http://embedding.test/v1",
+    "EMBEDDING_MODEL": "stub",
+    "EMBEDDING_DIMENSIONS": "256",
 }
 
 

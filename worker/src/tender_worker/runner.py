@@ -33,7 +33,8 @@ from tender_worker.handlers import (
     handle_uploaded,
 )
 from tender_worker.health import HealthServer
-from tender_worker.ingest.pipeline import IngestPipeline, NoIndex
+from tender_worker.ingest.index import EmbeddingClient, QdrantIndexer
+from tender_worker.ingest.pipeline import IngestPipeline
 from tender_worker.messages import WorkerInfo
 from tender_worker.settings import Settings
 
@@ -81,6 +82,14 @@ class S3Store:
     async def put(self, bucket: str, key: str, data: bytes, content_type: str) -> None:
         async with self._client() as client:
             await client.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
+
+    async def list_keys(self, bucket: str, prefix: str):
+        """Only the reindex command lists (AI 3.4); the message handlers never do."""
+        async with self._client() as client:
+            paginator = client.get_paginator("list_objects_v2")
+            async for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    yield obj["Key"]
 
     async def exists(self, bucket: str, key: str) -> bool:
         return await self.head(bucket, key) is not None
@@ -158,6 +167,25 @@ class Runner:
 
             pool = make_pool()
             control = await js.key_value("JOB_CONTROL")
+            indexer = QdrantIndexer(
+                s.QDRANT_URL,
+                s.QDRANT_API_KEY.get_secret_value(),
+                s.QDRANT_COLLECTION,
+                EmbeddingClient(
+                    base_url=s.EMBEDDING_BASE_URL or "",
+                    model=s.EMBEDDING_MODEL or "",
+                    api_key=s.EMBEDDING_API_KEY.get_secret_value() if s.EMBEDDING_API_KEY else "",
+                    dimensions=s.EMBEDDING_DIMENSIONS or 0,
+                    batch_size=s.EMBEDDING_BATCH_SIZE,
+                    timeout=s.DEP_TIMEOUT_SECONDS,
+                ),
+                upsert_batch=s.QDRANT_UPSERT_BATCH_SIZE,
+                timeout=s.DEP_TIMEOUT_SECONDS,
+            )
+            try:  # the ingest role owns the collection (AI 3.4); a late Qdrant is retried at use
+                await indexer.ensure_collection()
+            except Exception:  # noqa: BLE001
+                log.warning("collection not ready at start; created on first use")
 
             async def cancelled(job_id) -> bool:
                 try:
@@ -173,7 +201,7 @@ class Runner:
                 bucket_derived=s.S3_BUCKET_DERIVED,
                 executor=pool,
                 new_executor=make_pool,
-                indexer=NoIndex(),
+                indexer=indexer,
                 cancelled=cancelled,
                 parse_timeout=s.INGEST_PARSE_TIMEOUT_SECONDS,
                 convert_timeout=s.INGEST_CONVERT_TIMEOUT_SECONDS,

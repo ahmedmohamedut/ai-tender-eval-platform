@@ -50,6 +50,10 @@ secs=$(sql "select count(*) from document_sections where document_version_id='$v
 [ "${pages:-0}" = "${INGEST_SMOKE_PAGES:-30}" ] && ok "RFP has $pages pages, $secs sections, $pass passages" || bad "RFP rows: pages=$pages sections=$secs passages=$pass"
 box=$(sql "select count(*) from passages where document_version_id='$v_rfp' and jsonb_array_length(bbox) >= 1 and page_no >= 1 and char_end >= char_start")
 [ "$box" = "$pass" ] && ok "every passage has page, boxes and offsets" || bad "passages without boxes: $((pass-box))"
+qd=$(curl -s -H "api-key: $QDRANT_API_KEY" -H 'Content-Type: application/json' \
+  "http://localhost:${QDRANT_PORT:-16333}/collections/passages/points/count" \
+  -d "{\"exact\":true,\"filter\":{\"must\":[{\"key\":\"document_version_id\",\"match\":{\"value\":\"$v_rfp\"}}]}}" | jq -r .result.count)
+[ "$qd" = "$pass" ] && ok "Qdrant holds $qd points for the RFP (= passages)" || bad "Qdrant points: $qd, passages: $pass"
 jobst=$(sql "select status from jobs where target_id='$v_rfp' and job_type='document_processing' order by queued_at desc limit 1")
 case "$jobst" in completed|completed_with_warnings) ok "job $jobst";; *) bad "job status '$jobst'";; esac
 

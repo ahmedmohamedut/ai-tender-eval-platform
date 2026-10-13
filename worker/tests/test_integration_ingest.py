@@ -17,12 +17,15 @@ from pathlib import Path
 import aioboto3
 import nats
 import pytest
+from aiohttp.test_utils import TestServer
 from botocore.config import Config
 from fixtures import synthetic
 from nats.js.api import KeyValueConfig, StreamConfig
+from test_ingest_index import FakeQdrant
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
 
+from tender_worker import stub_embedding
 from tender_worker.consumers import ROLE_CONSUMERS
 from tender_worker.runner import Runner
 from tender_worker.settings import Settings
@@ -128,6 +131,11 @@ async def test_ingest_consumes_upload_event_and_duplicates_have_no_second_effect
     tender, document, version = (str(uuid.uuid4()) for _ in range(3))
     key = f"originals/{tender}/{document}/{version}.pdf"
 
+    fake = FakeQdrant()
+    qdrant = TestServer(fake.app())
+    embed = TestServer(stub_embedding.app())
+    await qdrant.start_server()
+    await embed.start_server()
     nc = await nats.connect(stack["nats"])
     js = nc.jetstream()
     for f in sorted(INFRA_STREAMS.glob("*.json")):
@@ -158,7 +166,10 @@ async def test_ingest_consumes_upload_event_and_duplicates_have_no_second_effect
             "S3_ENDPOINT": stack["s3"],
             "S3_ACCESS_KEY": ACCESS,
             "S3_SECRET_KEY": SECRET,
-            "QDRANT_URL": "http://localhost:1",
+            "QDRANT_URL": str(qdrant.make_url("")).rstrip("/"),
+            "EMBEDDING_BASE_URL": str(embed.make_url("/v1")).rstrip("/"),
+            "EMBEDDING_MODEL": "stub",
+            "EMBEDDING_DIMENSIONS": "256",
             "QDRANT_API_KEY": "unused",
             "HEALTH_PORT": "0",
             "SHUTDOWN_GRACE_SECONDS": "5",
@@ -190,6 +201,8 @@ async def test_ingest_consumes_upload_event_and_duplicates_have_no_second_effect
             Bucket="tender-derived", Key=f"parsed/{tender}/{version}/manifest.json"
         )
         assert json.loads(await manifest["Body"].read())["page_count"] == 3
+        # and every passage is a point in the collection (AI 3.5)
+        assert len(fake.points) == body["counts"]["passages"]
         result = await js.get_last_msg(
             "ANALYSIS_EVENTS", "documents.analysis.result.document_processing"
         )
@@ -252,3 +265,5 @@ async def test_ingest_consumes_upload_event_and_duplicates_have_no_second_effect
         stop.set()
         await asyncio.wait_for(task, 20)
     await nc.close()
+    await qdrant.close()
+    await embed.close()

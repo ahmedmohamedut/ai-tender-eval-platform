@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     AGENT_CONCURRENCY_EXTRACTION: int = Field(default=1, ge=1)
     AGENT_CONCURRENCY_PRECHECK: int = Field(default=1, ge=1)
 
+    EMBEDDING_BASE_URL: str | None = None
+    EMBEDDING_MODEL: str | None = None
+    EMBEDDING_DIMENSIONS: int | None = Field(default=None, ge=8)
+    EMBEDDING_API_KEY: SecretStr | None = None
+    EMBEDDING_BATCH_SIZE: int = Field(default=64, ge=1)
+    QDRANT_UPSERT_BATCH_SIZE: int = Field(default=128, ge=1)
+
     HEALTH_PORT: int = 8080
     SHUTDOWN_GRACE_SECONDS: int = 45
     DEP_TIMEOUT_SECONDS: int = 30
@@ -55,6 +62,10 @@ class Settings(BaseSettings):
         for name in ("S3_ACCESS_KEY", "S3_SECRET_KEY", "QDRANT_API_KEY"):
             if not getattr(self, name).get_secret_value():
                 raise ValueError(f"{name} must not be empty")
+        if self.WORKER_ROLE == "ingest":
+            for name in ("EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_DIMENSIONS"):
+                if not getattr(self, name):
+                    raise ValueError(f"{name} is required for the ingest role")
         return self
 
     @property
