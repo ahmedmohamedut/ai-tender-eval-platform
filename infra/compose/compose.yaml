@@ -330,6 +330,27 @@ services:
       timeout: 5s
       retries: 20
 
+  # A rule-based stand-in for the approved model endpoint (open question PI Q1): never a model,
+  # never used with real documents (AGENTS rule 15). Point LLM_BASE_URL in .env at a model you
+  # approve (the worker reaches the host as host.docker.internal) to use that instead.
+  llm-stub:
+    image: tender-eval/worker:dev
+    profiles: [apps]
+    entrypoint: ["python", "-m", "tender_worker.stub_llm"]
+    environment:
+      PORT: "8000"
+    read_only: true
+    networks: [default]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   worker-ingest:
     profiles: [apps]
     build:
@@ -376,8 +397,17 @@ services:
     <<: *restart
     depends_on:
       worker-ingest: { condition: service_healthy }
+      llm-stub: { condition: service_healthy }
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       WORKER_ROLE: agent
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://llm-stub:8000/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-dev-llm-key}
+      LLM_MODEL_EXTRACTION: ${LLM_MODEL_EXTRACTION:-stub-llm}
+      LLM_MODEL_VERSION: ${LLM_MODEL_VERSION:-stub-1}
+      LLM_STRUCTURED_OUTPUT: ${LLM_STRUCTURED_OUTPUT:-json_schema}
+      S3_BUCKET_JOBS: ${S3_BUCKET_JOBS}
       WORKER_ID: worker-agent-1
       NATS_URL: nats://nats:4222
       S3_ENDPOINT: http://rustfs:9000

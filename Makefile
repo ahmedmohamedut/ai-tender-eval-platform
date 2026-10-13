@@ -39,7 +39,7 @@ rebuild-backend: .env
 ## The ingest and agent workers and the development embedding stub share one image.
 rebuild-workers: .env
 	$(COMPOSE) build worker-ingest
-	$(COMPOSE) up -d --no-deps --force-recreate embedding-stub worker-ingest worker-agent
+	$(COMPOSE) up -d --no-deps --force-recreate embedding-stub llm-stub worker-ingest worker-agent
 	@infra/scripts/wait-healthy.sh
 
 ## The SPA is a static build served by the gateway from frontend/dist: no restart needed.
