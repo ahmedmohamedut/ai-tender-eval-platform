@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file .env -f infra/compose/compose.yaml --profile apps
 
-.PHONY: up up-infra down clean ps logs env verify-env smoke-ingest \
+.PHONY: up up-infra down clean ps logs env verify-env smoke-ingest drills \
 	seed-dev-users api contracts contracts-check lint lint-worker lint-backend lint-frontend lint-api \
 	test e2e test-unit test-integration test-slice test-worker test-backend test-frontend deps
 
@@ -128,6 +128,10 @@ test-slice: up
 # Real upload through the gateway to ready (and the three file causes): synthetic documents only.
 smoke-ingest: up
 	infra/scripts/ingest-smoke.sh
+
+# Failure drills of the worker and the message loop (several minutes; restarts workers and Qdrant).
+drills: up
+	infra/scripts/drills.sh
 
 ## Everything, in order.
 test: test-unit test-integration test-slice
