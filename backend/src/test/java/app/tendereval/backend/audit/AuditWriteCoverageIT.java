@@ -103,9 +103,52 @@ class AuditWriteCoverageIT extends AbstractApiIT {
         .getETag();
   }
 
+  /**
+   * A tender in the requirements stage with one vendor and one proposal version; the Chair
+   * declared.
+   */
+  private record ScreeningWorld(UUID tender, UUID tv, UUID pv) {}
+
+  private ScreeningWorld screeningWorld(String versionStatus) {
+    UUID t = Fixtures.tender(admin(), chair());
+    TestUsers.sql("UPDATE tenders SET status = 'requirements' WHERE id = ?", t);
+    UUID v =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO vendors (name, normalized_name) VALUES ('Sc', ?) RETURNING id",
+                UUID.randomUUID().toString());
+    UUID tv =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO tender_vendors (tender_id, vendor_id, added_by) VALUES (?, ?, ?) RETURNING id",
+                t,
+                v,
+                admin().id());
+    UUID pv =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO proposal_versions (tender_vendor_id, version_no, uploaded_by) VALUES (?, 1, ?) RETURNING id",
+                tv,
+                admin().id());
+    TestUsers.sql(
+        "INSERT INTO conflict_declarations (tender_vendor_id, user_id, has_conflict) VALUES (?, ?, false)",
+        tv,
+        chair().id());
+    if (!"uploaded".equals(versionStatus)) {
+      TestUsers.sql("UPDATE proposal_versions SET status = 'in_screening' WHERE id = ?", pv);
+      if (!"in_screening".equals(versionStatus)) {
+        TestUsers.sql("UPDATE proposal_versions SET status = ? WHERE id = ?", versionStatus, pv);
+      }
+    }
+    return new ScreeningWorld(t, tv, pv);
+  }
+
   private org.springframework.test.web.reactive.server.WebTestClient.RequestBodySpec asChair(
       String method, String uri) {
-    var spec = "PATCH".equals(method) ? web.patch().uri(uri) : web.post().uri(uri);
+    var spec =
+        "PATCH".equals(method)
+            ? web.patch().uri(uri)
+            : "PUT".equals(method) ? web.put().uri(uri) : web.post().uri(uri);
     return spec.header("Authorization", "Bearer " + tokenFor(chair()))
         .contentType(MediaType.APPLICATION_JSON);
   }
@@ -1533,6 +1576,136 @@ class AuditWriteCoverageIT extends AbstractApiIT {
           public void refused() {
             asChair("POST", "/tender-vendors/" + tv + "/declaration")
                 .bodyValue(Map.of("has_conflict", true))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "saveScreeningChecks",
+        new Scenario() {
+          ScreeningWorld w = screeningWorld("uploaded");
+
+          @Override
+          public int success() {
+            String item =
+                (String)
+                    TestUsers.scalar(
+                        "SELECT id::text FROM screening_checklist_items WHERE tender_id = ? LIMIT 1",
+                        w.tender());
+            asChair("PUT", "/tender-vendors/" + w.tv() + "/screening/checks")
+                .bodyValue(
+                    Map.of(
+                        "checks", List.of(Map.of("checklist_item_id", item, "is_checked", true))))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("PUT", "/tender-vendors/" + w.tv() + "/screening/checks")
+                .bodyValue(Map.of("checks", List.of()))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "saveRecommendation",
+        new Scenario() {
+          ScreeningWorld w = screeningWorld("uploaded");
+
+          @Override
+          public int success() {
+            asChair("PUT", "/tender-vendors/" + w.tv() + "/screening/recommendation")
+                .bodyValue(Map.of("recommendation", "accept"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("PUT", "/tender-vendors/" + w.tv() + "/screening/recommendation")
+                .bodyValue(Map.of("recommendation", "reject"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "confirmScreeningDecision",
+        new Scenario() {
+          ScreeningWorld w = screeningWorld("in_screening");
+
+          @Override
+          public int success() {
+            asChair("POST", "/tender-vendors/" + w.tv() + "/screening/decision")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .bodyValue(
+                    Map.of("decision", "reject", "reason", "The mandatory documents are missing"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tender-vendors/" + w.tv() + "/screening/decision")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .bodyValue(Map.of("decision", "reject", "reason", "short"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "reinstateVendor",
+        new Scenario() {
+          ScreeningWorld w = screeningWorld("rejected");
+
+          @Override
+          public int success() {
+            asChair("POST", "/tender-vendors/" + w.tv() + "/screening/reinstate")
+                .bodyValue(Map.of("note", "The certificates arrived by post"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tender-vendors/" + w.tv() + "/screening/reinstate")
+                .bodyValue(Map.of("note", "short"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "setScreeningChecklist",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+
+          @Override
+          public int success() {
+            asChair("PUT", "/tenders/" + t + "/screening/checklist")
+                .bodyValue(Map.of("items", List.of(Map.of("label", "Written in plain language"))))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("PUT", "/tenders/" + t + "/screening/checklist")
+                .bodyValue(Map.of("items", List.of(Map.of("label", " "))))
                 .exchange()
                 .expectStatus()
                 .isEqualTo(422);
