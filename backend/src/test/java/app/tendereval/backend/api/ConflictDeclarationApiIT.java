@@ -162,4 +162,68 @@ class ConflictDeclarationApiIT extends AbstractApiIT {
         .expectStatus()
         .isNotFound();
   }
+
+  /** The file list must exist before the declaration, or the member has no Open button (PG-13). */
+  @Test
+  void theFileRowsAreListedBeforeTheDeclarationWithoutTheirNamesOrStatus() {
+    World w = world();
+    UUID doc =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO documents (tender_id, doc_type, title) VALUES (?, 'proposal', 'P') RETURNING id",
+                w.tender());
+    UUID dv = UUID.randomUUID();
+    TestUsers.sql(
+        "INSERT INTO document_versions (id, document_id, version_no, file_name, file_format, size_bytes,"
+            + " sha256, storage_key, status, uploaded_by) VALUES (?, ?, 1, 'secret-name.pdf', 'pdf', 10,"
+            + " repeat('a', 64), ?, 'uploading', ?)",
+        dv,
+        doc,
+        "originals/%s/%s/%s.pdf".formatted(w.tender(), doc, dv),
+        w.admin().id());
+    UUID pv =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO proposal_versions (tender_vendor_id, version_no, uploaded_by) VALUES (?, 1, ?) RETURNING id",
+                w.vendor(),
+                w.admin().id());
+    TestUsers.sql(
+        "INSERT INTO proposal_version_files (proposal_version_id, document_version_id, file_role)"
+            + " VALUES (?, ?, 'main')",
+        pv,
+        dv);
+    var list =
+        (java.util.function.Supplier<
+                org.springframework.test.web.reactive.server.WebTestClient.BodyContentSpec>)
+            () ->
+                web.get()
+                    .uri("/tender-vendors/" + w.vendor() + "/proposal-versions")
+                    .header("Authorization", "Bearer " + tokenFor(w.member()))
+                    .exchange()
+                    .expectStatus()
+                    .isOk()
+                    .expectBody();
+
+    // before: the row and its id are there, so the screen can offer Open; name and status are not
+    list.get()
+        .jsonPath("$[0].files.length()")
+        .isEqualTo(1)
+        .jsonPath("$[0].files[0].document_version_id")
+        .isEqualTo(dv.toString())
+        .jsonPath("$[0].files[0].role")
+        .isEqualTo("main")
+        .jsonPath("$[0].files[0].file_name")
+        .isEqualTo("Main file")
+        .jsonPath("$[0].files[0].status")
+        .doesNotExist();
+
+    declare(w, w.member(), Map.of("has_conflict", false)).expectStatus().isCreated();
+
+    // after: the real name and status
+    list.get()
+        .jsonPath("$[0].files[0].file_name")
+        .isEqualTo("secret-name.pdf")
+        .jsonPath("$[0].files[0].status")
+        .isEqualTo("uploading");
+  }
 }

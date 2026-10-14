@@ -72,21 +72,27 @@ public class ProposalService {
     if (versions.isEmpty()) {
       return Mono.just(versions);
     }
+    // LEFT JOIN: a member's view of a proposal's document record is closed until they declare no
+    // conflict (V9, V20). The row is still listed, so the screen can offer Open, which asks for
+    // the declaration; the name and status come back once it is on record.
     return db.sql(
-            "SELECT f.proposal_version_id, f.file_role, v.id AS dv_id, v.file_name, v.status,"
-                + " v.failure_reason, v.page_count FROM proposal_version_files f"
-                + " JOIN document_versions v ON v.id = f.document_version_id"
+            "SELECT f.proposal_version_id, f.file_role, f.document_version_id AS dv_id, v.id AS vid,"
+                + " v.file_name, v.status, v.failure_reason, v.page_count"
+                + " FROM proposal_version_files f"
+                + " LEFT JOIN document_versions v ON v.id = f.document_version_id"
                 + " WHERE f.proposal_version_id IN (:ids) ORDER BY f.sort_order, f.created_at")
         .bind("ids", versions.stream().map(ProposalVersion::getId).toList())
         .map(
             (r, m) -> {
+              boolean open = r.get("vid", UUID.class) != null;
+              FileRole role = FileRole.fromValue(r.get("file_role", String.class));
               String reason = r.get("failure_reason", String.class);
               ProposalFile file =
                   new ProposalFile()
                       .documentVersionId(r.get("dv_id", UUID.class))
-                      .fileName(r.get("file_name", String.class))
-                      .role(FileRole.fromValue(r.get("file_role", String.class)))
-                      .status(DocumentStatus.fromValue(r.get("status", String.class)))
+                      .fileName(open ? r.get("file_name", String.class) : closedName(role))
+                      .role(role)
+                      .status(open ? DocumentStatus.fromValue(r.get("status", String.class)) : null)
                       .failureReason(reason == null ? null : FailureReason.fromValue(reason))
                       .pageCount(r.get("page_count", Integer.class));
               return Map.entry(r.get("proposal_version_id", UUID.class), file);
@@ -103,6 +109,10 @@ public class ProposalService {
               }
               return versions;
             });
+  }
+
+  private static String closedName(FileRole role) {
+    return role == FileRole.MAIN ? "Main file" : "Annex";
   }
 
   /**

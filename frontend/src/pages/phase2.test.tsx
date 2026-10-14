@@ -237,6 +237,23 @@ describe("PG-05 Vendors", () => {
     expect(await accessibilityViolations(container)).toEqual([]);
   });
 
+  it("offers Open for a file whose record is closed until the member declares (PG-13)", async () => {
+    const closed = {
+      ...proposal,
+      files: [{ document_version_id: "a", file_name: "Main file", role: "main", status: null }],
+    };
+    const api = fakeApi((call) =>
+      call === "GET /tender-vendors/{tenderVendorId}/proposal-versions" ? [closed] : handler(call),
+    );
+    renderPage(at(<Vendors />, "/tenders/:tenderId/vendors"), {
+      api,
+      route: `/tenders/${TENDER_ID}/vendors`,
+    });
+    expect(await screen.findByText(/Main file \(main file\)/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open Main file" })).toBeInTheDocument();
+    expect(screen.queryByText(/failed|processing|uploading/i)).not.toBeInTheDocument();
+  });
+
   it("asks before adding a vendor that looks like an existing one", async () => {
     const api = fakeApi((call) => {
       if (call === "POST /tenders/{tenderId}/vendors") {

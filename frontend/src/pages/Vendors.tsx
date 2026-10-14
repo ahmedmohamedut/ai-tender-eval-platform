@@ -262,7 +262,7 @@ function VendorCard({
             {current.files.map((f) => (
               <li key={f.document_version_id}>
                 {f.file_name} ({f.role === "main" ? "main file" : "annex"}){" "}
-                {f.status === "ready" && (
+                {(f.status === "ready" || f.status === null) && (
                   <OpenProposalFile
                     tenderVendorId={tv.id}
                     vendorName={tv.vendor.name}
@@ -271,10 +271,12 @@ function VendorCard({
                     onDeclared={onChanged}
                   />
                 )}{" "}
-                <StatusChip
-                  label={documentStatusLabel[f.status] ?? f.status}
-                  tone={(documentStatusTone[f.status] ?? "neutral") as Tone}
-                />
+                {f.status !== null && (
+                  <StatusChip
+                    label={documentStatusLabel[f.status] ?? f.status}
+                    tone={(documentStatusTone[f.status] ?? "neutral") as Tone}
+                  />
+                )}
                 {f.status === "failed" && f.failure_reason && (
                   <span className="help">
                     {" "}

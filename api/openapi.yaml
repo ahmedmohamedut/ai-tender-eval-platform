@@ -6305,6 +6305,7 @@ components:
       - matches
     ProposalFile:
       type: object
+      description: A file of a proposal version. Until a member has declared no conflict for the vendor, the file's own record is closed to them (PG-13), so the row is listed with a generic name ("Main file", "Annex 2") and a null status. The declaration opens it.
       properties:
         document_version_id:
           type: string
@@ -6314,7 +6315,10 @@ components:
         role:
           $ref: '#/components/schemas/FileRole'
         status:
-          $ref: '#/components/schemas/DocumentStatus'
+          oneOf:
+          - $ref: '#/components/schemas/DocumentStatus'
+          - type: 'null'
+          description: Null while the file is closed to the caller because no declaration is on record.
         failure_reason:
           oneOf:
           - $ref: '#/components/schemas/FailureReason'
