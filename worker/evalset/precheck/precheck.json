@@ -1,0 +1,1146 @@
+[
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Security measures"
+   },
+   {
+    "found": false,
+    "name": "Technical solution"
+   },
+   {
+    "found": true,
+    "name": "Project team"
+   },
+   {
+    "found": true,
+    "name": "Pricing"
+   }
+  ],
+  "has_clause": true,
+  "id": "p001",
+  "proposal": [
+   {
+    "id": "d36ff41e-f356-5dd1-82be-cce04b1c9f65",
+    "section": "Security measures",
+    "text": "This section describes our security measures for the ministry in detail."
+   },
+   {
+    "id": "79cef62d-ead6-5cfd-a054-9540cc4f17ac",
+    "section": "Project team",
+    "text": "This section describes our project team for the ministry in detail."
+   },
+   {
+    "id": "294fdf49-bca3-5805-9ea1-bfbe5d739c25",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "c33767be-6578-5439-9962-f471d1f0bae9",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "d73a3baa-45f4-55cd-95a5-b07f4fbf1bec",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Security measures, Technical solution, Project team and Pricing."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": false,
+    "name": "Executive summary"
+   },
+   {
+    "found": false,
+    "name": "Project team"
+   },
+   {
+    "found": false,
+    "name": "Technical solution"
+   },
+   {
+    "found": true,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "Pricing"
+   }
+  ],
+  "has_clause": true,
+  "id": "p002",
+  "proposal": [
+   {
+    "id": "aac95121-0a29-5121-b1cf-12ca026535ed",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   },
+   {
+    "id": "b7a06d8c-50fb-5d0d-94e1-d19ab54485e0",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "25006bcd-bb75-552a-a9a1-61cadfafb274",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "d2204598-25b2-51d0-ad1e-182720083ef5",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Executive summary, Project team, Technical solution, Service levels and Pricing."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": false,
+    "name": "Executive summary"
+   },
+   {
+    "found": false,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "References"
+   },
+   {
+    "found": false,
+    "name": "Project team"
+   },
+   {
+    "found": true,
+    "name": "Pricing",
+    "synonym": "Price schedule"
+   }
+  ],
+  "has_clause": true,
+  "id": "p003",
+  "proposal": [
+   {
+    "id": "8e51509f-2299-531b-a721-e613a0f3319b",
+    "section": "References",
+    "text": "This section describes our references for the ministry in detail."
+   },
+   {
+    "id": "b31a948e-fde1-57a2-acad-2b7929d4f950",
+    "section": "Price schedule",
+    "text": "This section describes our price schedule for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "e26e2aaf-77d6-5cfb-a8d5-3299e78c6559",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "bf156250-49ec-5e00-92ae-6af01d54e6a6",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Executive summary, Service levels, References, Project team and Pricing."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": false,
+    "name": "Executive summary"
+   },
+   {
+    "found": false,
+    "name": "Service levels"
+   },
+   {
+    "found": false,
+    "name": "Project team"
+   }
+  ],
+  "has_clause": true,
+  "id": "p004",
+  "proposal": [],
+  "rfp": [
+   {
+    "id": "06877991-04ec-54a8-a360-e69a7e5264a6",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "86e100c7-3b3b-5725-aa6f-20093f31830a",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Executive summary, Service levels and Project team."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "References",
+    "synonym": "Customer references"
+   },
+   {
+    "found": true,
+    "name": "Implementation plan",
+    "synonym": "Delivery plan"
+   },
+   {
+    "found": true,
+    "name": "Technical solution"
+   }
+  ],
+  "has_clause": true,
+  "id": "p005",
+  "proposal": [
+   {
+    "id": "aa7dbe09-5bdf-5d50-aa68-ad6e964f8063",
+    "section": "Customer references",
+    "text": "This section describes our customer references for the ministry in detail."
+   },
+   {
+    "id": "1b69c0e8-0464-562b-9df3-5fe8811c7318",
+    "section": "Delivery plan",
+    "text": "This section describes our delivery plan for the ministry in detail."
+   },
+   {
+    "id": "7ec55ef3-c8f6-5dc6-89f7-9da3cb632e44",
+    "section": "Technical solution",
+    "text": "This section describes our technical solution for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "377142de-1a94-5aa9-856f-b226be8beec8",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "9016b4be-1793-5272-9903-a94afd048e37",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: References, Implementation plan and Technical solution."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "References"
+   },
+   {
+    "found": true,
+    "name": "Pricing"
+   },
+   {
+    "found": true,
+    "name": "Technical solution"
+   }
+  ],
+  "has_clause": true,
+  "id": "p006",
+  "proposal": [
+   {
+    "id": "f0805d76-0600-527b-bb65-a1228842df79",
+    "section": "References",
+    "text": "This section describes our references for the ministry in detail."
+   },
+   {
+    "id": "cb1f0965-ca80-5bf6-bc99-9f14e772d54d",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   },
+   {
+    "id": "7915699b-2957-59c8-94e5-012bfa202854",
+    "section": "Technical solution",
+    "text": "This section describes our technical solution for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "1ed8a962-0310-512d-9d64-7c2fa1507e16",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "652f9066-53e2-50ed-acfd-540f033907a1",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: References, Pricing and Technical solution."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "Project team"
+   },
+   {
+    "found": false,
+    "name": "Pricing"
+   },
+   {
+    "found": true,
+    "name": "Technical solution"
+   },
+   {
+    "found": true,
+    "name": "Executive summary"
+   }
+  ],
+  "has_clause": true,
+  "id": "p007",
+  "proposal": [
+   {
+    "id": "dba0a51c-e3fb-5225-b746-73a1d08dcabc",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   },
+   {
+    "id": "64994406-6a64-5075-9fc4-bef64f0ce76c",
+    "section": "Project team",
+    "text": "This section describes our project team for the ministry in detail."
+   },
+   {
+    "id": "ac8d745c-335f-5079-832c-42661aa1d1f7",
+    "section": "Technical solution",
+    "text": "This section describes our technical solution for the ministry in detail."
+   },
+   {
+    "id": "253cf907-81d4-5263-9ac3-5502b7bbc496",
+    "section": "Executive summary",
+    "text": "This section describes our executive summary for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "eb5c220b-90a4-54bb-87f2-15e0063b2319",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "f701b3c5-c1e5-5ff4-86ed-43a44823613e",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Service levels, Project team, Pricing, Technical solution and Executive summary."
+   }
+  ]
+ },
+ {
+  "expected": [],
+  "has_clause": false,
+  "id": "p008",
+  "proposal": [
+   {
+    "id": "09667598-1652-57aa-958c-402bde56d58b",
+    "section": "Executive summary",
+    "text": "This section describes our executive summary for the ministry in detail."
+   },
+   {
+    "id": "03279dd6-3ddf-57f2-8fa6-8d3b16a19eb5",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   },
+   {
+    "id": "c0b54ed6-8129-580e-8721-425617bf692b",
+    "section": "Security measures",
+    "text": "This section describes our security measures for the ministry in detail."
+   },
+   {
+    "id": "bc6c79f2-be1c-57a8-9366-042c5758fe8d",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "253e1f06-ebf0-53dc-b0ab-eb72e7fed870",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "5e2165f6-86f8-5022-9620-9dd03eaf197a",
+    "section": "2. Instructions to vendors",
+    "text": "Proposals are submitted as one PDF file in English before the deadline."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": false,
+    "name": "Technical solution"
+   },
+   {
+    "found": false,
+    "name": "Security measures"
+   },
+   {
+    "found": false,
+    "name": "Project team"
+   },
+   {
+    "found": true,
+    "name": "Service levels"
+   },
+   {
+    "found": false,
+    "name": "Pricing"
+   }
+  ],
+  "has_clause": true,
+  "id": "p009",
+  "proposal": [
+   {
+    "id": "e01dde8a-cd40-5ac4-97e1-9b9d6ba33572",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "d6e9d619-6531-5a5f-bac1-08bb3b417d4c",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "8fae64ea-d8e4-517c-bfd3-fbab45df75e7",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Technical solution, Security measures, Project team, Service levels and Pricing."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Pricing",
+    "synonym": "Price schedule"
+   },
+   {
+    "found": false,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "Implementation plan"
+   }
+  ],
+  "has_clause": true,
+  "id": "p010",
+  "proposal": [
+   {
+    "id": "74693e24-451c-5ad6-9e7a-1d7cdb4e498d",
+    "section": "Price schedule",
+    "text": "This section describes our price schedule for the ministry in detail."
+   },
+   {
+    "id": "21187968-8e41-5a67-abd6-5c3624e31a8e",
+    "section": "Implementation plan",
+    "text": "This section describes our implementation plan for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "7abd8050-eed9-5010-9b63-604b74f77986",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "f287e58f-e500-5384-a792-4bd937c43581",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Pricing, Service levels and Implementation plan."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Technical solution"
+   },
+   {
+    "found": false,
+    "name": "Security measures"
+   },
+   {
+    "found": true,
+    "name": "Implementation plan"
+   },
+   {
+    "found": false,
+    "name": "References"
+   }
+  ],
+  "has_clause": true,
+  "id": "p011",
+  "proposal": [
+   {
+    "id": "c25a30d3-3518-512a-9270-d7557e537120",
+    "section": "Technical solution",
+    "text": "This section describes our technical solution for the ministry in detail."
+   },
+   {
+    "id": "7d93a307-bdc0-581c-bcf8-f212390f0837",
+    "section": "Implementation plan",
+    "text": "This section describes our implementation plan for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "78e3da4f-f3ab-545a-803d-b44db52398d1",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "52e59cc1-c72c-5286-b90d-3c4a163d21ab",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Technical solution, Security measures, Implementation plan and References."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": false,
+    "name": "Project team"
+   },
+   {
+    "found": true,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "Implementation plan"
+   },
+   {
+    "found": true,
+    "name": "Pricing"
+   }
+  ],
+  "has_clause": true,
+  "id": "p012",
+  "proposal": [
+   {
+    "id": "e11b10ec-b9ba-559a-8b9d-c5acc78b785b",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   },
+   {
+    "id": "6c2319af-6fb8-51a3-b5ff-96d268b24b56",
+    "section": "Implementation plan",
+    "text": "This section describes our implementation plan for the ministry in detail."
+   },
+   {
+    "id": "d02d2ad9-0156-5fe9-a5f5-22fd89ab5658",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "e663c04a-f6f1-5f12-bd64-6177c775742c",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "e37b789b-0336-5e3e-87c9-c2a1294d5294",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Project team, Service levels, Implementation plan and Pricing."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "Security measures"
+   },
+   {
+    "found": true,
+    "name": "Technical solution"
+   }
+  ],
+  "has_clause": true,
+  "id": "p013",
+  "proposal": [
+   {
+    "id": "07d0bba1-4014-5342-8f12-ed7493760c0a",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   },
+   {
+    "id": "505da499-6adc-555a-80d5-251d42c681c4",
+    "section": "Security measures",
+    "text": "This section describes our security measures for the ministry in detail."
+   },
+   {
+    "id": "f017c30e-9aee-512f-af0f-e2108c96e76f",
+    "section": "Technical solution",
+    "text": "This section describes our technical solution for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "582ac2fc-16b3-5cef-9423-0497043e5982",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "984a80b9-37df-55d8-b214-cce7abd41bf5",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Service levels, Security measures and Technical solution."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "Implementation plan",
+    "synonym": "Delivery plan"
+   },
+   {
+    "found": true,
+    "name": "Executive summary"
+   }
+  ],
+  "has_clause": true,
+  "id": "p014",
+  "proposal": [
+   {
+    "id": "52682c9a-b6ad-549a-9c6a-62e0d499e1fd",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   },
+   {
+    "id": "90ec7002-be7b-53c5-8b9c-0d505195cd25",
+    "section": "Delivery plan",
+    "text": "This section describes our delivery plan for the ministry in detail."
+   },
+   {
+    "id": "87ae66a0-c9a6-52a6-be9a-b9d09fc7fe8a",
+    "section": "Executive summary",
+    "text": "This section describes our executive summary for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "e813dd2b-b897-5c90-8745-7358fd5cb756",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "5ca327d2-c924-5075-8dbc-70d5154ae7cd",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Service levels, Implementation plan and Executive summary."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": false,
+    "name": "Pricing"
+   },
+   {
+    "found": false,
+    "name": "References"
+   },
+   {
+    "found": false,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "Security measures"
+   }
+  ],
+  "has_clause": true,
+  "id": "p015",
+  "proposal": [
+   {
+    "id": "d14ae395-9c5d-5d96-9cd3-044923d41b21",
+    "section": "Security measures",
+    "text": "This section describes our security measures for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "26bec361-20e6-59ae-8207-aae0c33be2fa",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "2702edca-f505-5226-9fce-21768f20ef29",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Pricing, References, Service levels and Security measures."
+   }
+  ]
+ },
+ {
+  "expected": [],
+  "has_clause": false,
+  "id": "p016",
+  "proposal": [
+   {
+    "id": "f6202834-83d6-5e45-88be-f82e2f7c0e1f",
+    "section": "Implementation plan",
+    "text": "This section describes our implementation plan for the ministry in detail."
+   },
+   {
+    "id": "fef82ba8-28e0-533e-a1ed-ab208a3f35ab",
+    "section": "References",
+    "text": "This section describes our references for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "377d65d2-47f9-5aad-aea6-7dd531bedf21",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "986a3f7a-8149-55b7-b4fd-80c8a7a91b2b",
+    "section": "2. Instructions to vendors",
+    "text": "Proposals are submitted as one PDF file in English before the deadline."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Security measures"
+   },
+   {
+    "found": true,
+    "name": "Technical solution"
+   },
+   {
+    "found": true,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "Pricing"
+   },
+   {
+    "found": true,
+    "name": "Implementation plan"
+   }
+  ],
+  "has_clause": true,
+  "id": "p017",
+  "proposal": [
+   {
+    "id": "f3b8f573-8035-52e1-ada2-e630fa5341b6",
+    "section": "Security measures",
+    "text": "This section describes our security measures for the ministry in detail."
+   },
+   {
+    "id": "fbec7298-8149-5f9d-a113-882dbcae70f7",
+    "section": "Technical solution",
+    "text": "This section describes our technical solution for the ministry in detail."
+   },
+   {
+    "id": "36130a9c-7c40-5965-aa1a-8a3cf397bab7",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   },
+   {
+    "id": "93306bb7-c4bd-5b33-9494-514851960b6e",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   },
+   {
+    "id": "2595a6a6-2da9-57b2-8d17-fcade183bff0",
+    "section": "Implementation plan",
+    "text": "This section describes our implementation plan for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "0b010cc3-0bb4-54fa-838c-fc748596edff",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "7854b426-094b-5c58-be75-26e924336ece",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Security measures, Technical solution, Service levels, Pricing and Implementation plan."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "References"
+   },
+   {
+    "found": true,
+    "name": "Service levels"
+   },
+   {
+    "found": false,
+    "name": "Project team"
+   },
+   {
+    "found": true,
+    "name": "Pricing"
+   },
+   {
+    "found": true,
+    "name": "Implementation plan"
+   }
+  ],
+  "has_clause": true,
+  "id": "p018",
+  "proposal": [
+   {
+    "id": "c4d93d2c-42e3-5516-bccb-4423437a0323",
+    "section": "References",
+    "text": "This section describes our references for the ministry in detail."
+   },
+   {
+    "id": "bc0fb98d-f88b-5840-84ea-43fb497bffd2",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   },
+   {
+    "id": "217a59db-cda5-539f-b4a4-599d592b74f8",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   },
+   {
+    "id": "f8948e57-22c8-57bb-80ab-f986bce90dec",
+    "section": "Implementation plan",
+    "text": "This section describes our implementation plan for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "a9a6e0bf-268f-5691-b551-4dadce8837a7",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "d9746fba-3e13-52c5-8064-b1858a7c73ac",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: References, Service levels, Project team, Pricing and Implementation plan."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Pricing"
+   },
+   {
+    "found": true,
+    "name": "Service levels"
+   },
+   {
+    "found": true,
+    "name": "Technical solution"
+   },
+   {
+    "found": true,
+    "name": "Project team"
+   }
+  ],
+  "has_clause": true,
+  "id": "p019",
+  "proposal": [
+   {
+    "id": "aa133e9e-b6ea-5aed-b649-77d8ebb3ac79",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   },
+   {
+    "id": "74218337-7a96-55fa-98c0-0f2ce48f51fb",
+    "section": "Service levels",
+    "text": "This section describes our service levels for the ministry in detail."
+   },
+   {
+    "id": "06b270dc-43fa-5cb1-844f-29f2b1e69014",
+    "section": "Technical solution",
+    "text": "This section describes our technical solution for the ministry in detail."
+   },
+   {
+    "id": "482e2d69-53bc-5b1f-8547-6842ba8294f0",
+    "section": "Project team",
+    "text": "This section describes our project team for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "d472f3b0-7aa4-56f5-a594-2bdbd9de3b72",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "dd0516f6-e5b7-5815-ab88-8a1b7d68634b",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Pricing, Service levels, Technical solution and Project team."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Executive summary"
+   },
+   {
+    "found": true,
+    "name": "References",
+    "synonym": "Customer references"
+   },
+   {
+    "found": true,
+    "name": "Security measures"
+   },
+   {
+    "found": false,
+    "name": "Project team"
+   }
+  ],
+  "has_clause": true,
+  "id": "p020",
+  "proposal": [
+   {
+    "id": "0a5ad738-883f-53ab-940c-0f10607030f5",
+    "section": "Executive summary",
+    "text": "This section describes our executive summary for the ministry in detail."
+   },
+   {
+    "id": "de5b946f-f339-5575-a537-ac6e494f75a1",
+    "section": "Customer references",
+    "text": "This section describes our customer references for the ministry in detail."
+   },
+   {
+    "id": "d21f6d76-a382-5d41-988e-4664cb2fc949",
+    "section": "Security measures",
+    "text": "This section describes our security measures for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "6b53df7f-fbda-5059-ba09-a352a585bc4c",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "42f409d0-aae3-5750-bef3-de7181b7cc53",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Executive summary, References, Security measures and Project team."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": false,
+    "name": "Security measures"
+   },
+   {
+    "found": true,
+    "name": "References"
+   },
+   {
+    "found": false,
+    "name": "Technical solution"
+   },
+   {
+    "found": true,
+    "name": "Pricing"
+   }
+  ],
+  "has_clause": true,
+  "id": "p021",
+  "proposal": [
+   {
+    "id": "3c5b49dd-ed9c-54ed-93cb-eec65e62aed1",
+    "section": "References",
+    "text": "This section describes our references for the ministry in detail."
+   },
+   {
+    "id": "e65a4d45-ccde-5e65-8fde-c01e94a6e1ed",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "c99bbe17-0c35-5bb1-9187-5bb857f15b39",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "4b4a1778-69fe-52e9-9fe5-6301df52df55",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Security measures, References, Technical solution and Pricing."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Executive summary"
+   },
+   {
+    "found": true,
+    "name": "Security measures"
+   },
+   {
+    "found": false,
+    "name": "References"
+   }
+  ],
+  "has_clause": true,
+  "id": "p022",
+  "proposal": [
+   {
+    "id": "55983046-b91f-5979-972b-440a6a670ddc",
+    "section": "Executive summary",
+    "text": "This section describes our executive summary for the ministry in detail."
+   },
+   {
+    "id": "e299b2a2-f04f-5e48-8264-c9eb68168398",
+    "section": "Security measures",
+    "text": "This section describes our security measures for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "0b95f088-d90d-5662-8cc2-0b382cf235db",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "45f51023-ef37-52aa-8e0e-be7ea6a042f9",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Executive summary, Security measures and References."
+   }
+  ]
+ },
+ {
+  "expected": [
+   {
+    "found": true,
+    "name": "Executive summary"
+   },
+   {
+    "found": true,
+    "name": "References"
+   },
+   {
+    "found": true,
+    "name": "Project team"
+   },
+   {
+    "found": true,
+    "name": "Technical solution"
+   }
+  ],
+  "has_clause": true,
+  "id": "p023",
+  "proposal": [
+   {
+    "id": "47d28f0c-5fe0-5ae2-b501-211c36654ae5",
+    "section": "Executive summary",
+    "text": "This section describes our executive summary for the ministry in detail."
+   },
+   {
+    "id": "5038e000-373f-5c0d-b747-5ea2a230d706",
+    "section": "References",
+    "text": "This section describes our references for the ministry in detail."
+   },
+   {
+    "id": "e4273a41-7bd1-5271-9e46-124256227861",
+    "section": "Project team",
+    "text": "This section describes our project team for the ministry in detail."
+   },
+   {
+    "id": "5ffa827e-a10f-585f-9e1a-afdd8d62ce39",
+    "section": "Technical solution",
+    "text": "This section describes our technical solution for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "e2ca5281-b05f-5af3-8132-7cdc724d9799",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "cca778d3-8e3b-507c-ac90-a6f2f9d95bdf",
+    "section": "2. Instructions to vendors",
+    "text": "The proposal must include the following sections: Executive summary, References, Project team and Technical solution."
+   }
+  ]
+ },
+ {
+  "expected": [],
+  "has_clause": false,
+  "id": "p024",
+  "proposal": [
+   {
+    "id": "c33a3b64-83ec-5f81-8eeb-ebf167798bda",
+    "section": "Implementation plan",
+    "text": "This section describes our implementation plan for the ministry in detail."
+   },
+   {
+    "id": "350b58bf-12f0-5244-b4ac-298aff9c75d2",
+    "section": "Pricing",
+    "text": "This section describes our pricing for the ministry in detail."
+   },
+   {
+    "id": "b44073e9-b078-5d18-a9ef-3a810b2c248d",
+    "section": "Executive summary",
+    "text": "This section describes our executive summary for the ministry in detail."
+   },
+   {
+    "id": "87fcb9ef-1898-53c2-9a2f-882fec41ac00",
+    "section": "Customer references",
+    "text": "This section describes our customer references for the ministry in detail."
+   }
+  ],
+  "rfp": [
+   {
+    "id": "09c73208-26e8-5dc4-859e-d7d089173b27",
+    "section": "1. Background",
+    "text": "The ministry is renewing its registers."
+   },
+   {
+    "id": "d551227e-6783-56ce-99bf-492276373790",
+    "section": "2. Instructions to vendors",
+    "text": "Proposals are submitted as one PDF file in English before the deadline."
+   }
+  ]
+ }
+]

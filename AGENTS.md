@@ -89,8 +89,10 @@ Run from the repository root. Each command below exists and was run (see `docs/d
 | Real upload to ready through the gateway, DOCX conversion and the three file-cause failures (synthetic documents) | `make smoke-ingest` |
 | Failure drills of the worker, the agent and the message loop (several minutes; restarts workers, Qdrant and the model stub; `DRILL_SET=extraction` runs the four extraction drills only) | `make drills` |
 | Backlog of every consumer and the dead-letter stream | `infra/scripts/consumer-lag.sh` |
-| Run the extraction evaluation set on synthetic documents (stub in-process; `EVAL_ARGS="--base-url URL --model NAME --write"` for a model, results into `docs/releases/`) | `make eval` |
+| Run the evaluation sets on synthetic documents: extraction, grading (360 cases), pre-check, injection (stub in-process; `EVAL_ARGS="--base-url URL --model NAME --write"` for a model and `EVAL_QUALITY_ARGS="--context-chars N --max-output-tokens N"` for the grading sets; results into `docs/releases/`) | `make eval` |
 | Real extraction, review, baseline confirm, reopen and version 2 on the running stack | `infra/scripts/extraction-smoke.sh` |
+| Real screening on the running stack: declaration, AI structure check, checks, recommendation, the Chair's decision | `infra/scripts/screening-smoke.sh` |
+| Real evaluation on the running stack: accept before the baseline, confirm it, the system starts the evaluation, grades with citations, members' evaluations | `infra/scripts/evaluation-smoke.sh` |
 
 Per component: `cd backend && ./gradlew test integrationTest spotlessApply`, `cd worker && uv run pytest` (add `-m integration` for the container tests) and `cd frontend && npm test`. Generated code (`backend/build/generated`, `frontend/src/api/generated`) is never committed. Ports on the host are in `.env` (copied from `.env.example` by `make up`).
 

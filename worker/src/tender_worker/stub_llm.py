@@ -123,19 +123,31 @@ _EXCLUDE = re.compile(
 )
 
 
+def _stems(text: str) -> set[str]:
+    return {w[:5] for w in _WORD.findall(text.lower()) if len(w) > 3}
+
+
+_FILLER = {"shall", "must", "should", "will", "suppl", "vendo", "provi", "platf", "servi"}
+_NEGATION = re.compile(r"\b(not|no|cannot|never|without)\b", re.I)
+_PARTIAL = re.compile(r";|\bbut\b|\bonly\b|\bnot yet\b|\bhas not been tested\b", re.I)
+
+
 def grade_draft(user: str) -> dict:
-    """A rule-based grade: word overlap between the requirement and the best passage sentence."""
+    """A rule-based grade from word overlap between the requirement and the best passage sentence.
+
+    A sentence that mostly matches and says it is not provided is an exclusion; one that matches
+    but holds a limit ("only", "not yet", a second clause) is partial; a table row that matches is
+    taken as fully met; a claim without the requirement's words is not evidence."""
     m = _REQ.search(user)
     req = m.group(1).strip() if m else ""
-    filler = {"shall", "must", "should", "will", "supplier", "vendor", "provide", "platform"}
-    wanted = {w for w in _words(req) if len(w) > 3 and w not in filler}
+    wanted = _stems(req) - _FILLER
     best: tuple[float, str, str] | None = None
     for pid, text in _PASSAGE.findall(user):
         for sentence in _SENTENCE.split(" ".join(text.split())):
             sentence = sentence.strip()
-            if len(sentence) < 15:
+            if len(sentence) < 8:
                 continue
-            overlap = len(wanted & _words(sentence)) / max(1, len(wanted))
+            overlap = len(wanted & _stems(sentence)) / max(1, len(wanted))
             if best is None or overlap > best[0]:
                 best = (overlap, pid, sentence)
     if best is None or best[0] < 0.34:
@@ -150,34 +162,47 @@ def grade_draft(user: str) -> dict:
         }
     overlap, pid, sentence = best
     quote = sentence if len(sentence) <= 160 else sentence[:160]
-    if _EXCLUDE.search(sentence):
+    cite = [{"passage_id": pid, "quote": quote}]
+    negated = bool(_NEGATION.search(sentence))
+    limited = bool(_PARTIAL.search(sentence))
+    if negated and not limited:
         return {
             "grade": "non_compliant",
             "non_compliance_reason": "explicitly_excluded",
             "rationale_summary": "The proposal states it does not meet this requirement.",
             "rationale": "A passage says the vendor does not provide it.",
             "missing_elements": [],
-            "citations": [{"passage_id": pid, "quote": quote}],
+            "citations": cite,
             "certainty": "high",
         }
-    if overlap >= 0.67:
+    if "|" in sentence and not negated:
         return {
             "grade": "fully_compliant",
             "non_compliance_reason": None,
-            "rationale_summary": "The proposal describes how the requirement is met.",
-            "rationale": "A passage covers the requirement in detail.",
+            "rationale_summary": "The capability table lists it as supported.",
+            "rationale": "A table row states the capability and that it is supported.",
             "missing_elements": [],
-            "citations": [{"passage_id": pid, "quote": quote}],
-            "certainty": "high" if overlap >= 0.8 else "medium",
+            "citations": cite,
+            "certainty": "medium",
+        }
+    if limited or overlap < 0.6:
+        return {
+            "grade": "partially_compliant",
+            "non_compliance_reason": None,
+            "rationale_summary": "The proposal covers part of the requirement.",
+            "rationale": "A passage covers some of the requirement but not all of it.",
+            "missing_elements": ["Details of the remaining part of the requirement"],
+            "citations": cite,
+            "certainty": "medium",
         }
     return {
-        "grade": "partially_compliant",
+        "grade": "fully_compliant",
         "non_compliance_reason": None,
-        "rationale_summary": "The proposal covers part of the requirement.",
-        "rationale": "A passage covers some of the requirement but not all of it.",
-        "missing_elements": ["Details of the remaining part of the requirement"],
-        "citations": [{"passage_id": pid, "quote": quote}],
-        "certainty": "medium",
+        "rationale_summary": "The proposal describes how the requirement is met.",
+        "rationale": "A passage covers the requirement in detail.",
+        "missing_elements": [],
+        "citations": cite,
+        "certainty": "high" if overlap >= 0.8 else "medium",
     }
 
 

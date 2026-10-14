@@ -147,10 +147,13 @@ test-integration: worker/.venv
 test-slice: up
 	infra/scripts/walking-slice.sh
 
-# The extraction evaluation set (synthetic documents). Without arguments the rule-based stub runs
-# in-process, which checks the harness. For a model: make eval EVAL_ARGS="--base-url URL --model NAME --write"
+# The evaluation sets (synthetic documents): extraction, then grading (360 cases), pre-check and
+# injection. Without arguments the rule-based stub runs in-process, which checks the harness. For
+# a model: make eval EVAL_ARGS="--base-url URL --model NAME --write" (EVAL_QUALITY_ARGS takes the
+# same plus --context-chars and --max-output-tokens for the grading sets).
 eval:
 	cd worker && uv run python -m tender_worker.evalrun extraction $(EVAL_ARGS)
+	cd worker && uv run python -m tender_worker.evalquality all $(EVAL_ARGS) $(EVAL_QUALITY_ARGS)
 
 # Real upload through the gateway to ready (and the three file causes): synthetic documents only.
 smoke-ingest: up
