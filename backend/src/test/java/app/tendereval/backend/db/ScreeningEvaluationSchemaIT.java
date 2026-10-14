@@ -1450,4 +1450,56 @@ class ScreeningEvaluationSchemaIT {
     assertThat(as(chair, "member", c -> one(c, read, g))).isEqualTo(0L);
     assertThat(as(admin, "admin", c -> one(c, read, g))).isEqualTo(0L);
   }
+
+  @Test
+  void auditEventsAboutAMembersRowsAreHeldBackFromTheAdministratorAndTheObserverUntilRelease() {
+    Scn s = scenario();
+    declare(s, m1, false);
+    declare(s, m2, false);
+    declare(s, chair, false);
+    gradedAndSynced(s);
+    UUID e1 = evaluation(s, m1);
+    Object row =
+        one(owner, "SELECT id FROM member_evaluation_rows WHERE member_evaluation_id = ?", e1);
+    exec(
+        owner,
+        "INSERT INTO audit_events (actor_user_id, actor_role, source, tender_id, tender_vendor_id,"
+            + " object_type, object_id, action, after, note) VALUES (?, 'member', 'person', ?, ?,"
+            + " 'member_evaluation_row', ?, 'grade_overridden', '{\"grade\": \"non_compliant\"}',"
+            + " 'The proposal says encryption is only in transit')",
+        m1,
+        tender,
+        s.tv(),
+        row);
+    exec(
+        owner,
+        "INSERT INTO audit_events (actor_user_id, actor_role, source, tender_id, tender_vendor_id,"
+            + " object_type, object_id, action) VALUES (?, 'member', 'person', ?, ?,"
+            + " 'tender_vendor', ?, 'tender_vendor_added')",
+        admin,
+        tender,
+        s.tv(),
+        s.tv());
+    String held =
+        "SELECT count(*) FROM audit_events WHERE tender_vendor_id = ?"
+            + " AND object_type = 'member_evaluation_row'";
+    String other =
+        "SELECT count(*) FROM audit_events WHERE tender_vendor_id = ? AND object_type = 'tender_vendor'";
+    assertThat(as(admin, "admin", c -> one(c, held, s.tv()))).isEqualTo(0L);
+    assertThat(as(observer, "observer", c -> one(c, held, s.tv()))).isEqualTo(0L);
+    assertThat(as(admin, "admin", c -> one(c, other, s.tv()))).isEqualTo(1L);
+    assertThat(as(observer, "observer", c -> one(c, other, s.tv()))).isEqualTo(1L);
+    submit(e1);
+    submit(evaluation(s, m2));
+    submit(evaluation(s, chair));
+    assertThat(as(admin, "admin", c -> one(c, held, s.tv()))).isEqualTo(1L);
+    assertThat(as(observer, "observer", c -> one(c, held, s.tv()))).isEqualTo(0L);
+    // the member reads their own history through the function, not another member's
+    String hist = "SELECT count(*) FROM app_evaluation_row_history(?, ?)";
+    UUID requirement =
+        uuid(one(owner, "SELECT requirement_id FROM member_evaluation_rows WHERE id = ?", row));
+    assertThat(as(m1, "member", c -> one(c, hist, s.tv(), requirement))).isEqualTo(1L);
+    assertThat(as(m2, "member", c -> one(c, hist, s.tv(), requirement))).isEqualTo(0L);
+    assertThat(as(admin, "admin", c -> one(c, hist, s.tv(), requirement))).isEqualTo(0L);
+  }
 }

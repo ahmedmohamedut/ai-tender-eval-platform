@@ -143,6 +143,138 @@ class AuditWriteCoverageIT extends AbstractApiIT {
     return new ScreeningWorld(t, tv, pv);
   }
 
+  /** An evaluated proposal with one AI grade and every member's evaluation created. */
+  private record EvalWorld(UUID tender, UUID tv, UUID requirement, TestUser member) {}
+
+  private EvalWorld evalWorld() {
+    TestUser member = TestUsers.create("member");
+    UUID t = Fixtures.tender(admin(), chair(), member);
+    TestUsers.sql("UPDATE tenders SET status = 'requirements' WHERE id = ?", t);
+    TestUsers.sql("UPDATE tenders SET status = 'evaluation' WHERE id = ?", t);
+    UUID r =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO requirements (tender_id, text, importance, origin) VALUES (?, 'R',"
+                    + " 'mandatory', 'manual') RETURNING id",
+                t);
+    UUID b =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO baselines (tender_id, version_no, requirement_count, confirmed_by)"
+                    + " VALUES (?, 1, 1, ?) RETURNING id",
+                t,
+                chair().id());
+    TestUsers.sql(
+        "INSERT INTO baseline_requirements (baseline_id, requirement_id, display_no, text, importance,"
+            + " content_hash) VALUES (?, ?, 'REQ-001', 'x', 'mandatory', repeat('c', 64))",
+        b,
+        r);
+    UUID v =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO vendors (name, normalized_name) VALUES ('Ew', ?) RETURNING id",
+                UUID.randomUUID().toString());
+    UUID tv =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO tender_vendors (tender_id, vendor_id, added_by) VALUES (?, ?, ?)"
+                    + " RETURNING id",
+                t,
+                v,
+                admin().id());
+    UUID pv =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO proposal_versions (tender_vendor_id, version_no, uploaded_by) VALUES (?, 1,"
+                    + " ?) RETURNING id",
+                tv,
+                admin().id());
+    UUID doc =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO documents (tender_id, doc_type, title) VALUES (?, 'proposal', 'P')"
+                    + " RETURNING id",
+                t);
+    UUID dv = UUID.randomUUID();
+    TestUsers.sql(
+        "INSERT INTO document_versions (id, document_id, version_no, file_name, file_format, size_bytes,"
+            + " sha256, storage_key, status, uploaded_by) VALUES (?, ?, 1, 'p.pdf', 'pdf', 10,"
+            + " repeat('a', 64), ?, 'uploading', ?)",
+        dv,
+        doc,
+        "originals/%s/%s/%s.pdf".formatted(t, doc, dv),
+        admin().id());
+    TestUsers.sql(
+        "INSERT INTO proposal_version_files (proposal_version_id, document_version_id, file_role)"
+            + " VALUES (?, ?, 'main')",
+        pv,
+        dv);
+    UUID passage = UUID.randomUUID();
+    TestUsers.sql(
+        "INSERT INTO passages (id, document_version_id, page_no, passage_no, text, bbox, char_start,"
+            + " char_end, content_hash) VALUES (?, ?, 1, 1, 'We encrypt all data at rest.',"
+            + " '[]'::jsonb, 0, 28, repeat('b', 64))",
+        passage,
+        dv);
+    for (UUID u : List.of(chair().id(), member.id())) {
+      TestUsers.sql(
+          "INSERT INTO conflict_declarations (tender_vendor_id, user_id, has_conflict) VALUES (?, ?,"
+              + " false)",
+          tv,
+          u);
+    }
+    TestUsers.sql("UPDATE proposal_versions SET status = 'in_screening' WHERE id = ?", pv);
+    TestUsers.sql("UPDATE proposal_versions SET status = 'accepted' WHERE id = ?", pv);
+    UUID job =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO jobs (tender_id, job_type, target_type, target_id) VALUES (?, 'evaluation',"
+                    + " 'proposal_version', ?) RETURNING id",
+                t,
+                pv);
+    UUID run =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO ai_runs (job_id, run_type, model_name, prompt_version) VALUES (?,"
+                    + " 'evaluation', 'stub', 'e-1') RETURNING id",
+                job);
+    TestUsers.sql(
+        "WITH g AS (INSERT INTO ai_grades (source_item_id, ai_run_id, proposal_version_id, baseline_id,"
+            + " requirement_id, outcome, grade, requirement_hash) VALUES (gen_random_uuid(), ?, ?, ?,"
+            + " ?, 'graded', 'fully_compliant', repeat('c', 64)) RETURNING id) INSERT INTO"
+            + " grade_citations (ai_grade_id, citation_no, document_version_id, passage_id, page_no,"
+            + " excerpt) SELECT id, 1, ?, ?, 1, 'We encrypt all data at rest.' FROM g",
+        run,
+        pv,
+        b,
+        r,
+        dv,
+        passage);
+    TestUsers.sql("UPDATE jobs SET status = 'running', started_at = now() WHERE id = ?", job);
+    TestUsers.sql("UPDATE jobs SET status = 'completed', finished_at = now() WHERE id = ?", job);
+    TestUsers.scalar("SELECT count(*) FROM ingest_sync_member_evaluations(?)", pv);
+    return new EvalWorld(t, tv, r, member);
+  }
+
+  private int rowVersion(EvalWorld w) {
+    return (Integer)
+        TestUsers.scalar(
+            "SELECT r.row_version FROM member_evaluation_rows r JOIN member_evaluations e ON e.id ="
+                + " r.member_evaluation_id WHERE e.tender_vendor_id = ? AND e.user_id = ?"
+                + " AND r.requirement_id = ?",
+            w.tv(),
+            chair().id(),
+            w.requirement());
+  }
+
+  private UUID memberEvaluation(EvalWorld w, UUID user) {
+    return (UUID)
+        TestUsers.scalar(
+            "SELECT id FROM member_evaluations WHERE tender_vendor_id = ? AND user_id = ?",
+            w.tv(),
+            user);
+  }
+
   private org.springframework.test.web.reactive.server.WebTestClient.RequestBodySpec asChair(
       String method, String uri) {
     var spec =
@@ -1794,6 +1926,188 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .exchange()
                 .expectStatus()
                 .isNotFound();
+          }
+        });
+    m.put(
+        "updateEvaluationRow",
+        new Scenario() {
+          EvalWorld w = evalWorld();
+
+          @Override
+          public int success() {
+            asChair("PATCH", "/tender-vendors/" + w.tv() + "/evaluation/rows/" + w.requirement())
+                .header("If-Match", "\"" + rowVersion(w) + "\"")
+                .bodyValue(Map.of("action", "agree"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("PATCH", "/tender-vendors/" + w.tv() + "/evaluation/rows/" + w.requirement())
+                .header("If-Match", "\"" + (rowVersion(w) + 9) + "\"")
+                .bodyValue(Map.of("action", "agree"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(412);
+          }
+        });
+    m.put(
+        "bulkUpdateEvaluationRows",
+        new Scenario() {
+          EvalWorld w = evalWorld();
+
+          @Override
+          public int success() {
+            asChair("POST", "/tender-vendors/" + w.tv() + "/evaluation/rows/bulk")
+                .bodyValue(Map.of("requirement_ids", List.of(w.requirement()), "action", "agree"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tender-vendors/" + w.tv() + "/evaluation/rows/bulk")
+                .bodyValue(Map.of("requirement_ids", List.of(), "action", "agree"))
+                .exchange()
+                .expectStatus()
+                .is4xxClientError();
+          }
+        });
+    m.put(
+        "sendAiFeedback",
+        new Scenario() {
+          EvalWorld w = evalWorld();
+
+          @Override
+          public int success() {
+            asChair(
+                    "POST",
+                    "/tender-vendors/"
+                        + w.tv()
+                        + "/evaluation/rows/"
+                        + w.requirement()
+                        + "/feedback")
+                .bodyValue(Map.of("is_useful", false, "reason_tags", List.of("wrong_page")))
+                .exchange()
+                .expectStatus()
+                .isNoContent();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair(
+                    "POST",
+                    "/tender-vendors/"
+                        + w.tv()
+                        + "/evaluation/rows/"
+                        + w.requirement()
+                        + "/feedback")
+                .bodyValue(Map.of("is_useful", false, "reason_tags", List.of("made_up")))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "submitEvaluation",
+        new Scenario() {
+          EvalWorld w = evalWorld();
+
+          @Override
+          public int success() {
+            asChair("PATCH", "/tender-vendors/" + w.tv() + "/evaluation/rows/" + w.requirement())
+                .header("If-Match", "\"" + rowVersion(w) + "\"")
+                .bodyValue(Map.of("action", "agree"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            asChair("POST", "/tender-vendors/" + w.tv() + "/evaluation/submit")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .exchange()
+                .expectStatus()
+                .isOk();
+            // the agree and the submit are two events
+            return 2;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tender-vendors/" + w.tv() + "/evaluation/submit")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .exchange()
+                .expectStatus()
+                .isEqualTo(409); // after the success the evaluation is submitted and read only
+          }
+        });
+    m.put(
+        "reopenMemberEvaluation",
+        new Scenario() {
+          EvalWorld w = evalWorld();
+
+          {
+            TestUsers.sql(
+                "UPDATE member_evaluations SET status = 'in_progress' WHERE id = ?",
+                memberEvaluation(w, w.member().id()));
+            TestUsers.sql(
+                "UPDATE member_evaluations SET status = 'submitted' WHERE id = ?",
+                memberEvaluation(w, w.member().id()));
+          }
+
+          @Override
+          public int success() {
+            asChair(
+                    "POST",
+                    "/member-evaluations/" + memberEvaluation(w, w.member().id()) + "/reopen")
+                .bodyValue(Map.of("reason", "The pricing section was misread"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair(
+                    "POST",
+                    "/member-evaluations/" + memberEvaluation(w, w.member().id()) + "/reopen")
+                .bodyValue(Map.of("reason", "short"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "excludeMemberEvaluation",
+        new Scenario() {
+          EvalWorld w = evalWorld();
+
+          @Override
+          public int success() {
+            asChair(
+                    "POST",
+                    "/member-evaluations/" + memberEvaluation(w, w.member().id()) + "/exclude")
+                .bodyValue(Map.of("reason", "Disclosed a financial interest in the vendor"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair(
+                    "POST",
+                    "/member-evaluations/" + memberEvaluation(w, w.member().id()) + "/exclude")
+                .bodyValue(Map.of("reason", "short"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
           }
         });
     return m;
