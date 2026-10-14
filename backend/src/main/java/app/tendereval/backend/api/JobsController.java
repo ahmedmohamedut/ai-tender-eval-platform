@@ -7,6 +7,7 @@ import app.tendereval.backend.api.model.JobType;
 import app.tendereval.backend.common.Idempotency;
 import app.tendereval.backend.common.RateLimiter;
 import app.tendereval.backend.db.RequestTransaction;
+import app.tendereval.backend.evaluation.EvaluationService;
 import app.tendereval.backend.extraction.ExtractionService;
 import app.tendereval.backend.jobs.JobDispatcher;
 import app.tendereval.backend.jobs.JobProcessor;
@@ -34,6 +35,7 @@ public class JobsController implements JobsApi {
   private final JobProcessor processor;
   private final ExtractionService extraction;
   private final ScreeningService screening;
+  private final EvaluationService evaluation;
   private final JobDispatcher dispatcher;
   private final Idempotency idempotency;
   private final RateLimiter limiter;
@@ -45,6 +47,7 @@ public class JobsController implements JobsApi {
       JobProcessor processor,
       ExtractionService extraction,
       ScreeningService screening,
+      EvaluationService evaluation,
       JobDispatcher dispatcher,
       Idempotency idempotency,
       RateLimiter limiter) {
@@ -54,6 +57,7 @@ public class JobsController implements JobsApi {
     this.processor = processor;
     this.extraction = extraction;
     this.screening = screening;
+    this.evaluation = evaluation;
     this.dispatcher = dispatcher;
     this.idempotency = idempotency;
     this.limiter = limiter;
@@ -116,7 +120,9 @@ public class JobsController implements JobsApi {
                 r.getBody() != null && !"true".equals(r.getHeaders().getFirst("Idempotent-Replay"))
                     ? (r.getBody().getJobType() == JobType.SCREENING_PRECHECK
                             ? dispatcher.publishPrecheck(r.getBody().getId())
-                            : dispatcher.publishExtraction(r.getBody().getId()))
+                            : r.getBody().getJobType() == JobType.EVALUATION
+                                ? dispatcher.publishEvaluation(r.getBody().getId())
+                                : dispatcher.publishExtraction(r.getBody().getId()))
                         .thenReturn(r)
                     : Mono.just(r));
   }
@@ -134,6 +140,8 @@ public class JobsController implements JobsApi {
             type ->
                 "screening_precheck".equals(type)
                     ? screening.retryPrecheck(db, user, jobId)
-                    : extraction.retry(db, user, jobId));
+                    : "evaluation".equals(type)
+                        ? evaluation.retry(db, user, jobId)
+                        : extraction.retry(db, user, jobId));
   }
 }

@@ -1735,6 +1735,67 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isNotFound();
           }
         });
+    m.put(
+        "rerunEvaluation",
+        new Scenario() {
+          ScreeningWorld w = screeningWorld("accepted");
+
+          {
+            UUID b =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO baselines (tender_id, version_no, requirement_count, confirmed_by)"
+                            + " VALUES (?, 1, 1, ?) RETURNING id",
+                        w.tender(),
+                        chair().id());
+            UUID r =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO requirements (tender_id, text, importance, origin) VALUES (?, 'R',"
+                            + " 'mandatory', 'manual') RETURNING id",
+                        w.tender());
+            TestUsers.sql(
+                "INSERT INTO baseline_requirements (baseline_id, requirement_id, display_no, text,"
+                    + " importance, content_hash) VALUES (?, ?, 'REQ', 'x', 'mandatory', repeat('c', 64))",
+                b,
+                r);
+            UUID j =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO jobs (tender_id, job_type, target_type, target_id) VALUES (?,"
+                            + " 'evaluation', 'proposal_version', ?) RETURNING id",
+                        w.tender(),
+                        w.pv());
+            TestUsers.sql("UPDATE jobs SET status = 'running', started_at = now() WHERE id = ?", j);
+            TestUsers.sql(
+                "UPDATE jobs SET status = 'completed', finished_at = now() WHERE id = ?", j);
+            // a completed job moves the proposal only when a grade exists: here none, so move it
+            TestUsers.sql(
+                "UPDATE proposal_versions SET status = 'evaluated' WHERE id = ? AND status = 'evaluating'",
+                w.pv());
+          }
+
+          @Override
+          public int success() {
+            asChair("POST", "/tender-vendors/" + w.tv() + "/evaluation/rerun")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .bodyValue(Map.of("scope", "failed"))
+                .exchange()
+                .expectStatus()
+                .isAccepted();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tender-vendors/" + UUID.randomUUID() + "/evaluation/rerun")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .bodyValue(Map.of("scope", "failed"))
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+          }
+        });
     return m;
   }
 

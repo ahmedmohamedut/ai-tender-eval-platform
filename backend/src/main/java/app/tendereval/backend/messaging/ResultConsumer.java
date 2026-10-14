@@ -27,6 +27,7 @@ public class ResultConsumer extends AnalysisConsumer {
   private final JobProcessor jobs;
   private final app.tendereval.backend.jobs.RequirementResultProcessor requirements;
   private final app.tendereval.backend.jobs.PrecheckResultProcessor prechecks;
+  private final app.tendereval.backend.jobs.GradeResultProcessor grades;
 
   public ResultConsumer(
       JetStream js,
@@ -35,13 +36,15 @@ public class ResultConsumer extends AnalysisConsumer {
       ParsedResultProcessor parsed,
       JobProcessor jobs,
       app.tendereval.backend.jobs.RequirementResultProcessor requirements,
-      app.tendereval.backend.jobs.PrecheckResultProcessor prechecks) {
+      app.tendereval.backend.jobs.PrecheckResultProcessor prechecks,
+      app.tendereval.backend.jobs.GradeResultProcessor grades) {
     super(js, jsm, DURABLE, configuration());
     this.store = store;
     this.parsed = parsed;
     this.jobs = jobs;
     this.requirements = requirements;
     this.prechecks = prechecks;
+    this.grades = grades;
   }
 
   public static ConsumerConfiguration configuration() {
@@ -79,7 +82,9 @@ public class ResultConsumer extends AnalysisConsumer {
     if ("prechecks".equals(kind)) {
       return prechecks.apply(body).block(Duration.ofSeconds(120));
     }
-    // Grade batches arrive with the evaluation milestone.
+    if ("grades".equals(kind)) {
+      return grades.apply(body).block(Duration.ofSeconds(120));
+    }
     return Outcome.deadLetter("no handler for result kind " + kind);
   }
 

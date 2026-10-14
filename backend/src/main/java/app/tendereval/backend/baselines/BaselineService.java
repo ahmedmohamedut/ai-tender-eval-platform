@@ -37,10 +37,13 @@ import tools.jackson.databind.json.JsonMapper;
 public class BaselineService {
 
   private final AuditService audit;
+  private final app.tendereval.backend.evaluation.EvaluationService evaluation;
   private final JsonMapper json = JsonMapper.builder().build();
 
-  public BaselineService(AuditService audit) {
+  public BaselineService(
+      AuditService audit, app.tendereval.backend.evaluation.EvaluationService evaluation) {
     this.audit = audit;
+    this.evaluation = evaluation;
   }
 
   // ---- baselines --------------------------------------------------------------------------------
@@ -373,6 +376,8 @@ public class BaselineService {
                                 .tender(tenderId)
                                 .created(Map.of("version_no", version, "requirement_count", count))
                                 .build()))
+                    // accepted vendors wait for this baseline; evaluated ones get what changed
+                    .then(evaluation.onBaselineConfirmed(db, actor, tenderId, version))
                     .then(byId(db, baselineId)));
   }
 

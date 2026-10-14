@@ -308,6 +308,162 @@ public class JobDispatcher {
         .onErrorResume(e -> Mono.empty());
   }
 
+  /**
+   * The command of an evaluation job (PI 5.4): the baseline's requirements that need a grade for
+   * this proposal version (all of them, or those that failed, changed or are new) in a file in
+   * {@code tender-jobs} named by {@code input_ref}, and the proposal's document versions.
+   */
+  public Mono<Void> publishEvaluation(UUID jobId) {
+    return db.inTransaction(
+            c ->
+                c.sql(
+                        "SELECT j.tender_id, j.started_by, j.target_id, b.id AS baseline_id"
+                            + " FROM jobs j JOIN baselines b ON b.tender_id = j.tender_id"
+                            + " AND b.status = 'confirmed' WHERE j.id = :id AND j.status = 'queued'"
+                            + " AND j.job_type = 'evaluation'")
+                    .bind("id", jobId)
+                    .map(
+                        (r, m) ->
+                            new UUID[] {
+                              r.get("tender_id", UUID.class),
+                              r.get("started_by", UUID.class),
+                              r.get("target_id", UUID.class),
+                              r.get("baseline_id", UUID.class)
+                            })
+                    .one()
+                    .flatMap(
+                        j ->
+                            Mono.zip(
+                                    c.sql(
+                                            "SELECT br.requirement_id, br.display_no, br.text,"
+                                                + " br.acceptance_criteria, br.importance,"
+                                                + " br.category_name, br.content_hash"
+                                                + " FROM baseline_requirements br WHERE br.baseline_id = :b"
+                                                + " AND NOT EXISTS (SELECT 1 FROM ai_grades g"
+                                                + "   WHERE g.proposal_version_id = :p AND g.is_current"
+                                                + "   AND g.requirement_id = br.requirement_id"
+                                                + "   AND g.outcome = 'graded'"
+                                                + "   AND g.requirement_hash = br.content_hash)"
+                                                + " ORDER BY br.display_no")
+                                        .bind("b", j[3])
+                                        .bind("p", j[2])
+                                        .map(
+                                            (r, m) -> {
+                                              Map<String, Object> o = new LinkedHashMap<>();
+                                              o.put(
+                                                  "id",
+                                                  r.get("requirement_id", UUID.class).toString());
+                                              o.put("number", r.get("display_no", String.class));
+                                              o.put("text", r.get("text", String.class));
+                                              o.put(
+                                                  "acceptance_criteria",
+                                                  r.get("acceptance_criteria", String.class));
+                                              o.put(
+                                                  "importance", r.get("importance", String.class));
+                                              o.put(
+                                                  "category", r.get("category_name", String.class));
+                                              o.put(
+                                                  "requirement_hash",
+                                                  r.get("content_hash", String.class));
+                                              return o;
+                                            })
+                                        .all()
+                                        .collectList(),
+                                    c.sql(
+                                            "SELECT f.document_version_id FROM proposal_version_files f"
+                                                + " JOIN document_versions v ON v.id = f.document_version_id"
+                                                + " WHERE f.proposal_version_id = :p AND v.status = 'ready'"
+                                                + " ORDER BY f.sort_order, f.created_at")
+                                        .bind("p", j[2])
+                                        .map(
+                                            (r, m) ->
+                                                r.get("document_version_id", UUID.class).toString())
+                                        .all()
+                                        .collectList())
+                                .flatMap(
+                                    t -> {
+                                      Map<String, Object> input = new LinkedHashMap<>();
+                                      input.put("proposal_version_id", j[2].toString());
+                                      input.put("baseline_id", j[3].toString());
+                                      input.put("proposal_document_version_ids", t.getT2());
+                                      input.put("requirements", t.getT1());
+                                      return c.sql(
+                                              "UPDATE jobs SET command_published_at = now() WHERE id = :id")
+                                          .bind("id", jobId)
+                                          .fetch()
+                                          .rowsUpdated()
+                                          .thenReturn(new Object[] {j, input});
+                                    })))
+        .flatMap(
+            row -> {
+              UUID[] j = (UUID[]) row[0];
+              @SuppressWarnings("unchecked")
+              Map<String, Object> input = (Map<String, Object>) row[1];
+              byte[] data =
+                  json.writeValueAsString(input).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+              String key = "jobs/%s/input.json".formatted(jobId);
+              String sha = java.util.HexFormat.of().formatHex(sha256(data));
+              Map<String, Object> body = new LinkedHashMap<>();
+              body.put("job_id", jobId.toString());
+              body.put("job_type", "evaluation");
+              body.put("tender_id", j[0].toString());
+              body.put("target", Map.of("type", "proposal_version", "id", j[2].toString()));
+              body.put("requested_by", j[1] == null ? null : j[1].toString());
+              body.put("attempt", 1);
+              body.put("created_at", Instant.now().toString());
+              body.put(
+                  "input_ref", Map.of("bucket", props.s3BucketJobs(), "key", key, "sha256", sha));
+              String msgId = "job:" + jobId + ":cmd:" + (Instant.now().getEpochSecond() / 60);
+              return storage
+                  .putBytes(props.s3BucketJobs(), key, data, "application/json")
+                  .then(
+                      publisher
+                          .publish(
+                              Subjects.command("evaluation"),
+                              json.writeValueAsString(body),
+                              msgId,
+                              app.tendereval.backend.web.TraceIds.newTraceparent(
+                                  app.tendereval.backend.web.TraceIds.newTraceId()),
+                              Subjects.SCHEMA_COMMAND)
+                          .then());
+            })
+        .doOnError(
+            e ->
+                log.warn(
+                    "evaluation command not published job={} error={}",
+                    jobId,
+                    e.getClass().getSimpleName()))
+        .onErrorResume(e -> Mono.empty());
+  }
+
+  /** The same for the tender of a vendor, after a screening decision. */
+  public Mono<Void> publishPendingForVendor(UUID tenderVendorId) {
+    return db.inTransaction(
+            c ->
+                c.sql("SELECT tender_id FROM tender_vendors WHERE id = :v")
+                    .bind("v", tenderVendorId)
+                    .map((r, m) -> r.get("tender_id", UUID.class))
+                    .one())
+        .flatMap(this::publishPendingEvaluations);
+  }
+
+  /** After a commit that may have queued evaluation jobs: publish those never published. */
+  public Mono<Void> publishPendingEvaluations(UUID tenderId) {
+    return db.inTransaction(
+            c ->
+                c.sql(
+                        "SELECT id FROM jobs WHERE tender_id = :t AND job_type = 'evaluation'"
+                            + " AND status = 'queued' AND command_published_at IS NULL"
+                            + " ORDER BY queued_at")
+                    .bind("t", tenderId)
+                    .map((r, m) -> r.get("id", UUID.class))
+                    .all()
+                    .collectList())
+        .flatMapMany(reactor.core.publisher.Flux::fromIterable)
+        .concatMap(this::publishEvaluation)
+        .then();
+  }
+
   private static byte[] sha256(byte[] data) {
     try {
       return java.security.MessageDigest.getInstance("SHA-256").digest(data);

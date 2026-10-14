@@ -28,12 +28,17 @@ public class BaselineController implements BaselineApi {
   private final RequestTransaction tx;
   private final BaselineService service;
   private final Idempotency idempotency;
+  private final app.tendereval.backend.jobs.JobDispatcher dispatcher;
 
   public BaselineController(
-      RequestTransaction tx, BaselineService service, Idempotency idempotency) {
+      RequestTransaction tx,
+      BaselineService service,
+      Idempotency idempotency,
+      app.tendereval.backend.jobs.JobDispatcher dispatcher) {
     this.tx = tx;
     this.service = service;
     this.idempotency = idempotency;
+    this.dispatcher = dispatcher;
   }
 
   @Override
@@ -60,18 +65,24 @@ public class BaselineController implements BaselineApi {
       UUID tenderId, String idempotencyKey, ServerWebExchange exchange) {
     String key = Idempotency.requireKey(idempotencyKey);
     return tx.asUser(
-        (db, user) ->
-            idempotency.run(
-                db,
-                user.id(),
-                key,
-                "POST /tenders/{id}/baselines:" + tenderId,
-                Idempotency.hash("confirmBaseline", tenderId.toString()),
-                Baseline.class,
-                () ->
-                    service
-                        .confirm(db, user, tenderId)
-                        .map(b -> ResponseEntity.status(HttpStatus.CREATED).body(b))));
+            (db, user) ->
+                idempotency.run(
+                    db,
+                    user.id(),
+                    key,
+                    "POST /tenders/{id}/baselines:" + tenderId,
+                    Idempotency.hash("confirmBaseline", tenderId.toString()),
+                    Baseline.class,
+                    () ->
+                        service
+                            .confirm(db, user, tenderId)
+                            .map(b -> ResponseEntity.status(HttpStatus.CREATED).body(b))))
+        // After the commit (rule 4): evaluation jobs this confirmation queued are published.
+        .flatMap(
+            r ->
+                !"true".equals(r.getHeaders().getFirst("Idempotent-Replay"))
+                    ? dispatcher.publishPendingEvaluations(tenderId).thenReturn(r)
+                    : Mono.just(r));
   }
 
   @Override

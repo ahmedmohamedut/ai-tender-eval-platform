@@ -245,7 +245,24 @@ public class ProposalService {
                       String role = newMain && "main".equals(k[1]) ? "annex" : (String) k[1];
                       files = files.then(insertFile(db, pvId, (UUID) k[0], role, order++));
                     }
+                    // rows reviewed against the replaced version become Outdated (UX-VND-05)
+                    Mono<Void> outdate =
+                        prev.none()
+                            ? Mono.empty()
+                            : db.sql(
+                                    "SELECT app_mark_rows_outdated(:v, 'proposal_changed', NULL, :n)"
+                                        + " AS n")
+                                .bind("v", tenderVendorId)
+                                .bind(
+                                    "n",
+                                    reason == null || reason.trim().length() < 10
+                                        ? "A new proposal version was uploaded"
+                                        : reason.trim())
+                                .map((r, m) -> r.get("n", Integer.class))
+                                .one()
+                                .then();
                     return files
+                        .then(outdate)
                         .then(
                             audit.record(
                                 db,

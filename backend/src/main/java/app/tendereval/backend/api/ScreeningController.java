@@ -111,22 +111,31 @@ public class ScreeningController implements ScreeningApi {
       String idempotencyKey,
       ServerWebExchange exchange) {
     String key = Idempotency.requireKey(idempotencyKey);
-    return screeningDecisionInput.flatMap(
-        in ->
-            tx.asUser(
-                (db, user) ->
-                    idempotency.run(
-                        db,
-                        user.id(),
-                        key,
-                        "POST /tender-vendors/{id}/screening/decision:" + tenderVendorId,
-                        Idempotency.hash(
-                            "confirmScreeningDecision",
-                            tenderVendorId.toString(),
-                            String.valueOf(in)),
-                        ScreeningState.class,
-                        () ->
-                            service.decide(db, user, tenderVendorId, in).map(ResponseEntity::ok))));
+    return screeningDecisionInput
+        .flatMap(
+            in ->
+                tx.asUser(
+                    (db, user) ->
+                        idempotency.run(
+                            db,
+                            user.id(),
+                            key,
+                            "POST /tender-vendors/{id}/screening/decision:" + tenderVendorId,
+                            Idempotency.hash(
+                                "confirmScreeningDecision",
+                                tenderVendorId.toString(),
+                                String.valueOf(in)),
+                            ScreeningState.class,
+                            () ->
+                                service
+                                    .decide(db, user, tenderVendorId, in)
+                                    .map(ResponseEntity::ok))))
+        // After the commit (rule 4): an evaluation this decision queued is published.
+        .flatMap(
+            r ->
+                !"true".equals(r.getHeaders().getFirst("Idempotent-Replay"))
+                    ? dispatcher.publishPendingForVendor(tenderVendorId).thenReturn(r)
+                    : Mono.just(r));
   }
 
   @Override
@@ -134,6 +143,7 @@ public class ScreeningController implements ScreeningApi {
       UUID tenderVendorId, Mono<ReinstateInput> reinstateInput, ServerWebExchange exchange) {
     return reinstateInput
         .flatMap(in -> tx.asUser((db, user) -> service.reinstate(db, user, tenderVendorId, in)))
+        .flatMap(r -> dispatcher.publishPendingForVendor(tenderVendorId).thenReturn(r))
         .map(ResponseEntity::ok);
   }
 

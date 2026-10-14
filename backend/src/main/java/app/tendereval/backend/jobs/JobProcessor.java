@@ -343,7 +343,9 @@ public class JobProcessor {
                 ? requirementsStored(c, job.id(), m)
                 : "screening_precheck".equals(job.jobType())
                     ? prechecksStored(c, job.id(), m)
-                    : Mono.just(true);
+                    : "evaluation".equals(job.jobType())
+                        ? gradesStored(c, job.id(), m)
+                        : Mono.just(true);
     return stored.flatMap(
         ok -> {
           if (!ok) {
@@ -354,6 +356,8 @@ public class JobProcessor {
               .then(finishJob(c, job.id(), m.state(), null, null, m))
               .then(
                   "document_processing".equals(job.jobType()) ? versionReady(c, job) : Mono.empty())
+              .then(
+                  "evaluation".equals(job.jobType()) ? syncMemberEvaluations(c, job) : Mono.empty())
               .then(
                   "completed_with_warnings".equals(m.state())
                       ? finishRun(c, job.id(), "partial", warningCount(m))
@@ -386,6 +390,34 @@ public class JobProcessor {
                 + " WHERE a.job_id = :j")
         .bind("j", jobId)
         .map((r, md) -> r.get("n", Long.class) == m.counts().get("requirements").longValue())
+        .one();
+  }
+
+  /** A completed evaluation creates (or re-points) every member's evaluation and rows. */
+  private Mono<Void> syncMemberEvaluations(DatabaseClient c, JobRow job) {
+    // not for a version that a newer upload has already replaced
+    return c.sql(
+            "SELECT (ingest_sync_member_evaluations(p.id)).* FROM proposal_versions p"
+                + " WHERE p.id = :pv AND p.status <> 'superseded'")
+        .bind("pv", job.targetId())
+        .fetch()
+        .all()
+        .then();
+  }
+
+  /** An evaluation completes when the stored grades of the run equal what the worker counted. */
+  private Mono<Boolean> gradesStored(DatabaseClient c, UUID jobId, StatusMessage m) {
+    if (m.resultParts() == null || m.counts() == null || !m.counts().containsKey("grades")) {
+      return Mono.just(false);
+    }
+    if (m.counts().get("grades") == 0) {
+      return Mono.just(true);
+    }
+    return c.sql(
+            "SELECT count(*) AS n FROM ai_grades g JOIN ai_runs a ON a.id = g.ai_run_id"
+                + " WHERE a.job_id = :j")
+        .bind("j", jobId)
+        .map((r, md) -> r.get("n", Long.class) == m.counts().get("grades").longValue())
         .one();
   }
 

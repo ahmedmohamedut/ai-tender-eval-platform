@@ -20,6 +20,7 @@ import app.tendereval.backend.api.model.UserRef;
 import app.tendereval.backend.audit.AuditEntry;
 import app.tendereval.backend.audit.AuditService;
 import app.tendereval.backend.common.Actions;
+import app.tendereval.backend.evaluation.EvaluationService;
 import app.tendereval.backend.jobs.JobsService;
 import app.tendereval.backend.security.CurrentUser;
 import app.tendereval.backend.vendors.ProposalService;
@@ -46,11 +47,17 @@ public class ScreeningService {
   private final AuditService audit;
   private final ProposalService proposals;
   private final JobsService jobs;
+  private final EvaluationService evaluation;
 
-  public ScreeningService(AuditService audit, ProposalService proposals, JobsService jobs) {
+  public ScreeningService(
+      AuditService audit,
+      ProposalService proposals,
+      JobsService jobs,
+      EvaluationService evaluation) {
     this.audit = audit;
     this.proposals = proposals;
     this.jobs = jobs;
+    this.evaluation = evaluation;
   }
 
   /**
@@ -568,7 +575,11 @@ public class ScreeningService {
     return spec.fetch()
         .rowsUpdated()
         .onErrorMap(DataIntegrityViolationException.class, e -> clash(e))
-        .then();
+        // an accepted vendor is evaluated at once when the baseline is confirmed, else it waits
+        .then(
+            "accept".equals(decision)
+                ? evaluation.queueIfReady(db, t.versionId()).then()
+                : Mono.empty());
   }
 
   /** The state for the signed-in person: their own check marks and recommendation filled in. */
