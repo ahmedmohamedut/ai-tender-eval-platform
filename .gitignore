@@ -38,3 +38,8 @@ frontend/playwright-report/
 frontend/test-results/
 frontend/.vitest/
 backend/bin/
+
+# Eclipse / Java language server project files
+backend/.classpath
+backend/.project
+backend/.settings/
