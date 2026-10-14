@@ -10,6 +10,7 @@ import {
   useAnnounce,
 } from "../components/ui";
 import { useSession } from "../app/Session";
+import { OpenProposalFile } from "../components/OpenProposalFile";
 import { ApiError, unwrap, useApi } from "../lib/api";
 import { documentStatusLabel, documentStatusTone, failureText, type Tone } from "../lib/labels";
 import { uploadForm } from "../lib/upload";
@@ -247,6 +248,15 @@ function VendorCard({
             {current.files.map((f) => (
               <li key={f.document_version_id}>
                 {f.file_name} ({f.role === "main" ? "main file" : "annex"}){" "}
+                {f.status === "ready" && (
+                  <OpenProposalFile
+                    tenderVendorId={tv.id}
+                    vendorName={tv.vendor.name}
+                    documentVersionId={f.document_version_id}
+                    fileName={f.file_name}
+                    onDeclared={onChanged}
+                  />
+                )}{" "}
                 <StatusChip
                   label={documentStatusLabel[f.status] ?? f.status}
                   tone={(documentStatusTone[f.status] ?? "neutral") as Tone}

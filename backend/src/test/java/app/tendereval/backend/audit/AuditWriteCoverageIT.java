@@ -1497,6 +1497,47 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isNotFound();
           }
         });
+    m.put(
+        "declareConflict",
+        new Scenario() {
+          UUID t = Fixtures.tender(admin(), chair());
+          UUID tv;
+
+          {
+            UUID v =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO vendors (name, normalized_name) VALUES ('Dc', ?) RETURNING id",
+                        UUID.randomUUID().toString());
+            tv =
+                (UUID)
+                    TestUsers.scalar(
+                        "INSERT INTO tender_vendors (tender_id, vendor_id, added_by) VALUES (?, ?, ?)"
+                            + " RETURNING id",
+                        t,
+                        v,
+                        admin().id());
+          }
+
+          @Override
+          public int success() {
+            asChair("POST", "/tender-vendors/" + tv + "/declaration")
+                .bodyValue(Map.of("has_conflict", false))
+                .exchange()
+                .expectStatus()
+                .isCreated();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tender-vendors/" + tv + "/declaration")
+                .bodyValue(Map.of("has_conflict", true))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
     return m;
   }
 

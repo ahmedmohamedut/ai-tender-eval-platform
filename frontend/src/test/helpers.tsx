@@ -43,7 +43,7 @@ export function fakeApi(handler: Handler) {
         { status?: number; data?: unknown; error?: unknown } | undefined;
       const status = out?.status ?? (out?.error ? 400 : 200);
       return {
-        data: out?.error ? undefined : (out?.data ?? out),
+        data: out?.error ? undefined : out && "data" in out ? out.data : out,
         error: out?.error,
         response: { status },
       };

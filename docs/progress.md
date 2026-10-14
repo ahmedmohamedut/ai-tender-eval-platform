@@ -90,7 +90,7 @@ Decisions for this phase: notification centre and email move to Phase 5; Chair r
 | --- | --- | --- | --- | --- |
 | P4-0 Embeddings and models (Nemotron prefixes, eval tooling, release record) | done, defaults not switched | P4-0 | worker unit tests (118), `docs/releases/extraction-eval-20261014-gemma-4-12b-nemotron-embed-8b.md` | P70; containers cannot reach the gateway (I12) |
 | P4-1 Schema and RLS (ten tables, policies, triggers) | done (approved) | P4-1 | `ScreeningEvaluationSchemaIT` (29), backend 264 passing; independent review found 11 issues, fixed | P71; V20 |
-| P4-2 Conflict declaration and proposal access (PG-13) | not started | | | Closes G8 |
+| P4-2 Conflict declaration and proposal access (PG-13) | done | P4-2 | `ConflictDeclarationApiIT` (3), audit scenario, vitest (65) | P72; closes G8 |
 | P4-3 Screening and pre-check job (PG-14) | not started | | | |
 | P4-4 Evaluation backend (job, grades handler, member rows, outdated) | not started | | | |
 | P4-5 Evaluation graph (retrieval, grade, verify absence, repair, resume) | not started | | | |
@@ -128,7 +128,7 @@ Notable problems found while building, how each was found and what guards agains
 | G5 | Duplicate detection is not exercised well: the development embedding is a hash (duplicates flagged 0 of 2 in the release record) | Extraction quality | A real embedding model, then re-run `make eval` |
 | G6 | Phoenix and OpenInference tracing for the agent (P65) | Observability | Add the hook, keep `TRACE_CAPTURE_CONTENT` off |
 | G7 | Requirements export answers 501 | UX-REQ-15 | With the Phase 5 export machinery |
-| G8 | Proposal files are visible to members only after Phase 4 conflict declarations | Phase 4 | Conflict declaration and proposal-access policies |
+| G8 | Proposal files are visible to members only after Phase 4 conflict declarations | Phase 4 | Closed in P4-2: declaration API and dialog; files open only with a no-conflict declaration |
 | G9 | `render` buffers the whole PDF in memory | Large documents | Stream with Range |
 | G10 | Parts are published together after the graph finishes, so a cancel keeps nothing or whole parts (P69) | Long extractions | Design change if incremental results are wanted |
 | G11 | A gate from a wiped clone was not repeated for Phase 3 (`make clean` deletes local data) | Phase 3 sign-off | `git clone`, `make up`, then the gate |
