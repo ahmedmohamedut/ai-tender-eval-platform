@@ -344,6 +344,8 @@ Both tools are read-only, are offered only to the Verify absence node, and count
 
 No tool takes a tender, a vendor or a document version from the model.
 
+**As built (Phase 4, decision P77).** Verify absence does not use model tool calls. The model answers one structured question (`QueryPlan`: up to `VERIFY_ABSENCE_MAX_SEARCHES` short queries in other wording); code runs those queries through the same filtered search (`agent/search.py`), adds what is new to the context within `GRADE_CONTEXT_MAX_CHARS`, and grades once more. The model therefore has no tool at all, which keeps rules 7 and 8 trivially true. `get_passage_context` is not needed: the neighbours of the best hits are added by code before grading.
+
 ### 4.6 Structured outputs
 
 | Schema | Fields | Becomes |
