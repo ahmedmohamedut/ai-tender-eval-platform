@@ -87,7 +87,7 @@ Run from the repository root. Each command below exists and was run (see `docs/d
 | Lint the OpenAPI file; generate and compile the server interfaces; generate the typed client | `make api` |
 | Export JSON Schemas from the Pydantic message models and test the backend against them | `make contracts` |
 | Real upload to ready through the gateway, DOCX conversion and the three file-cause failures (synthetic documents) | `make smoke-ingest` |
-| Failure drills of the worker, the agent and the message loop (several minutes; restarts workers, Qdrant and the model stub; `DRILL_SET=extraction` runs the four extraction drills only) | `make drills` |
+| Failure drills of the worker, the agent and the message loop (several minutes; restarts workers, Qdrant and the model stub; `DRILL_SET=extraction` runs the four extraction drills only, `DRILL_SET=evaluation` the four evaluation drills, `DRILL_EVAL_ROWS=500` is the release size) | `make drills` |
 | Backlog of every consumer and the dead-letter stream | `infra/scripts/consumer-lag.sh` |
 | Run the evaluation sets on synthetic documents: extraction, grading (360 cases), pre-check, injection (stub in-process; `EVAL_ARGS="--base-url URL --model NAME --write"` for a model and `EVAL_QUALITY_ARGS="--context-chars N --max-output-tokens N"` for the grading sets; results into `docs/releases/`) | `make eval` |
 | Real extraction, review, baseline confirm, reopen and version 2 on the running stack | `infra/scripts/extraction-smoke.sh` |

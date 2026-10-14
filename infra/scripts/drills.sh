@@ -14,6 +14,13 @@
 #      after the endpoint returns, a retry completes
 #   9. a result part is delivered again: no requirement is stored twice
 #  10. cancel during a run: the job is cancelled and nothing is stored
+# Phase 4 (evaluation of a proposal against a confirmed baseline, DRILL_EVAL_ROWS requirements,
+# default 120; the release run uses 500). DRILL_SET=evaluation runs only 11 to 14:
+#  11. rows appear while the job runs; the agent is killed mid-run and the job finishes with every
+#      row once, the model not asked again for what was sealed
+#  12. the model endpoint is down: llm_unavailable, retryable; the retry completes
+#  13. every result part is delivered again: no grade is stored twice
+#  14. cancel during a run: cancelled, what was stored stays and nothing arrives later
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 set -a; . ./.env; set +a
@@ -150,7 +157,7 @@ done
 [ "${d1:-0}" -gt "${d0:-0}" ] && ok "unreadable event copied to the dead-letter stream ($d0 -> $d1)" || bad "no dead letter ($d0 -> $d1)"
 
 }
-[ "${DRILL_SET:-all}" = extraction ] || base_drills   # DRILL_SET=extraction runs only 7 to 10
+case "${DRILL_SET:-all}" in extraction|evaluation) ;; *) base_drills ;; esac   # DRILL_SET=extraction runs 7 to 10, evaluation 11 to 14
 
 # ---- extraction drills ------------------------------------------------------------------------------------------------
 M1TOKEN_FILE=$(mktemp)
@@ -178,6 +185,7 @@ wait_job() { # job wanted-prefix seconds
 }
 req_count() { sql "select count(*) from requirements where tender_id='$1'"; }
 
+extraction_drills() {
 # 7. killed mid-run ------------------------------------------------------------------------------------------------------
 ext_tender control; tc=$EXT_TENDER; vc=$EXT_VERSION
 jc=$(start_ext "$tc" "$vc")
@@ -240,6 +248,119 @@ if s=$(wait_job "$jx" cancelled 120); then
   [ "$n" = 0 ] && [ "$s2" = "cancelled:" ] && ok "cancelled mid-run: stays cancelled, nothing stored" || bad "after cancel: $n requirements, job '$s2'"
 else stub_control '{"delay_ms":0}'; bad "cancel: job is '$s'"; fi
 rm -f "$M1TOKEN_FILE"
+}
+case "${DRILL_SET:-all}" in all|extraction) extraction_drills ;; esac
+
+# ---- evaluation drills ----------------------------------------------------------------------------------
+EVAL_ROWS="${DRILL_EVAL_ROWS:-120}"
+stub_calls() { docker exec "${PROJECT}-llm-stub-1" python -c "import json,urllib.request as u; print(json.load(u.urlopen('http://127.0.0.1:8000/health', timeout=5))['calls'])" 2>/dev/null; }
+grades_of() { sql "select count(*) from ai_grades where proposal_version_id='$1'"; }
+# A tender with a confirmed baseline of $2 requirements and one screened proposal; echoes
+# "tender tender_vendor proposal_version". The Chair's acceptance (the last step) starts the evaluation.
+eval_world() { # name rows [accept]
+  local t tv up pv n="$2" b
+  t=$(new_tender "$1")
+  tv=$(curl -s -H "$(auth)" -H 'Content-Type: application/json' -X POST "$GW/tenders/$t/vendors" -d "{\"new_vendor\":{\"name\":\"Drill vendor $RANDOM$RANDOM\",\"confirm_duplicate\":true}}" | jq -r .id)
+  up=$(curl -s -H "$(auth)" -H "Idempotency-Key: drill-$RANDOM$RANDOM" -F file_roles=main -F "files=@$DIR/small4.pdf" "$GW/tender-vendors/$tv/proposal-versions")
+  pv=$(echo "$up" | jq -r .id)
+  wait_for "$(echo "$up" | jq -r '.files[0].document_version_id')" ready 120 >/dev/null
+  sql "update tenders set status='requirements' where id='$t'" >/dev/null
+  sql "insert into requirements (tender_id, text, importance, origin, review_state) select '$t', case when g % 2 = 0 then 'The supplier shall encrypt all customer data at rest, item ' || g else 'The platform shall hold certificate number ' || g || ' of conformity' end, 'mandatory', 'manual', 'reviewed' from generate_series(1, $n) g" >/dev/null
+  b=$(sql "insert into baselines (tender_id, version_no, requirement_count, confirmed_by) values ('$t', 1, $n, '$chair') returning id" | head -1)
+  sql "insert into baseline_requirements (baseline_id, requirement_id, display_no, text, importance, acceptance_criteria, content_hash) select '$b', id, display_no, text, importance, '', encode(sha256(convert_to(text || '|' || importance || '|', 'UTF8')), 'hex') from requirements where tender_id='$t'" >/dev/null
+  sql "insert into scoring_models (tender_id, baseline_id, points_fully, points_partially, points_non, mandatory_rule) values ('$t', '$b', 1, 0.5, 0, 'flag_only')" >/dev/null
+  sql "update tenders set status='evaluation' where id='$t'" >/dev/null
+  curl -s -o /dev/null -H "$(mauth)" -H 'Content-Type: application/json' -H "Idempotency-Key: drill-$RANDOM" -X POST "$GW/tender-vendors/$tv/declaration" -d '{"has_conflict":false}'
+  curl -s -o /dev/null -H "$(mauth)" -H 'Content-Type: application/json' -X PUT "$GW/tender-vendors/$tv/screening/recommendation" -d '{"recommendation":"accept"}'
+  EVAL_T=$t; EVAL_TV=$tv; EVAL_PV=$pv
+}
+accept_vendor() { curl -s -o /dev/null -H "$(mauth)" -H 'Content-Type: application/json' -H "Idempotency-Key: drill-$RANDOM" -X POST "$GW/tender-vendors/$1/screening/decision" -d '{"decision":"accept"}'; }
+eval_job() { sql "select id from jobs where job_type='evaluation' and target_id='$1' order by queued_at desc limit 1"; }
+wait_eval() { # pv seconds -> prefix wait on the latest evaluation job
+  local end=$((SECONDS + $2)) j s=""
+  while [ $SECONDS -lt $end ]; do
+    j=$(eval_job "$1"); [ -n "$j" ] && { s=$(job_state "$j"); case "$s" in completed*|failed*|cancelled*) echo "$s"; return 0;; esac; }
+    sleep 2
+  done; echo "$s"; return 1
+}
+
+evaluation_drills() {
+  # 11. rows appear while the job runs; killed mid-run; sealed rows are not graded again
+  stub_control '{"delay_ms":700}'
+  eval_world eval-control "$EVAL_ROWS"; tc=$EVAL_T; pc=$EVAL_PV
+  c0=$(stub_calls); accept_vendor "$EVAL_TV"
+  seen_mid=0; end=$((SECONDS + 600))
+  while [ $SECONDS -lt $end ]; do
+    n=$(grades_of "$pc"); [ "${n:-0}" -gt 0 ] && [ "${n:-0}" -lt "$EVAL_ROWS" ] && seen_mid=1
+    case "$(job_state "$(eval_job "$pc")")" in completed*|failed*) break;; esac; sleep 1
+  done
+  c1=$(stub_calls); full=$((c1 - c0))
+  [ "$(grades_of "$pc")" = "$EVAL_ROWS" ] && ok "undisturbed evaluation: $EVAL_ROWS grades in $full model calls" || bad "undisturbed evaluation: $(grades_of "$pc") grades"
+  [ "$seen_mid" = 1 ] && ok "rows appeared while the job was running" || bad "no row was visible before the job finished"
+
+  eval_world eval-kill "$EVAL_ROWS"; tk=$EVAL_T; pk=$EVAL_PV; tvk=$EVAL_TV
+  k0=$(stub_calls); accept_vendor "$tvk"
+  for _ in $(seq 1 300); do [ "$(grades_of "$pk")" -ge 50 ] && break; sleep 1; done
+  docker kill "${PROJECT}-worker-agent-1" >/dev/null
+  echo "      agent killed with $(grades_of "$pk") grades stored"
+  docker start "${PROJECT}-worker-agent-1" >/dev/null
+  if s=$(wait_eval "$pk" 600); then
+    k1=$(stub_calls); used=$((k1 - k0))
+    g=$(grades_of "$pk"); cur=$(sql "select count(distinct requirement_id) from ai_grades where proposal_version_id='$pk' and is_current")
+    j=$(sql "select count(*) from jobs where job_type='evaluation' and target_id='$pk'")
+    [ "$g" = "$EVAL_ROWS" ] && [ "$cur" = "$EVAL_ROWS" ] && [ "$j" = 1 ] && ok "killed mid-run: $g grades, one current each, one job" || bad "after the kill: grades=$g current=$cur jobs=$j state=$s"
+    # sealed rows are not graded again: the calls stay near an undisturbed run (rows in flight at
+    # the kill are repeated, at most the concurrency)
+    [ "$used" -le $((full + 40)) ] && ok "the model was not asked again for sealed rows ($used calls, $full undisturbed)" || bad "model calls $used against $full undisturbed"
+  else bad "after the agent kill the job is '$s'"; fi
+  stub_control '{"delay_ms":0}'
+
+  # 13. every result part delivered again
+  last=$(nats_ stream info ANALYSIS_EVENTS --json 2>/dev/null | jq -r .state.last_seq)
+  jk=$(eval_job "$pk"); sent=0
+  for seq in $(seq "$last" -1 $((last > 3000 ? last - 3000 : 1))); do
+    m=$(nats_ stream get ANALYSIS_EVENTS "$seq" --json 2>/dev/null) || continue
+    [ "$(echo "$m" | jq -r .subject)" = documents.analysis.result.evaluation ] || continue
+    data=$(echo "$m" | jq -r '.data|@base64d')
+    [ "$(echo "$data" | jq -r .job_id)" = "$jk" ] || continue
+    nats_ pub documents.analysis.result.evaluation "$data" -H "Tender-Schema:tender.analysis.result/1" -H "Nats-Msg-Id:drill-dup-$RANDOM$RANDOM" >/dev/null 2>&1 && sent=$((sent+1))
+  done
+  b4=$(grades_of "$pk"); sleep 15; af=$(grades_of "$pk")
+  [ "$sent" -gt 0 ] && [ "$b4" = "$af" ] && [ "$af" = "$EVAL_ROWS" ] && ok "$sent result parts delivered again: still $af grades" || bad "duplicate parts: sent=$sent grades $b4 -> $af"
+
+  # 12. the model endpoint is down
+  eval_world eval-outage 30; to=$EVAL_T; po=$EVAL_PV; tvo=$EVAL_TV
+  LLM_OUTAGE_GIVE_UP_SECONDS=40 "${COMPOSE[@]}" up -d --no-deps --force-recreate worker-agent >/dev/null 2>&1
+  docker stop "${PROJECT}-llm-stub-1" >/dev/null
+  accept_vendor "$tvo"
+  if s=$(wait_eval "$po" 300); then
+    [ "$s" = "failed:llm_unavailable" ] && ok "endpoint down: failed:llm_unavailable" || bad "endpoint down: $s"
+  else bad "endpoint down: job is '$s'"; fi
+  jo=$(eval_job "$po")
+  rt=$(curl -s -H "$(mauth)" "$GW/jobs/$jo" | jq -r '[.failure.code, .can_retry] | join(" ")')
+  [ "$rt" = "llm_unavailable true" ] && ok "the failure is retryable" || bad "retry not offered ($rt)"
+  docker start "${PROJECT}-llm-stub-1" >/dev/null
+  for _ in $(seq 1 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' "${PROJECT}-llm-stub-1")" = healthy ] && break; sleep 1; done
+  restore_agent
+  jr=$(curl -s -H "$(mauth)" -H "Idempotency-Key: drill-retry-$RANDOM" -X POST "$GW/jobs/$jo/retry" | jq -r .id)
+  if [ -n "$jr" ] && [ "$jr" != null ] && s=$(wait_job "$jr" completed 300); then
+    [ "$(grades_of "$po")" -ge 30 ] && ok "retry after the outage completed ($(grades_of "$po") grades)" || bad "retry: $(grades_of "$po") grades"
+  else bad "retry after the outage: job '$jr' is '$s'"; fi
+
+  # 14. cancel during a run
+  stub_control '{"delay_ms":1500}'
+  eval_world eval-cancel "$EVAL_ROWS"; tx=$EVAL_T; px=$EVAL_PV; tvx=$EVAL_TV
+  accept_vendor "$tvx"
+  for _ in $(seq 1 120); do [ "$(grades_of "$px")" -ge 1 ] && break; sleep 1; done
+  jx=$(eval_job "$px")
+  curl -s -o /dev/null -H "$(mauth)" -H "Idempotency-Key: drill-cancel-$RANDOM" -X POST "$GW/jobs/$jx/cancel"
+  if s=$(wait_job "$jx" cancelled 120); then
+    stub_control '{"delay_ms":0}'; sleep 15
+    n1=$(grades_of "$px"); sleep 10; n2=$(grades_of "$px")
+    [ "$n1" = "$n2" ] && [ "$n1" -lt "$EVAL_ROWS" ] && ok "cancelled mid-run: $n1 grades stay, nothing arrives later" || bad "after cancel: $n1 then $n2 grades"
+  else stub_control '{"delay_ms":0}'; bad "cancel: job is '$s'"; fi
+}
+case "${DRILL_SET:-all}" in all|evaluation) evaluation_drills ;; esac
 
 echo
 echo "$PASS passed, $FAIL failed"

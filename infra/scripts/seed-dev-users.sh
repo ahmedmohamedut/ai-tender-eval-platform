@@ -37,7 +37,9 @@ seed() { # short_name display_name platform_role realm_role
   else
     created="already in Keycloak"
   fi
-  # Role and password are ensured every time, so a half-finished earlier run is repaired.
+  # Enabled, role and password are ensured every time, so a half-finished earlier run (or a
+  # browser journey that deactivated the user) is repaired.
+  $KC update "users/$id" -r $REALM -s enabled=true >/dev/null
   $KC add-roles -r $REALM --uusername "$user" --rolename "$realm_role"
   if ! out=$($KC set-password -r $REALM --username "$user" --new-password "$PASSWORD" 2>&1); then
     # The realm refuses a password equal to one of the last five: it is already set.
@@ -47,6 +49,11 @@ seed() { # short_name display_name platform_role realm_role
   psql_ -c "INSERT INTO users (email, display_name, role, status, sso_subject)
             SELECT '$email', '$name', '$role', 'active', '$id'
             WHERE NOT EXISTS (SELECT 1 FROM users WHERE sso_subject = '$id' OR lower(email) = '$email')" >/dev/null
+  # (as the administrator, because a status change is the administrator's by trigger)
+  psql_ -c "BEGIN; SELECT set_config('app.role', 'admin', true), set_config('app.user_id',
+            (SELECT id::text FROM users WHERE role = 'admin' AND status = 'active' LIMIT 1), true);
+            UPDATE users SET status = 'active' WHERE lower(email) = '$email' AND status <> 'active';
+            COMMIT;" >/dev/null
   echo "seeded $user ($role): $created"
 }
 
