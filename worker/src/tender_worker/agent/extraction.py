@@ -8,6 +8,7 @@ accepted and when a loop ends; the model answers one narrow question at a time.
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
 import logging
 import math
@@ -21,7 +22,7 @@ from uuid import UUID
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
-from tender_worker import metrics
+from tender_worker import metrics, tracing
 from tender_worker.agent.grounding import (
     sanitise_passage,
     suspected_injection,
@@ -128,6 +129,20 @@ def item_id(job_id: UUID, text: str, passage_ids: list[str]) -> str:
     return str(uuid.uuid5(ITEM_NAMESPACE, f"{job_id}:{key}"))
 
 
+def _step(name: str):
+    """Run a graph node inside a `step.{name}` span (AI 6.1, level 2)."""
+
+    def wrap(fn):
+        @functools.wraps(fn)
+        async def run(self, state):
+            with tracing.span(f"step.{name}", "CHAIN", {"tender.step": name}):
+                return await fn(self, state)
+
+        return run
+
+    return wrap
+
+
 class ExtractionGraph:
     def __init__(
         self,
@@ -191,6 +206,7 @@ class ExtractionGraph:
         if self._progress:
             await self._progress(step, percent)
 
+    @_step("load_scope")
     async def _load_scope(self, state: State) -> dict[str, Any]:
         await self._tick("load_scope", 5)
         passages = await self._source.load(self._tender, state["scope"])
@@ -198,6 +214,7 @@ class ExtractionGraph:
             raise NoContentInScope()
         return {"passages": passages}
 
+    @_step("plan_windows")
     async def _plan(self, state: State) -> dict[str, Any]:
         await self._tick("plan_windows", 10)
         return {
@@ -225,6 +242,18 @@ class ExtractionGraph:
 
     async def _extract(self, state: dict) -> dict[str, Any]:
         window: Window = state["window"]
+        with tracing.span(
+            "row",
+            "CHAIN",
+            {
+                "tender.step": "extract",
+                "tender.window": window.index,
+                "tender.passage_count": len(window.passages),
+            },
+        ):
+            return await self._extract_window(state, window)
+
+    async def _extract_window(self, state: dict, window: Window) -> dict[str, Any]:
         categories = state.get("categories", [])
         valid_categories = {c["id"] for c in categories}
         cats = "\n".join(f"{c['id']}: {c['name']}" for c in categories) or "(none)"
@@ -237,7 +266,8 @@ class ExtractionGraph:
         async with self._gate:
             if self._cancelled and await self._cancelled():
                 return {"candidates": [], "counters": []}
-            answer = await self._llm.generate(system, user, Candidates)
+            with tracing.purpose("llm.extract"):
+                answer = await self._llm.generate(system, user, Candidates)
             problems: list[str] = []
             accepted: list[Grounded] = []
             for cand in answer.items:
@@ -254,7 +284,8 @@ class ExtractionGraph:
                     passages=_passage_block(window.passages),
                     previous=answer.model_dump_json(),
                 )
-                fixed = await self._llm.generate(system, repair, Candidates)
+                with tracing.purpose("llm.repair"):
+                    fixed = await self._llm.generate(system, repair, Candidates)
                 problems = []
                 again: list[Grounded] = []
                 for cand in fixed.items:
@@ -270,6 +301,15 @@ class ExtractionGraph:
                 accepted.extend(a for a in again if a.text not in known)
             if problems:
                 counters.append(("ungrounded_candidate", max(1, len(problems))))
+            # counts only: the problem texts quote the candidate (rule 10)
+            tracing.set_attributes(
+                {
+                    "tender.accepted": len(accepted),
+                    "tender.rejected": len(problems),
+                    "tender.repair_attempts": attempts,
+                    "tender.row_outcome": "failed" if problems and not accepted else "done",
+                }
+            )
         counters.append(("windows_done", 1))
         self._windows_done += 1
         percent = 10 + int(60 * self._windows_done / max(1, state.get("total", 1)))
@@ -329,6 +369,7 @@ class ExtractionGraph:
             [],
         )
 
+    @_step("merge")
     async def _merge(self, state: State) -> dict[str, Any]:
         await self._tick("merge", 75)
         cands = sorted(state.get("candidates", []), key=lambda c: (c.window, c.text))
@@ -358,6 +399,7 @@ class ExtractionGraph:
                 base.confidence = max(base.confidence, c.confidence)
         return {"merged": [cands[i] for i in keep]}
 
+    @_step("compare")
     async def _compare(self, state: State) -> dict[str, Any]:
         await self._tick("compare", 82)
         merged = state.get("merged", [])
@@ -382,9 +424,10 @@ class ExtractionGraph:
         for i, kind, other in pairs[:MAX_JUDGEMENTS]:
             a = merged[i].text
             b = merged[other].text if kind == "candidate" else existing[other]["text"]
-            verdict = await self._llm.generate(
-                system, f"Requirement A:\n{a}\n\nRequirement B:\n{b}", PairJudgement
-            )
+            with tracing.purpose("llm.compare"):
+                verdict = await self._llm.generate(
+                    system, f"Requirement A:\n{a}\n\nRequirement B:\n{b}", PairJudgement
+                )
             if verdict.verdict == "unrelated":
                 continue
             flag_type = "possible_duplicate" if verdict.verdict == "same" else "conflict"
@@ -397,6 +440,7 @@ class ExtractionGraph:
         metrics.inc("extraction_pairs_judged_total", float(min(len(pairs), MAX_JUDGEMENTS)))
         return {"merged": merged}
 
+    @_step("flag")
     async def _flag(self, state: State) -> dict[str, Any]:
         await self._tick("flag", 90)
         out = state.get("merged", [])

@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     RESULT_BATCH_MAX_ITEMS: int = Field(default=50, ge=1, le=50)
     CANCEL_CHECK_SECONDS: int = Field(default=10, ge=1)
 
+    PHOENIX_COLLECTOR_ENDPOINT: str | None = None
+    PHOENIX_PROJECT_NAME: str = "tender-eval"
+    PHOENIX_API_KEY: SecretStr | None = None
+    TRACE_CAPTURE_CONTENT: bool = False
+
     HEALTH_PORT: int = 8080
     SHUTDOWN_GRACE_SECONDS: int = 45
     DEP_TIMEOUT_SECONDS: int = 30

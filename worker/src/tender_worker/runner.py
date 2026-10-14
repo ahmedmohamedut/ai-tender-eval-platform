@@ -239,11 +239,24 @@ class Runner:
         await health.stop()
         if pool is not None:
             pool.shutdown(wait=False, cancel_futures=True)
+        from tender_worker import tracing
+
+        tracing.shutdown()
         await nc.drain()
 
     async def _agent_deps(self, js, store, worker, publisher):
         """The agent role's collaborators; None without a configured model endpoint."""
         s = self.settings
+        from tender_worker import tracing
+
+        tracing.configure(
+            endpoint=s.PHOENIX_COLLECTOR_ENDPOINT,
+            project=s.PHOENIX_PROJECT_NAME,
+            api_key=s.PHOENIX_API_KEY.get_secret_value() if s.PHOENIX_API_KEY else None,
+            capture_content=s.TRACE_CAPTURE_CONTENT,
+            service_version=s.service_version,
+            worker_id=s.WORKER_ID,
+        )
         if not (s.LLM_BASE_URL and s.LLM_MODEL_EXTRACTION and s.LLM_API_KEY):
             log.warning("no model endpoint configured; extraction commands are not run")
             return None, None

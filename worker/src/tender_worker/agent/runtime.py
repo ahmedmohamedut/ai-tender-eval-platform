@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from tender_worker import metrics
+from tender_worker import metrics, tracing
 from tender_worker.agent.evaluation import (
     EvaluationGraph,
     EvaluationSettings,
@@ -148,6 +148,14 @@ class _Emitter:
             **kw,
         )
         msg_id = f"{self._c.job_id}:s:{status.seq}"
+        if state in ("completed", "failed", "cancelled"):
+            failure = kw.get("failure")
+            tracing.set_attributes(
+                {
+                    "tender.outcome": state,
+                    "tender.failure_code": getattr(failure, "code", "") or "",
+                }
+            )
         await self._d.publisher.publish(
             STATUS_SUBJECT.format(self._c.job_type),
             status.model_dump_json(exclude_none=True).encode(),
@@ -218,6 +226,29 @@ def _warnings(counters: dict[str, int], items: list[Any]) -> list[StatusWarning]
 
 
 async def run_extraction(
+    deps: AgentDeps,
+    command: Command,
+    deliveries: int,
+    traceparent: str,
+    cancelled: Callable[[UUID], Awaitable[bool]],
+) -> None:
+    with tracing.span(
+        "job.requirement_extraction",
+        "CHAIN",
+        {
+            "tender.job_id": str(command.job_id),
+            "tender.tender_id": str(command.tender_id),
+            "tender.target_id": str(command.target.id),
+            "tender.worker_version": deps.worker.version,
+            "tender.prompt_version": EXTRACTION_VERSION,
+            "tender.delivery": deliveries,
+        },
+        traceparent=traceparent,
+    ):
+        await _run_extraction(deps, command, deliveries, traceparent, cancelled)
+
+
+async def _run_extraction(
     deps: AgentDeps,
     command: Command,
     deliveries: int,

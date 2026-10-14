@@ -49,3 +49,11 @@ def test_empty_secret_is_refused(env, monkeypatch):
     monkeypatch.setenv("S3_SECRET_KEY", "")
     with pytest.raises(SystemExit):
         load_settings()
+
+
+def test_tracing_keys_default_to_off_and_content_capture_is_off(env):
+    s = load_settings()
+    assert s.PHOENIX_COLLECTOR_ENDPOINT is None
+    assert s.PHOENIX_PROJECT_NAME == "tender-eval"
+    assert s.PHOENIX_API_KEY is None
+    assert s.TRACE_CAPTURE_CONTENT is False

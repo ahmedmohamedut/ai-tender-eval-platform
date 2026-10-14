@@ -247,7 +247,7 @@ The agent role runs three LangGraph graphs, one per job type. A graph is a fixed
 | Retrieval | A custom retriever on `qdrant-client`: the Query API with a dense and a sparse prefetch (3.4). The model never sees the client. |
 | Embeddings | The `EMBEDDING_*` settings, the same model that indexed the passages |
 | Limits | One async limiter of `LLM_MAX_CONCURRENCY` calls, shared by every job in the replica; `LLM_REQUESTS_PER_MINUTE` when set; and the retry policy of 2.4 around each call |
-| Tracing | OpenInference instrumentation of LangChain and LangGraph, exported to Phoenix (section 6) |
+| Tracing | OpenTelemetry spans carrying OpenInference attributes, made by hand in `tender_worker/tracing.py` and exported to Phoenix over OTLP/HTTP (section 6). Hand-made so that a span holds only what 6.2 allows; automatic LangChain instrumentation records prompts and outputs by default. |
 | Versions | LangChain and LangGraph 1.x, pinned to exact versions in the lock file. An upgrade runs the evaluation set (5.6) first. |
 
 ### 4.2 The evaluation graph

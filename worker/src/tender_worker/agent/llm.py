@@ -18,6 +18,8 @@ from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from tender_worker import tracing
+
 log = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
@@ -150,7 +152,9 @@ class OpenAiCompatible:
                 await self._sleep(1.0)
             try:
                 async with self._limit:
-                    result = await self._call(system, user, schema, model or self.model)
+                    result = await self._traced_call(
+                        system, user, schema, model or self.model, attempt + 1
+                    )
                 self.breaker.success()
                 return result
             except (ValidationError, ValueError, json.JSONDecodeError) as exc:
@@ -171,7 +175,42 @@ class OpenAiCompatible:
         log.warning("model call gave up", extra={"error": type(last).__name__})
         raise LlmUnavailable("the model endpoint did not give a usable answer") from last
 
-    async def _call(self, system: str, user: str, schema: type[T], model: str) -> T:
+    async def _traced_call(
+        self, system: str, user: str, schema: type[T], model: str, attempt: int
+    ) -> T:
+        """One model call as an `llm` span: model, tokens, latency, hashes and lengths (AI 6.1)."""
+        attrs: dict = {
+            tracing.LLM_MODEL_NAME: model,
+            "tender.attempt": attempt,
+            **tracing.text_attrs("tender.system", system),
+            **tracing.text_attrs("tender.prompt", user),
+        }
+        if tracing.capture_content():
+            attrs[tracing.INPUT_VALUE] = user
+        started = time.monotonic()
+        meta: dict[str, Any] = {}
+        with tracing.span(tracing.current_purpose(), "LLM", attrs):
+            try:
+                result = await self._call(system, user, schema, model, meta)
+            finally:
+                tracing.set_attributes(
+                    {"tender.latency_ms": int((time.monotonic() - started) * 1000)}
+                )
+                tracing.set_attributes(meta.get("attrs", {}))
+            out = result.model_dump_json()
+            tracing.set_attributes(tracing.text_attrs("tender.completion", out))
+            if tracing.capture_content():
+                tracing.set_attributes({tracing.OUTPUT_VALUE: out})
+            return result
+
+    async def _call(
+        self,
+        system: str,
+        user: str,
+        schema: type[T],
+        model: str,
+        meta: dict[str, Any] | None = None,
+    ) -> T:
         from langchain_core.messages import HumanMessage, SystemMessage
 
         chat = self._chat(model)
@@ -191,8 +230,28 @@ class OpenAiCompatible:
             }
         )
         reply = await bound.ainvoke(messages)
+        if meta is not None:
+            meta["attrs"] = _reply_attrs(reply)
         content = reply.content if isinstance(reply.content, str) else json.dumps(reply.content)
         return schema.model_validate_json(_json_text(content))
+
+
+def _reply_attrs(reply: Any) -> dict[str, Any]:
+    """Token counts, the model name the endpoint returned and the finish reason, when present."""
+    out: dict[str, Any] = {}
+    usage = getattr(reply, "usage_metadata", None) or {}
+    if usage.get("input_tokens") is not None:
+        out[tracing.LLM_TOKENS_PROMPT] = int(usage["input_tokens"])
+    if usage.get("output_tokens") is not None:
+        out[tracing.LLM_TOKENS_COMPLETION] = int(usage["output_tokens"])
+    if usage.get("total_tokens") is not None:
+        out[tracing.LLM_TOKENS_TOTAL] = int(usage["total_tokens"])
+    meta = getattr(reply, "response_metadata", None) or {}
+    if meta.get("model_name"):
+        out["tender.model_returned"] = str(meta["model_name"])
+    if meta.get("finish_reason"):
+        out["tender.finish_reason"] = str(meta["finish_reason"])
+    return out
 
 
 def _json_text(content: str) -> str:
