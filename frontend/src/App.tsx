@@ -7,6 +7,9 @@ import { Baseline } from "./pages/Baseline";
 import { Documents } from "./pages/Documents";
 import { Jobs } from "./pages/Jobs";
 import { Requirements } from "./pages/Requirements";
+import { CrossVendor } from "./pages/CrossVendor";
+import { EvaluationOverview } from "./pages/EvaluationOverview";
+import { EvaluationSheet } from "./pages/EvaluationSheet";
 import { Screening } from "./pages/Screening";
 import { TenderForm } from "./pages/TenderForm";
 import { TenderHome } from "./pages/TenderHome";
@@ -38,6 +41,15 @@ export function AppRoutes() {
         <Route path="tenders/:tenderId/vendors" element={<Vendors />} />
         <Route path="tenders/:tenderId/requirements" element={<Requirements />} />
         <Route path="tenders/:tenderId/vendors/:tenderVendorId/screening" element={<Screening />} />
+        <Route path="tenders/:tenderId/evaluation" element={<EvaluationOverview />} />
+        <Route
+          path="tenders/:tenderId/vendors/:tenderVendorId/evaluation"
+          element={<EvaluationSheet />}
+        />
+        <Route
+          path="tenders/:tenderId/requirements/:requirementId/compare"
+          element={<CrossVendor />}
+        />
         <Route path="tenders/:tenderId/baseline" element={<Baseline />} />
         <Route path="documents/:versionId/view" element={<Viewer />} />
         <Route path="jobs" element={<Jobs />} />

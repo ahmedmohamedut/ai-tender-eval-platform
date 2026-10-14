@@ -213,3 +213,57 @@ export const proposalStatusTone: Record<string, Tone> = {
   evaluated: "success",
   superseded: "neutral",
 };
+
+/** Evaluation vocabulary (UX-EVA; fixed vocabulary of the content design). */
+export const gradeLabel: Record<string, string> = {
+  fully_compliant: "Fully compliant",
+  partially_compliant: "Partially compliant",
+  non_compliant: "Non-compliant",
+};
+
+export const gradeTone: Record<string, Tone> = {
+  fully_compliant: "success",
+  partially_compliant: "warning",
+  non_compliant: "error",
+};
+
+export const gradeIcon: Record<string, string> = {
+  fully_compliant: "✓",
+  partially_compliant: "◐",
+  non_compliant: "✕",
+};
+
+export const nonComplianceLabel: Record<string, string> = {
+  explicitly_excluded: "Explicitly excluded",
+  not_addressed: "Not addressed",
+};
+
+export const memberStateLabel: Record<string, string> = {
+  not_reviewed: "Not reviewed",
+  agreed: "Agreed with AI",
+  overridden: "Overridden",
+};
+
+export const rowFlagText: Record<string, string> = {
+  needs_clarification: "Needs clarification",
+  outdated: "Outdated",
+  not_evaluated: "Not evaluated",
+  overridden: "Overridden",
+  low_confidence: "Low confidence",
+};
+
+export const evaluationStatusLabel: Record<string, string> = {
+  not_started: "Not started",
+  in_progress: "In progress",
+  submitted: "Submitted",
+  reopened: "Reopened",
+  outdated: "Outdated",
+};
+
+export const evaluationStatusTone: Record<string, Tone> = {
+  not_started: "neutral",
+  in_progress: "info",
+  submitted: "success",
+  reopened: "warning",
+  outdated: "warning",
+};

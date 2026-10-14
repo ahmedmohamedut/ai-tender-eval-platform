@@ -97,7 +97,7 @@ Decisions for this phase: notification centre and email move to Phase 5; Chair r
 | P4-4 Evaluation backend (job, grades handler, member rows, outdated) | done | P4-4 | `GradeResultIT` (3), `EvaluationApiIT` (3), audit scenario; backend 281 | P76; the worker side is P4-5 |
 | P4-5 Evaluation graph (retrieval, grade, verify absence, repair, resume) | done | P4-5 | worker 133, `infra/scripts/evaluation-smoke.sh` 19/19 on the stack (real Qdrant hybrid search, stub model) | P77 |
 | P4-6 Member evaluation API | done | P4-6 | `MemberEvaluationApiIT` (6), 6 audit scenarios, `ScreeningEvaluationSchemaIT` audit-hold test; backend 288 | P78 (audit read policy change approved) |
-| P4-7 Screens PG-15, PG-16 | not started | | | |
+| P4-7 Screens PG-15, PG-16 (+ evaluation overview) | done | P4-7 | vitest 74 (7 new, axe clean), `e2e/phase4.spec.ts` (two members, independence) | P79; Chair reopen/exclude controls are API only (gap G14) |
 | P4-8 Evaluation sets, security tests, drills, gate | not started | | | |
 
 ## Issues and fixes
@@ -136,4 +136,5 @@ Notable problems found while building, how each was found and what guards agains
 | G10 | Parts are published together after the graph finishes, so a cancel keeps nothing or whole parts (P69) | Long extractions | Design change if incremental results are wanted |
 | G11 | A gate from a wiped clone was not repeated for Phase 3 (`make clean` deletes local data) | Phase 3 sign-off | `git clone`, `make up`, then the gate |
 | G13 | The containers cannot use the real model gateway (loopback only) and the chat model has a 4096-token context | Real end-to-end runs and grading quality | Bind the gateway to the Docker bridge or forward it; serve a model with a larger context |
+| G14 | The Chair's reopen and exclude controls, and the clarification export, have no screen yet | UX-EVA-13, UX-EVA-06 | A Chair panel on the progress matrix (Phase 5 with the report) |
 | G12 | Decision owners and dates (Phase 0 table) are not recorded | Phase 0 exit criterion | Name an owner for each row |

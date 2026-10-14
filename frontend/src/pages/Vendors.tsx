@@ -250,7 +250,8 @@ function VendorCard({
             <p>
               <Link to={`/tenders/${tenderId}/vendors/${tv.id}/screening`}>
                 Screen this proposal
-              </Link>
+              </Link>{" "}
+              · <Link to={`/tenders/${tenderId}/vendors/${tv.id}/evaluation`}>Evaluate</Link>
             </p>
           )}
           <p className="help">

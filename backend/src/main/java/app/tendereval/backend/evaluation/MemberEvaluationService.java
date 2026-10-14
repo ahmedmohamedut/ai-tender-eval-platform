@@ -102,7 +102,9 @@ public class MemberEvaluationService {
       boolean firstSubmitted,
       boolean member,
       boolean chair,
-      boolean cleared) {}
+      boolean cleared,
+      OffsetDateTime firstAt,
+      OffsetDateTime submittedAt) {}
 
   private Mono<Ctx> ctx(DatabaseClient db, UUID tenderVendorId) {
     return db.sql(
@@ -110,7 +112,7 @@ public class MemberEvaluationService {
                 + " b.id AS baseline, b.version_no AS baseline_no, e.id AS me, e.status,"
                 + " (e.excluded_at IS NOT NULL) AS excluded, (e.first_submitted_at IS NOT NULL) AS first,"
                 + " app_is_member_of(tv.tender_id) AS member, app_is_chair_of(tv.tender_id) AS chair,"
-                + " app_cleared_for_vendor(tv.id) AS cleared"
+                + " app_cleared_for_vendor(tv.id) AS cleared, e.first_submitted_at, e.submitted_at"
                 + " FROM tender_vendors tv JOIN vendors v ON v.id = tv.vendor_id"
                 + " LEFT JOIN LATERAL (SELECT id, version_no FROM proposal_versions x"
                 + "   WHERE x.tender_vendor_id = tv.id AND x.status <> 'superseded'"
@@ -136,7 +138,9 @@ public class MemberEvaluationService {
                     Boolean.TRUE.equals(r.get("first", Boolean.class)),
                     Boolean.TRUE.equals(r.get("member", Boolean.class)),
                     Boolean.TRUE.equals(r.get("chair", Boolean.class)),
-                    Boolean.TRUE.equals(r.get("cleared", Boolean.class))))
+                    Boolean.TRUE.equals(r.get("cleared", Boolean.class)),
+                    r.get("first_submitted_at", OffsetDateTime.class),
+                    r.get("submitted_at", OffsetDateTime.class)))
         .one()
         .switchIfEmpty(Mono.error(ApiException.notFound("vendor of this tender")))
         .flatMap(
@@ -1086,6 +1090,8 @@ public class MemberEvaluationService {
                                           .tenderVendorId(c.tenderVendorId())
                                           .vendorName(c.vendorName())
                                           .status(MemberEvaluationStatus.fromValue(status))
+                                          .firstSubmittedAt(c.firstAt())
+                                          .submittedAt(c.submittedAt())
                                           .excluded(c.excluded())
                                           .summary(z.getT1())
                                           .job(z.getT2().orElse(null))
