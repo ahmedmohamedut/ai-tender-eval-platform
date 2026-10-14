@@ -193,7 +193,7 @@ A member's first task is to turn the RFP into a reviewed list of requirements. T
 | UX-REQ-01 | The requirements overview is a table with: ID, requirement text, category, importance (Mandatory or Optional), acceptance criteria, source (document and page), origin (AI or Manual), review state and last changed by. It supports search, sort, filters, and grouping by category or source. | M |
 | UX-REQ-02 | A summary strip shows total requirements, mandatory and optional counts, reviewed versus total, and flagged items. | M |
 | UX-REQ-03 | The source cell opens the viewer at the source passage, highlighted. | M |
-| UX-REQ-04 | A member edits text, category, importance and acceptance criteria inline or in a side panel. Categories come from a managed list (admin-configurable: S). Saving requires a justification note (UX-GEN-04). | M |
+| UX-REQ-04 | A member edits text, category, importance and acceptance criteria inline or in a side panel. Categories come from a managed list (admin-configurable: S, PG-21). A new installation starts with a list of seven (Functional, Technical, Security, Integration, Support and maintenance, Commercial, Compliance) that the administrator can change. Saving requires a justification note (UX-GEN-04). | M |
 | UX-REQ-05 | Delete asks for a reason: duplicate, out of scope, not a requirement, or other. Marking a duplicate asks which requirement is kept. Deleted rows stay under a "Deleted" filter and can be restored. | M |
 | UX-REQ-06 | A member can add a requirement the AI missed, with text, category, importance, acceptance criteria and an optional source reference. It is labelled "Manual". | M |
 | UX-REQ-07 | A member can merge two or more requirements into one, and split a compound requirement into several. Source references are kept. | S |
@@ -367,6 +367,7 @@ Twenty screens cover the whole flow. The design phase should start from this lis
 | PG-18 | Notification center | All | Unread items grouped by tender | UX-NOT-01 to 03 |
 | PG-19 | Consolidated evaluation report | Admin, Chair; members after finalization | Progress, overview, matrix, disagreements, final grades, finalize, export | UX-RPT-01 to 13 |
 | PG-20 | Audit trail | Admin, Observer | Search, filter, export | UX-AUD-01 to 04 |
+| PG-21 | Categories | Admin | Add, rename, reorder, deactivate the managed category list | UX-REQ-04 |
 
 ### Shared components
 

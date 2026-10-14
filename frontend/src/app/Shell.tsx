@@ -13,6 +13,7 @@ export function Shell() {
           { to: "/tenders", label: "Tenders" },
           { to: "/jobs", label: "Jobs" },
           { to: "/users", label: "Users" },
+          { to: "/categories", label: "Categories" },
         ]
       : role === "member"
         ? [

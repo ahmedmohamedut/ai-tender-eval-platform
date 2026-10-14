@@ -75,6 +75,7 @@ flowchart TB
         pg19a["PG-19 Consolidated report"]
         pg07["PG-07 User management"]
         pg20["PG-20 Audit trail"]
+        pg21["PG-21 Categories"]
         pg02 --> pg03
         pg02 --> pg04
         pg02 --> pg05
@@ -190,7 +191,7 @@ Every screen sits in one shell and uses one of six page templates, so users lear
 
 | Template | Used by | Layout |
 | --- | --- | --- |
-| T1 List page | PG-02, PG-08, PG-17, PG-18, PG-20 | Title, search and filters, table, empty state with one primary action |
+| T1 List page | PG-02, PG-08, PG-17, PG-18, PG-20, PG-21 | Title, search and filters, table, empty state with one primary action |
 | T2 Form page | PG-01, PG-03, PG-07 | Single column up to 640 px, readiness checklist beside it, sticky save bar |
 | T3 Workspace page | PG-04, PG-05, PG-06, PG-09 | Stacked sections with a status chip and primary action each |
 | T4 Review table with side panel | PG-11, PG-14 | Summary strip, filter bar, table, right panel for details and history, bulk action bar when rows are selected |
@@ -481,6 +482,7 @@ Each screen follows one template and has its own set of states to design; this t
 | PG-18 Notification center | T1 | Items grouped by tender, unread marker | Mark all read | No notifications |
 | PG-19 Consolidated evaluation report | T6 | Header, progress matrix, overview, matrix, disagreements, screening outcomes | Finalize (Chair); Export | In progress with limited results, finalized, reopened version |
 | PG-20 Audit trail | T1 | Filter bar and a table with before and after values | Export CSV | No results |
+| PG-21 Categories | T1 | The managed category list with order and state; add, rename, move up or down, deactivate or activate. Administrator only, under Administration next to Users. | Add category | No categories yet (extracted requirements get no category and a baseline cannot be confirmed); name already used |
 
 ## Component specifications
 

@@ -346,6 +346,7 @@ describe("App shell", () => {
     expect(screen.getByRole("link", { name: "Skip to content" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Tenders" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Users" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Categories" })).toBeInTheDocument();
     expect(screen.getAllByRole("main")).toHaveLength(1);
     expect(await accessibilityViolations(container)).toEqual([]);
   });
@@ -354,5 +355,6 @@ describe("App shell", () => {
     renderPage(tree, { api: fakeApi(() => undefined), me: makeMe("member", "Morgan Member") });
     expect(screen.getByRole("link", { name: "My tenders" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Users" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Categories" })).not.toBeInTheDocument();
   });
 });

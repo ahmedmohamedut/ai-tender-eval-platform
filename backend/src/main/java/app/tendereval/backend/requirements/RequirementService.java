@@ -1081,6 +1081,9 @@ public class RequirementService {
 
   public Mono<Category> updateCategory(
       DatabaseClient db, CurrentUser actor, UUID id, CategoryInput in) {
+    if (in.getName() != null && in.getName().isBlank()) {
+      return Mono.error(ApiException.invalid("name", "required", "Enter the category name"));
+    }
     DatabaseClient.GenericExecuteSpec spec =
         db.sql(
                 "UPDATE requirement_categories SET name = coalesce(:n, name),"

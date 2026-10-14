@@ -16,6 +16,7 @@ import { TenderHome } from "./pages/TenderHome";
 import { TenderProgress } from "./pages/TenderProgress";
 import { TendersList } from "./pages/TendersList";
 import { Users } from "./pages/Users";
+import { Categories } from "./pages/Categories";
 import { Vendors } from "./pages/Vendors";
 import { Viewer } from "./pages/Viewer";
 import { EmptyState } from "./components/ui";
@@ -54,6 +55,7 @@ export function AppRoutes() {
         <Route path="documents/:versionId/view" element={<Viewer />} />
         <Route path="jobs" element={<Jobs />} />
         <Route path="users" element={<Users />} />
+        <Route path="categories" element={<Categories />} />
         <Route
           path="*"
           element={

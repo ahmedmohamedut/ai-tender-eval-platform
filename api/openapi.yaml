@@ -251,6 +251,7 @@ paths:
       tags:
       - Requirements
       summary: Rename or deactivate a category
+      description: Send the name with every change; set is_active to false to deactivate. A category that is in use is deactivated, never deleted. A name that another category has answers 409.
       x-roles:
       - admin
       x-ux:
