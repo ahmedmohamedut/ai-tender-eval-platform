@@ -219,6 +219,95 @@ public class JobDispatcher {
         .onErrorResume(e -> Mono.empty());
   }
 
+  /**
+   * The command of a screening pre-check job (PI 5.4): the RFP's and addenda's document versions
+   * and the proposal version's files, inline.
+   */
+  public Mono<Void> publishPrecheck(UUID jobId) {
+    return db.inTransaction(
+            c ->
+                c.sql(
+                        "SELECT j.tender_id, j.started_by, j.target_id FROM jobs j WHERE j.id = :id"
+                            + " AND j.status = 'queued' AND j.job_type = 'screening_precheck'")
+                    .bind("id", jobId)
+                    .map(
+                        (r, m) ->
+                            new UUID[] {
+                              r.get("tender_id", UUID.class),
+                              r.get("started_by", UUID.class),
+                              r.get("target_id", UUID.class)
+                            })
+                    .one()
+                    .flatMap(
+                        j ->
+                            Mono.zip(
+                                    c.sql(
+                                            "SELECT v.id FROM document_versions v JOIN documents d"
+                                                + " ON d.id = v.document_id WHERE d.tender_id = :t"
+                                                + " AND d.doc_type IN ('rfp', 'addendum')"
+                                                + " AND d.deleted_at IS NULL AND v.deleted_at IS NULL"
+                                                + " AND v.status = 'ready' AND v.superseded_at IS NULL"
+                                                + " ORDER BY d.doc_type, v.created_at")
+                                        .bind("t", j[0])
+                                        .map((r, m) -> r.get("id", UUID.class).toString())
+                                        .all()
+                                        .collectList(),
+                                    c.sql(
+                                            "SELECT f.document_version_id FROM proposal_version_files f"
+                                                + " JOIN document_versions v ON v.id = f.document_version_id"
+                                                + " WHERE f.proposal_version_id = :p AND v.status = 'ready'"
+                                                + " ORDER BY f.sort_order, f.created_at")
+                                        .bind("p", j[2])
+                                        .map(
+                                            (r, m) ->
+                                                r.get("document_version_id", UUID.class).toString())
+                                        .all()
+                                        .collectList())
+                                .flatMap(
+                                    t -> {
+                                      Map<String, Object> input = new LinkedHashMap<>();
+                                      input.put("proposal_version_id", j[2].toString());
+                                      input.put("rfp_document_version_ids", t.getT1());
+                                      input.put("proposal_document_version_ids", t.getT2());
+                                      return c.sql(
+                                              "UPDATE jobs SET command_published_at = now() WHERE id = :id")
+                                          .bind("id", jobId)
+                                          .fetch()
+                                          .rowsUpdated()
+                                          .thenReturn(new Object[] {j, input});
+                                    })))
+        .flatMap(
+            row -> {
+              UUID[] j = (UUID[]) row[0];
+              Map<String, Object> body = new LinkedHashMap<>();
+              body.put("job_id", jobId.toString());
+              body.put("job_type", "screening_precheck");
+              body.put("tender_id", j[0].toString());
+              body.put("target", Map.of("type", "proposal_version", "id", j[2].toString()));
+              body.put("requested_by", j[1] == null ? null : j[1].toString());
+              body.put("attempt", 1);
+              body.put("created_at", Instant.now().toString());
+              body.put("input", row[1]);
+              String msgId = "job:" + jobId + ":cmd:" + (Instant.now().getEpochSecond() / 60);
+              return publisher
+                  .publish(
+                      Subjects.command("screening_precheck"),
+                      json.writeValueAsString(body),
+                      msgId,
+                      app.tendereval.backend.web.TraceIds.newTraceparent(
+                          app.tendereval.backend.web.TraceIds.newTraceId()),
+                      Subjects.SCHEMA_COMMAND)
+                  .then();
+            })
+        .doOnError(
+            e ->
+                log.warn(
+                    "pre-check command not published job={} error={}",
+                    jobId,
+                    e.getClass().getSimpleName()))
+        .onErrorResume(e -> Mono.empty());
+  }
+
   private static byte[] sha256(byte[] data) {
     try {
       return java.security.MessageDigest.getInstance("SHA-256").digest(data);

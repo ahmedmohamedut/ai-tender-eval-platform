@@ -12,6 +12,7 @@ import app.tendereval.backend.jobs.JobDispatcher;
 import app.tendereval.backend.jobs.JobProcessor;
 import app.tendereval.backend.jobs.JobsService;
 import app.tendereval.backend.messaging.JobControl;
+import app.tendereval.backend.screening.ScreeningService;
 import java.net.URI;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -32,6 +33,7 @@ public class JobsController implements JobsApi {
   private final JobControl control;
   private final JobProcessor processor;
   private final ExtractionService extraction;
+  private final ScreeningService screening;
   private final JobDispatcher dispatcher;
   private final Idempotency idempotency;
   private final RateLimiter limiter;
@@ -42,6 +44,7 @@ public class JobsController implements JobsApi {
       JobControl control,
       JobProcessor processor,
       ExtractionService extraction,
+      ScreeningService screening,
       JobDispatcher dispatcher,
       Idempotency idempotency,
       RateLimiter limiter) {
@@ -50,6 +53,7 @@ public class JobsController implements JobsApi {
     this.control = control;
     this.processor = processor;
     this.extraction = extraction;
+    this.screening = screening;
     this.dispatcher = dispatcher;
     this.idempotency = idempotency;
     this.limiter = limiter;
@@ -99,8 +103,7 @@ public class JobsController implements JobsApi {
                   Idempotency.hash("retryJob", jobId.toString()),
                   Job.class,
                   () ->
-                      extraction
-                          .retry(db, user, jobId)
+                      retryByType(db, user, jobId)
                           .map(
                               j ->
                                   ResponseEntity.status(HttpStatus.ACCEPTED)
@@ -111,7 +114,26 @@ public class JobsController implements JobsApi {
         .flatMap(
             r ->
                 r.getBody() != null && !"true".equals(r.getHeaders().getFirst("Idempotent-Replay"))
-                    ? dispatcher.publishExtraction(r.getBody().getId()).thenReturn(r)
+                    ? (r.getBody().getJobType() == JobType.SCREENING_PRECHECK
+                            ? dispatcher.publishPrecheck(r.getBody().getId())
+                            : dispatcher.publishExtraction(r.getBody().getId()))
+                        .thenReturn(r)
                     : Mono.just(r));
+  }
+
+  private Mono<Job> retryByType(
+      org.springframework.r2dbc.core.DatabaseClient db,
+      app.tendereval.backend.security.CurrentUser user,
+      UUID jobId) {
+    return db.sql("SELECT job_type FROM jobs WHERE id = :j")
+        .bind("j", jobId)
+        .map((r, m) -> r.get("job_type", String.class))
+        .one()
+        .switchIfEmpty(Mono.error(app.tendereval.backend.web.ApiException.notFound("job")))
+        .flatMap(
+            type ->
+                "screening_precheck".equals(type)
+                    ? screening.retryPrecheck(db, user, jobId)
+                    : extraction.retry(db, user, jobId));
   }
 }

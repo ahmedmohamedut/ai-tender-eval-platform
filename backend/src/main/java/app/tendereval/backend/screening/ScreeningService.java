@@ -6,6 +6,7 @@ import app.tendereval.backend.api.model.ChecklistUpdate;
 import app.tendereval.backend.api.model.ChecklistUpdateItemsInner;
 import app.tendereval.backend.api.model.ChecksInput;
 import app.tendereval.backend.api.model.ChecksInputChecksInner;
+import app.tendereval.backend.api.model.Job;
 import app.tendereval.backend.api.model.PrecheckFinding;
 import app.tendereval.backend.api.model.Recommendation;
 import app.tendereval.backend.api.model.RecommendationInput;
@@ -19,6 +20,7 @@ import app.tendereval.backend.api.model.UserRef;
 import app.tendereval.backend.audit.AuditEntry;
 import app.tendereval.backend.audit.AuditService;
 import app.tendereval.backend.common.Actions;
+import app.tendereval.backend.jobs.JobsService;
 import app.tendereval.backend.security.CurrentUser;
 import app.tendereval.backend.vendors.ProposalService;
 import app.tendereval.backend.web.ApiException;
@@ -43,10 +45,123 @@ public class ScreeningService {
 
   private final AuditService audit;
   private final ProposalService proposals;
+  private final JobsService jobs;
 
-  public ScreeningService(AuditService audit, ProposalService proposals) {
+  public ScreeningService(AuditService audit, ProposalService proposals, JobsService jobs) {
     this.audit = audit;
     this.proposals = proposals;
+    this.jobs = jobs;
+  }
+
+  /**
+   * Starts the AI pre-check of a proposal's structure (UX-SCR-03): advisory findings against the
+   * format the RFP asks for. One at a time per proposal version. The command is published by the
+   * caller after the commit (rule 4).
+   */
+  public Mono<Job> startPrecheck(DatabaseClient db, CurrentUser actor, UUID tenderVendorId) {
+    return withProposal(db, tenderVendorId)
+        .flatMap(
+            t -> {
+              if (!t.member()) {
+                return Mono.<Job>error(
+                    ApiException.forbidden("forbidden", "Only the committee screens proposals"));
+              }
+              if (!open(t)) {
+                return Mono.<Job>error(
+                    ApiException.conflict(
+                        "screening_closed", "Screening of this proposal is closed"));
+              }
+              return cleared(db, tenderVendorId)
+                  .flatMap(
+                      ok -> {
+                        if (!ok) {
+                          return Mono.<Job>error(
+                              ApiException.forbidden(
+                                  "declaration_required",
+                                  "Declare that you have no conflict for this vendor first"));
+                        }
+                        return db.sql(
+                                "SELECT 1 AS x FROM jobs WHERE job_type = 'screening_precheck'"
+                                    + " AND target_id = :pv AND status IN ('queued', 'running')")
+                            .bind("pv", t.versionId())
+                            .map((r, m) -> 1)
+                            .one()
+                            .map(x -> true)
+                            .defaultIfEmpty(false)
+                            .flatMap(
+                                running ->
+                                    running
+                                        ? Mono.<Job>error(
+                                            ApiException.conflict(
+                                                "job_overlap",
+                                                "A pre-check of this proposal is already running"))
+                                        : createPrecheckJob(db, actor, t, tenderVendorId, null));
+                      });
+            });
+  }
+
+  /** Retry of a failed or cancelled pre-check: a new job that points back to the first. */
+  public Mono<Job> retryPrecheck(DatabaseClient db, CurrentUser actor, UUID jobId) {
+    return jobs.get(db, jobId)
+        .flatMap(
+            old -> {
+              if (!Boolean.TRUE.equals(old.getCanRetry())) {
+                return Mono.<Job>error(
+                    ApiException.conflict("not_retryable", "This job cannot be retried"));
+              }
+              return db.sql(
+                      "SELECT tv.id AS tv FROM proposal_versions p JOIN tender_vendors tv"
+                          + " ON tv.id = p.tender_vendor_id WHERE p.id = :pv")
+                  .bind("pv", old.getTargetId())
+                  .map((r, m) -> r.get("tv", UUID.class))
+                  .one()
+                  .flatMap(
+                      tv ->
+                          withProposal(db, tv)
+                              .flatMap(
+                                  t -> {
+                                    if (!t.versionId().equals(old.getTargetId())) {
+                                      return Mono.<Job>error(
+                                          ApiException.conflict(
+                                              "not_retryable", "The proposal has a newer version"));
+                                    }
+                                    if (!open(t)) {
+                                      return Mono.<Job>error(
+                                          ApiException.conflict(
+                                              "screening_closed",
+                                              "Screening of this proposal is closed"));
+                                    }
+                                    return createPrecheckJob(db, actor, t, tv, jobId);
+                                  }));
+            });
+  }
+
+  private Mono<Job> createPrecheckJob(
+      DatabaseClient db, CurrentUser actor, Target t, UUID tenderVendorId, UUID retryOf) {
+    DatabaseClient.GenericExecuteSpec insert =
+        db.sql(
+                "INSERT INTO jobs (tender_id, job_type, target_type, target_id, started_by,"
+                    + " retry_of_job_id) VALUES (:t, 'screening_precheck', 'proposal_version', :pv,"
+                    + " :u, :r) RETURNING id")
+            .bind("t", t.tenderId())
+            .bind("pv", t.versionId())
+            .bind("u", actor.id());
+    insert = retryOf == null ? insert.bindNull("r", UUID.class) : insert.bind("r", retryOf);
+    return insert
+        .map((r, m) -> r.get("id", UUID.class))
+        .one()
+        .flatMap(
+            id ->
+                audit
+                    .record(
+                        db,
+                        actor,
+                        AuditEntry.of("job_status_changed", "job", id)
+                            .tender(t.tenderId())
+                            .vendor(tenderVendorId)
+                            .created(Map.of("status", "queued", "job_type", "screening_precheck"))
+                            .build())
+                    .then(jobs.get(db, id)));
   }
 
   /** The vendor's tender and its latest proposal version, or an error. */

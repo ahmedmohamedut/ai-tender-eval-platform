@@ -25,6 +25,7 @@ class PassageRef:
     text: str
     section_path_ids: tuple[str, ...]
     table_header: str | None = None
+    section_path: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -98,6 +99,7 @@ class QdrantPassageSource:
                         text=p.get("text", ""),
                         section_path_ids=tuple(p.get("section_path_ids", [])),
                         table_header=p.get("table_header"),
+                        section_path=tuple(str(t) for t in p.get("section_path", [])),
                     )
                     seen.setdefault(ref.id, ref)
                 offset = result.get("next_page_offset")

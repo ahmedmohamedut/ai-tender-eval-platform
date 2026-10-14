@@ -1,16 +1,29 @@
 package app.tendereval.backend.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import app.tendereval.backend.testsupport.AbstractApiIT;
 import app.tendereval.backend.testsupport.Fixtures;
 import app.tendereval.backend.testsupport.TestUsers;
 import app.tendereval.backend.testsupport.TestUsers.TestUser;
 import com.jayway.jsonpath.JsonPath;
+import io.nats.client.JetStream;
+import io.nats.client.Message;
+import io.nats.client.PublishOptions;
+import io.nats.client.api.PublishAck;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
@@ -18,6 +31,15 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  * UX-SCR-01..07, PG-14: checklist, checks, recommendations, the Chair's decision, reinstatement.
  */
 class ScreeningApiIT extends AbstractApiIT {
+
+  @Autowired JetStream js;
+
+  @BeforeEach
+  void publishWorks() throws Exception {
+    when(js.publish(any(Message.class), any(PublishOptions.class)))
+        .thenReturn(mock(PublishAck.class));
+    clearInvocations(js);
+  }
 
   private record World(
       TestUser admin, TestUser chair, TestUser member, UUID tender, UUID tv, UUID pv) {}
@@ -298,5 +320,116 @@ class ScreeningApiIT extends AbstractApiIT {
         .isEqualTo("accepted")
         .jsonPath("$.decision.is_reinstatement")
         .isEqualTo(true);
+  }
+
+  @Test
+  void aClearedMemberStartsAPrecheckAndTheCommandIsPublishedAfterTheCommit() throws Exception {
+    World w = world();
+    // an RFP and one proposal file, both ready
+    UUID rfp = readyDocument(w, "rfp", "RFP");
+    UUID file = readyDocument(w, "proposal", "Proposal");
+    TestUsers.sql(
+        "INSERT INTO proposal_version_files (proposal_version_id, document_version_id, file_role)"
+            + " VALUES (?, ?, 'main')",
+        w.pv(),
+        file);
+    String uri = "/tender-vendors/" + w.tv() + "/screening/precheck";
+    call("POST", uri, w.member())
+        .header("Idempotency-Key", "p-" + UUID.randomUUID())
+        .exchange()
+        .expectStatus()
+        .isForbidden()
+        .expectBody()
+        .jsonPath("$.code")
+        .isEqualTo("declaration_required");
+    declare(w, w.member());
+    String key = "p-" + UUID.randomUUID();
+    byte[] out =
+        call("POST", uri, w.member())
+            .header("Idempotency-Key", key)
+            .exchange()
+            .expectStatus()
+            .isAccepted()
+            .expectBody()
+            .jsonPath("$.job_type")
+            .isEqualTo("screening_precheck")
+            .jsonPath("$.status")
+            .isEqualTo("queued")
+            .returnResult()
+            .getResponseBody();
+    String job = JsonPath.read(new String(out), "$.id");
+    ArgumentCaptor<Message> sent = ArgumentCaptor.forClass(Message.class);
+    verify(js, atLeastOnce()).publish(sent.capture(), any(PublishOptions.class));
+    Message m =
+        sent.getAllValues().stream()
+            .filter(x -> new String(x.getData()).contains(job))
+            .findFirst()
+            .orElseThrow();
+    assertThat(m.getSubject()).isEqualTo("documents.analysis.requested.screening_precheck");
+    String body = new String(m.getData());
+    assertThat(JsonPath.<String>read(body, "$.target.type")).isEqualTo("proposal_version");
+    assertThat(JsonPath.<String>read(body, "$.target.id")).isEqualTo(w.pv().toString());
+    assertThat(JsonPath.<List<String>>read(body, "$.input.rfp_document_version_ids"))
+        .containsExactly(rfp.toString());
+    assertThat(JsonPath.<List<String>>read(body, "$.input.proposal_document_version_ids"))
+        .containsExactly(file.toString());
+    // one at a time per proposal
+    call("POST", uri, w.member())
+        .header("Idempotency-Key", "p-" + UUID.randomUUID())
+        .exchange()
+        .expectStatus()
+        .isEqualTo(409)
+        .expectBody()
+        .jsonPath("$.code")
+        .isEqualTo("job_overlap");
+    // a replay of the first key answers with the same job and publishes nothing again
+    clearInvocations(js);
+    call("POST", uri, w.member())
+        .header("Idempotency-Key", key)
+        .exchange()
+        .expectStatus()
+        .isAccepted()
+        .expectBody()
+        .jsonPath("$.id")
+        .isEqualTo(job);
+    verify(js, org.mockito.Mockito.never()).publish(any(Message.class), any(PublishOptions.class));
+    // a failed pre-check is retried as a new job that points back
+    TestUsers.sql("UPDATE jobs SET status = 'running', started_at = now() WHERE id = ?::uuid", job);
+    TestUsers.sql(
+        "UPDATE jobs SET status = 'failed', failure_code = 'llm_unavailable', finished_at = now()"
+            + " WHERE id = ?::uuid",
+        job);
+    call("POST", "/jobs/" + job + "/retry", w.member())
+        .header("Idempotency-Key", "p-" + UUID.randomUUID())
+        .exchange()
+        .expectStatus()
+        .isAccepted()
+        .expectBody()
+        .jsonPath("$.retry_of_job_id")
+        .isEqualTo(job)
+        .jsonPath("$.job_type")
+        .isEqualTo("screening_precheck");
+  }
+
+  private UUID readyDocument(World w, String type, String title) {
+    UUID doc =
+        (UUID)
+            TestUsers.scalar(
+                "INSERT INTO documents (tender_id, doc_type, title) VALUES (?, ?, ?) RETURNING id",
+                w.tender(),
+                type,
+                title);
+    UUID v = UUID.randomUUID();
+    TestUsers.sql(
+        "INSERT INTO document_versions (id, document_id, version_no, file_name, file_format, size_bytes,"
+            + " sha256, storage_key, status, uploaded_by) VALUES (?, ?, 1, 'f.pdf', 'pdf', 10,"
+            + " repeat('a', 64), ?, 'uploading', ?)",
+        v,
+        doc,
+        "originals/%s/%s/%s.pdf".formatted(w.tender(), doc, v),
+        w.admin().id());
+    TestUsers.sql("UPDATE document_versions SET status = 'processing' WHERE id = ?", v);
+    TestUsers.sql("UPDATE document_versions SET status = 'ready', page_count = 3 WHERE id = ?", v);
+    return v;
   }
 }

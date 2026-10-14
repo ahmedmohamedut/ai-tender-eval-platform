@@ -192,3 +192,65 @@ def make_docx(paragraphs: int = 30, *, seed: int = 5, tracked_change: bool = Fal
                 dst.writestr(item, content)
         data = dst_io.getvalue()
     return data
+
+
+def make_structured(
+    title: str, sections: list[tuple[str, list[str]]], *, header: str | None = None
+) -> bytes:
+    """A text PDF with one H1 (and bookmark) per section and the given paragraphs under it."""
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=16)
+    body = ParagraphStyle("Body", parent=styles["BodyText"], fontSize=10, leading=13)
+    out = io.BytesIO()
+    doc = _Doc(
+        out, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=22 * mm, header=header
+    )
+    story: list = [
+        Paragraph(title, ParagraphStyle("Title", parent=styles["Title"])),
+        Spacer(1, 6 * mm),
+    ]
+    for heading, paragraphs in sections:
+        story.append(Paragraph(heading, h1))
+        for text in paragraphs:
+            story.append(Paragraph(text, body))
+            story.append(Spacer(1, 3 * mm))
+        story.append(PageBreak())
+    deco = _decorate(header)
+    doc.build(story, onFirstPage=deco, onLaterPages=deco)
+    return out.getvalue()
+
+
+def make_structured_rfp(expected: list[str]) -> bytes:
+    """An RFP that says which sections a proposal must include (the pre-check's input)."""
+    names = ", ".join(expected[:-1]) + " and " + expected[-1]
+    return make_structured(
+        "Request for proposal: managed platform",
+        [
+            ("1. Background", ["The ministry wants to move its registers to a managed platform."]),
+            (
+                "2. Instructions to vendors",
+                [
+                    "The proposal must include the following sections: " + names + ".",
+                    "Proposals are submitted as one PDF file in English.",
+                ],
+            ),
+            (
+                "3. Requirements",
+                [
+                    "The supplier shall encrypt all customer data at rest.",
+                    "The supplier must provide support during working hours.",
+                ],
+            ),
+        ],
+    )
+
+
+def make_structured_proposal(present: list[str]) -> bytes:
+    """A proposal with one section per heading in `present`."""
+    return make_structured(
+        "Proposal: managed platform",
+        [
+            (name, [f"This section describes our {name.lower()} in detail for the ministry."])
+            for name in present
+        ],
+    )

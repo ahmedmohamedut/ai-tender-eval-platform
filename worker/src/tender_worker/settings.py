@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str | None = None
     LLM_API_KEY: SecretStr | None = None
     LLM_MODEL_EXTRACTION: str | None = None
+    LLM_MODEL_PRECHECK: str | None = None
     LLM_MODEL_VERSION: str = "unknown"
     LLM_TEMPERATURE: float = Field(default=0.0, ge=0, le=2)
     LLM_MAX_OUTPUT_TOKENS: int = Field(default=4096, ge=64)

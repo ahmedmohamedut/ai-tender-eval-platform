@@ -31,3 +31,19 @@ class Candidates(BaseModel):
 class PairJudgement(BaseModel):
     verdict: Literal["same", "conflicts", "unrelated"]
     reason: str = Field(default="", max_length=300)
+
+
+class ExpectedSection(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=400)
+    source_passage_id: str
+
+
+class ExpectedSections(BaseModel):
+    items: list[ExpectedSection] = Field(default_factory=list, max_length=40)
+
+
+class SectionMatch(BaseModel):
+    found: bool
+    matched_title: str | None = Field(default=None, max_length=300)
+    passage_ids: list[str] = Field(default_factory=list, max_length=6)

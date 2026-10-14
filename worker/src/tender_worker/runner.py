@@ -21,6 +21,7 @@ from nats.js.errors import APIError, KeyNotFoundError
 
 from tender_worker.consumers import (
     AGENT_EXTRACTION,
+    AGENT_PRECHECK,
     INGEST_COMMANDS,
     INGEST_UPLOADED,
     ROLE_CONSUMERS,
@@ -32,6 +33,7 @@ from tender_worker.handlers import (
     DeadLetter,
     handle_command,
     handle_extraction,
+    handle_precheck,
     handle_uploaded,
 )
 from tender_worker.health import HealthServer
@@ -290,6 +292,7 @@ class Runner:
             worker=worker,
             bucket_jobs=s.S3_BUCKET_JOBS,
             model_name=s.LLM_MODEL_EXTRACTION,
+            precheck_model=s.LLM_MODEL_PRECHECK,
             model_version=s.LLM_MODEL_VERSION,
             settings=ExtractionSettings(
                 window_chars=s.EXTRACTION_WINDOW_CHARS,
@@ -356,8 +359,12 @@ class Runner:
                 await handle_extraction(
                     ctx, msg.data, headers.get("Tender-Schema"), deliveries, traceparent
                 )
+            elif spec is AGENT_PRECHECK:
+                await handle_precheck(
+                    ctx, msg.data, headers.get("Tender-Schema"), deliveries, traceparent
+                )
             else:
-                # The pre-check and evaluation graphs arrive with Phases 4 and 5.
+                # The evaluation graph arrives with the next milestone.
                 log.info("agent command seen", extra={"durable": spec.durable})
             await msg.ack()
         except DeadLetter as exc:

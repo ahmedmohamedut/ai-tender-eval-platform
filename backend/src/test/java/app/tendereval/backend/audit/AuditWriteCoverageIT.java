@@ -1711,6 +1711,30 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isEqualTo(422);
           }
         });
+    m.put(
+        "startScreeningPrecheck",
+        new Scenario() {
+          ScreeningWorld w = screeningWorld("uploaded");
+
+          @Override
+          public int success() {
+            asChair("POST", "/tender-vendors/" + w.tv() + "/screening/precheck")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .exchange()
+                .expectStatus()
+                .isAccepted();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            asChair("POST", "/tender-vendors/" + UUID.randomUUID() + "/screening/precheck")
+                .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+          }
+        });
     return m;
   }
 

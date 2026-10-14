@@ -341,7 +341,9 @@ public class JobProcessor {
             ? parsedRowsMatch(c, job.targetId(), m)
             : "requirement_extraction".equals(job.jobType())
                 ? requirementsStored(c, job.id(), m)
-                : Mono.just(true);
+                : "screening_precheck".equals(job.jobType())
+                    ? prechecksStored(c, job.id(), m)
+                    : Mono.just(true);
     return stored.flatMap(
         ok -> {
           if (!ok) {
@@ -384,6 +386,22 @@ public class JobProcessor {
                 + " WHERE a.job_id = :j")
         .bind("j", jobId)
         .map((r, md) -> r.get("n", Long.class) == m.counts().get("requirements").longValue())
+        .one();
+  }
+
+  /** A pre-check completes when the stored findings of the run equal what the worker counted. */
+  private Mono<Boolean> prechecksStored(DatabaseClient c, UUID jobId, StatusMessage m) {
+    if (m.resultParts() == null || m.counts() == null || !m.counts().containsKey("prechecks")) {
+      return Mono.just(false);
+    }
+    if (m.counts().get("prechecks") == 0) {
+      return Mono.just(true);
+    }
+    return c.sql(
+            "SELECT count(*) AS n FROM screening_prechecks p JOIN ai_runs a ON a.id = p.ai_run_id"
+                + " WHERE a.job_id = :j")
+        .bind("j", jobId)
+        .map((r, md) -> r.get("n", Long.class) == m.counts().get("prechecks").longValue())
         .one();
   }
 

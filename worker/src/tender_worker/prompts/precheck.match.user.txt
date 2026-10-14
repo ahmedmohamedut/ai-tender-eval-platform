@@ -1,0 +1,7 @@
+Expected section: {name}
+What it should cover: {description}
+
+Passages of the proposal:
+{passages}
+
+Does the proposal contain this section?

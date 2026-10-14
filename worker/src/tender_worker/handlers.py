@@ -242,3 +242,31 @@ async def handle_extraction(
         )
     except BadInput as exc:
         raise DeadLetter(str(exc)) from exc
+
+
+async def handle_precheck(
+    ctx: Context,
+    body: bytes,
+    schema_header: str | None,
+    deliveries: int,
+    traceparent: str | None,
+) -> None:
+    """documents.analysis.requested.screening_precheck (PI 5.4)."""
+    check_schema(schema_header, SCHEMA_COMMAND)
+    try:
+        command = Command.model_validate_json(body)
+    except ValidationError as exc:
+        raise DeadLetter("invalid command body") from exc
+    if command.job_type != "screening_precheck":
+        raise DeadLetter(f"unknown job type {command.job_type}")
+    if ctx.agent is None or ctx.cancelled is None:
+        log.info("pre-check command seen; no model endpoint is configured")
+        return
+    from tender_worker.agent.runtime import run_precheck
+
+    try:
+        await run_precheck(
+            ctx.agent, command, deliveries, traceparent or new_traceparent(), ctx.cancelled
+        )
+    except BadInput as exc:
+        raise DeadLetter(str(exc)) from exc

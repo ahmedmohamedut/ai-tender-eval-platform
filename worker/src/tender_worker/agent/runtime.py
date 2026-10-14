@@ -24,6 +24,7 @@ from tender_worker.agent.extraction import (
     to_item,
 )
 from tender_worker.agent.llm import LlmUnavailable, StructuredLlm
+from tender_worker.agent.precheck import PrecheckGraph
 from tender_worker.agent.retrieval import PassageSource, ScopeItem
 from tender_worker.messages import (
     SCHEMA_RESULT,
@@ -33,17 +34,17 @@ from tender_worker.messages import (
     ResultBatch,
     RunInfo,
     Status,
-    Target,
     WorkerInfo,
 )
 from tender_worker.messages import Warning_ as StatusWarning
-from tender_worker.prompts import EXTRACTION_VERSION
+from tender_worker.prompts import EXTRACTION_VERSION, PRECHECK_VERSION
 
 log = logging.getLogger(__name__)
 
-STATUS_SUBJECT = "documents.analysis.status.requirement_extraction"
-RESULT_SUBJECT = "documents.analysis.result.requirement_extraction"
+STATUS_SUBJECT = "documents.analysis.status.{}"
+RESULT_SUBJECT = "documents.analysis.result.{}"
 STEPS = ["load_scope", "plan_windows", "extract", "merge", "compare", "flag", "seal"]
+PRECHECK_STEPS = ["load_scope", "find_format", "list_expected", "match", "seal"]
 BATCH_BYTES = 256 * 1024
 
 
@@ -77,6 +78,7 @@ class AgentDeps:
     settings: ExtractionSettings
     batch_max_items: int = 50
     cancel_check_seconds: float = 10.0
+    precheck_model: str | None = None
 
 
 class BadInput(Exception):
@@ -123,9 +125,9 @@ class _Emitter:
         self._seq += 1
         status = Status(
             job_id=self._c.job_id,
-            job_type="requirement_extraction",
+            job_type=self._c.job_type,
             tender_id=self._c.tender_id,
-            target=Target(type="tender", id=self._c.tender_id),
+            target=self._c.target,
             seq=self._seq,
             state=state,  # type: ignore[arg-type]
             emitted_at=datetime.now(UTC),
@@ -134,19 +136,21 @@ class _Emitter:
         )
         msg_id = f"{self._c.job_id}:s:{status.seq}"
         await self._d.publisher.publish(
-            STATUS_SUBJECT,
+            STATUS_SUBJECT.format(self._c.job_type),
             status.model_dump_json(exclude_none=True).encode(),
             self._headers(msg_id, SCHEMA_STATUS),
             msg_id,
         )
 
-    async def batch(self, part_no: int, final: bool, items: list[dict]) -> None:
+    async def batch(
+        self, part_no: int, final: bool, items: list[dict], kind: str = "requirements"
+    ) -> None:
         batch = ResultBatch(
             job_id=self._c.job_id,
-            job_type="requirement_extraction",
+            job_type=self._c.job_type,
             tender_id=self._c.tender_id,
-            target=Target(type="tender", id=self._c.tender_id),
-            kind="requirements",
+            target=self._c.target,
+            kind=kind,  # type: ignore[arg-type]
             part_no=part_no,
             final=final,
             items=items,
@@ -155,7 +159,7 @@ class _Emitter:
         )
         msg_id = f"{self._c.job_id}:r:{part_no}"
         await self._d.publisher.publish(
-            RESULT_SUBJECT,
+            RESULT_SUBJECT.format(self._c.job_type),
             batch.model_dump_json(exclude_none=True).encode(),
             self._headers(msg_id, SCHEMA_RESULT),
             msg_id,
@@ -305,7 +309,7 @@ async def _republish(deps: AgentDeps, emitter: _Emitter, job: UUID, final: dict)
         raw = await deps.kv.get(f"part.{job}.{n}")
         if raw is None:
             raise RuntimeError("a sealed part is missing")
-        await emitter.batch(n, n == count, json.loads(raw))
+        await emitter.batch(n, n == count, json.loads(raw), final.get("kind", "requirements"))
     warnings = [StatusWarning(**w) for w in final.get("warnings", [])]
     await emitter.status(
         "completed_with_warnings" if warnings else "completed",
@@ -315,3 +319,103 @@ async def _republish(deps: AgentDeps, emitter: _Emitter, job: UUID, final: dict)
         counts=final["counts"],
         warnings=warnings or None,
     )
+
+
+_PRECHECK_WARNINGS = {
+    "no_format_found": "The request for proposal does not say how a proposal must be organised",
+}
+
+
+async def run_precheck(
+    deps: AgentDeps,
+    command: Command,
+    deliveries: int,
+    traceparent: str,
+    cancelled: Callable[[UUID], Awaitable[bool]],
+) -> None:
+    """The pre-check job (AI 4.4): advisory findings, sealed and published like an extraction."""
+    emitter = _Emitter(command, deps, deliveries, traceparent)
+    job = command.job_id
+    if await cancelled(job):
+        await emitter.status("cancelled")
+        return
+    final_raw = await deps.kv.get(f"part.{job}.final")
+    if final_raw is not None:
+        await _republish(deps, emitter, job, json.loads(final_raw))
+        return
+
+    data = await _load_input(deps, command)
+    rfp = [ScopeItem(version_id=str(v)) for v in data.get("rfp_document_version_ids", [])]
+    proposal = [ScopeItem(version_id=str(v)) for v in data.get("proposal_document_version_ids", [])]
+    if not rfp or not proposal:
+        raise BadInput("the scope is empty")
+    run = RunInfo(
+        model_name=deps.precheck_model or deps.model_name,
+        model_version=deps.model_version,
+        prompt_version=PRECHECK_VERSION,
+        input_scope={
+            "rfp_document_versions": sorted({s.version_id for s in rfp}),
+            "proposal_document_versions": sorted({s.version_id for s in proposal}),
+        },
+    )
+    await emitter.status(
+        "running", step="load_scope", progress_percent=2, steps=PRECHECK_STEPS, run=run
+    )
+
+    async def progress(step: str, percent: int) -> None:
+        await emitter.status("running", step=step, progress_percent=percent)
+
+    async def check() -> bool:
+        return await cancelled(job)
+
+    graph = PrecheckGraph(
+        llm=deps.llm,
+        source=deps.source,
+        tender_id=command.tender_id,
+        job_id=job,
+        model=deps.precheck_model,
+        on_progress=progress,
+        cancelled=check,
+    )
+    try:
+        findings, warn_codes = await graph.run(rfp, proposal)
+    except NoContentInScope:
+        await emitter.status(
+            "failed",
+            failure=Failure(
+                code="no_content_in_scope",
+                message="The documents hold no text",
+                retryable=False,
+            ),
+        )
+        metrics.inc("precheck_jobs_total", outcome="no_content_in_scope")
+        return
+    except LlmUnavailable:
+        await emitter.status(
+            "failed",
+            failure=Failure(
+                code="llm_unavailable", message="The model did not answer", retryable=True
+            ),
+        )
+        metrics.inc("precheck_jobs_total", outcome="llm_unavailable")
+        return
+    if await cancelled(job):
+        await emitter.status("cancelled")
+        return
+
+    await emitter.status("running", step="seal", progress_percent=95)
+    parts = _parts(findings, deps.batch_max_items)
+    for n, part in enumerate(parts, start=1):
+        await deps.kv.put(f"part.{job}.{n}", json.dumps(part).encode())
+    warnings = [
+        StatusWarning(code=c, message=_PRECHECK_WARNINGS.get(c, c), count=1) for c in warn_codes
+    ]
+    final = {
+        "parts": len(parts),
+        "kind": "prechecks",
+        "counts": {"prechecks": len(findings)},
+        "warnings": [w.model_dump() for w in warnings],
+    }
+    await deps.kv.put(f"part.{job}.final", json.dumps(final).encode())
+    await _republish(deps, emitter, job, final)
+    metrics.inc("precheck_jobs_total", outcome="completed")

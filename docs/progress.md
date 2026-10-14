@@ -92,7 +92,7 @@ Decisions for this phase: notification centre and email move to Phase 5; Chair r
 | P4-1 Schema and RLS (ten tables, policies, triggers) | done (approved) | P4-1 | `ScreeningEvaluationSchemaIT` (29), backend 264 passing; independent review found 11 issues, fixed | P71; V20 |
 | P4-2 Conflict declaration and proposal access (PG-13) | done | P4-2 | `ConflictDeclarationApiIT` (3), audit scenario, vitest (65) | P72; closes G8 |
 | P4-3a Screening API (checklist, checks, recommendations, decision, reinstate) | done | P4-3a | `ScreeningApiIT` (5), 5 audit scenarios | P73 |
-| P4-3b Pre-check job (backend, worker graph, stub) | not started | | | |
+| P4-3b Pre-check job (backend, worker graph, stub) | done | P4-3b | worker 124, backend 275, `infra/scripts/screening-smoke.sh` 16/16 on the stack | P74 |
 | P4-3c Screen PG-14 | not started | | | |
 | P4-4 Evaluation backend (job, grades handler, member rows, outdated) | not started | | | |
 | P4-5 Evaluation graph (retrieval, grade, verify absence, repair, resume) | not started | | | |
@@ -117,6 +117,7 @@ Notable problems found while building, how each was found and what guards agains
 | I9 | 3 | A failed extraction could not be retried | `retryJob` answered 501 for AI jobs; found by the outage drill | Retry creates a new job over the same scope with `retry_of_job_id` (P69) | `ExtractionApiIT`, `AuditWriteCoverageIT`, drill 8 |
 | I10 | 3 | Extraction drills could not start a job | The drill uploaded the RFP as type `other`, so the tender would not open | Upload with `doc_type=rfp` | `DRILL_SET=extraction make drills` |
 | I11 | 3 | Kill drill killed nothing | One window, so the stub answered before the kill | Stub delay control, 20 s delay | Drill 7 |
+| I13 | 4 | After the Docker host restarted, the backend would not start (`OpenBao refused AppRole login 403`, then `UI event hub: stream not found`) | OpenBao runs in dev mode and loses its AppRoles on restart, and the NATS streams were not there | Re-ran provisioning (`make up` is idempotent and does all of it) | `make verify-env` |
 | I12 | 4 | Real model unreachable from containers; real extraction failed with `LlmUnavailable` | The gateway listens on `127.0.0.1` (refused from `host.docker.internal`); `gemma-4-12b` has a 4096-token context, so a 4096-token output limit overflowed it and 1,800 to 2,300 token outputs were cut or overflowed with 2,000 to 4,000 character windows | Eval run from the host with 1,200-character windows and 1,800 output tokens; settings recorded in P70 | `make eval` with `--window-chars`/`--max-output-tokens` |
 
 ## Open gaps

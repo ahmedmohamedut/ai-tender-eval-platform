@@ -1,0 +1,4 @@
+Passages:
+{passages}
+
+List the sections a proposal must contain.

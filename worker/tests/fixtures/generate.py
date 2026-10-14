@@ -24,6 +24,11 @@ def main() -> None:
     (out / "textless.pdf").write_bytes(synthetic.make_textless())
     (out / "corrupt.pdf").write_bytes(synthetic.make_corrupt())
     (out / "notes.txt").write_bytes(b"plain text, not a document")
+    expected = ["Executive summary", "Technical solution", "Implementation plan", "Pricing"]
+    (out / "rfp-structured.pdf").write_bytes(synthetic.make_structured_rfp(expected))
+    (out / "proposal-structured.pdf").write_bytes(
+        synthetic.make_structured_proposal(["Executive summary", "Technical solution", "Pricing"])
+    )
     print(f"wrote {len(list(out.iterdir()))} files to {out}")
 
 

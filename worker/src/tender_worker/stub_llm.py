@@ -79,6 +79,44 @@ def judge(user: str) -> dict:
     return {"verdict": "unrelated", "reason": ""}
 
 
+_EXPECT = re.compile(
+    r"(?:proposal|response|bid|tender)s?\s+(?:must|shall)\s+(?:include|contain|comprise)"
+    r"[^:]{0,60}:\s*(.+)",
+    re.I | re.S,
+)
+
+
+def expected_sections(user: str) -> dict:
+    items: list[dict] = []
+    seen: set[str] = set()
+    for pid, text in _PASSAGE.findall(user):
+        m = _EXPECT.search(" ".join(text.split()))
+        if not m:
+            continue
+        for part in re.split(r",|;|\band\b", m.group(1).rstrip(".")):
+            name = part.strip(" .")
+            if len(name) < 3 or name.lower() in seen:
+                continue
+            seen.add(name.lower())
+            items.append({"name": name, "description": "", "source_passage_id": pid})
+    return {"items": items}
+
+
+def section_match(user: str) -> dict:
+    name = re.search(r"Expected section: (.+)", user)
+    wanted = _words(name.group(1)) if name else set()
+    wanted = {w for w in wanted if len(w) > 3}
+    best: tuple[int, str, str] | None = None
+    for m in re.finditer(r'<passage id="([^"]+)"[^>]*section="([^"]*)"[^>]*>', user):
+        pid, path = m.group(1), m.group(2)
+        score = len(wanted & _words(path))
+        if score and (best is None or score > best[0]):
+            best = (score, pid, path.split(" > ")[-1])
+    if best is None:
+        return {"found": False, "matched_title": None, "passage_ids": []}
+    return {"found": True, "matched_title": best[2], "passage_ids": [best[1]]}
+
+
 class Control:
     def __init__(self) -> None:
         self.mode = os.environ.get("STUB_LLM_MODE", "ok")
@@ -106,12 +144,21 @@ def app() -> web.Application:
             else ""
         )
         tools = body.get("tools") or []
+        tool_names = [t.get("function", {}).get("name") for t in (body.get("tools") or [])]
+        wants = {schema_name, *tool_names}
         wants_pair = (
             "Requirement A:" in user
             or schema_name == "PairJudgement"
             or any(t.get("function", {}).get("name") == "PairJudgement" for t in tools)
         )
-        payload = judge(user) if wants_pair else extract(user, control.mode == "bad_quote")
+        if "ExpectedSections" in wants:
+            payload = expected_sections(user)
+        elif "SectionMatch" in wants:
+            payload = section_match(user)
+        elif wants_pair:
+            payload = judge(user)
+        else:
+            payload = extract(user, control.mode == "bad_quote")
         content = json.dumps(payload)
         message: dict = {"role": "assistant", "content": content}
         if tools:
