@@ -89,7 +89,7 @@ Decisions for this phase: notification centre and email move to Phase 5; Chair r
 | Work item | Status | Commit | Verified by | Notes |
 | --- | --- | --- | --- | --- |
 | P4-0 Embeddings and models (Nemotron prefixes, eval tooling, release record) | done, defaults not switched | P4-0 | worker unit tests (118), `docs/releases/extraction-eval-20261014-gemma-4-12b-nemotron-embed-8b.md` | P70; containers cannot reach the gateway (I12) |
-| P4-1 Schema and RLS (ten tables, policies, triggers) | not started | | | Pauses for review before merge |
+| P4-1 Schema and RLS (ten tables, policies, triggers) | done (approved) | P4-1 | `ScreeningEvaluationSchemaIT` (29), backend 264 passing; independent review found 11 issues, fixed | P71; V20 |
 | P4-2 Conflict declaration and proposal access (PG-13) | not started | | | Closes G8 |
 | P4-3 Screening and pre-check job (PG-14) | not started | | | |
 | P4-4 Evaluation backend (job, grades handler, member rows, outdated) | not started | | | |

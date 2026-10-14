@@ -90,7 +90,9 @@ class SchemaIT {
             "proposal_versions",
             "jobs",
             "requirements",
-            "baselines");
+            "baselines",
+            "member_evaluations",
+            "member_evaluation_rows");
     Map<String, Set<String>> statuses = new LinkedHashMap<>();
     Set<String> moves = new LinkedHashSet<>();
     List<String> lines =

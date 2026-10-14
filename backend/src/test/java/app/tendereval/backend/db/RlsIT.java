@@ -502,11 +502,13 @@ class RlsIT {
 
   @Test
   void declarationsAreReadByTheirOwnerTheAdminAndTheChairOnly() {
-    assertThat(count(m1, "member", "SELECT id FROM conflict_declarations")).isEqualTo(1);
-    assertThat(count(m3, "member", "SELECT id FROM conflict_declarations")).isEqualTo(1);
-    assertThat(count(chair, "member", "SELECT id FROM conflict_declarations")).isEqualTo(2);
-    assertThat(count(admin, "admin", "SELECT id FROM conflict_declarations")).isEqualTo(2);
-    assertThat(count(m2, "member", "SELECT id FROM conflict_declarations")).isZero();
+    // scoped to this class's vendor: other test classes share the database
+    String sql = "SELECT id FROM conflict_declarations WHERE tender_vendor_id = ?";
+    assertThat(count(m1, "member", sql, tv1)).isEqualTo(1);
+    assertThat(count(m3, "member", sql, tv1)).isEqualTo(1);
+    assertThat(count(chair, "member", sql, tv1)).isEqualTo(2);
+    assertThat(count(admin, "admin", sql, tv1)).isEqualTo(2);
+    assertThat(count(m2, "member", sql, tv1)).isZero();
   }
 
   // ---- drafts, idempotency, logs ----------------------------------------------------------------
