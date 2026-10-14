@@ -178,3 +178,38 @@ export const baselineStatusLabel: Record<string, string> = {
   reopened: "Reopened",
   superseded: "Superseded",
 };
+
+/** Screening vocabulary (UX-SCR; fixed vocabulary of the content design). */
+export const recommendationLabel: Record<string, string> = {
+  accept: "Accept",
+  reject: "Reject",
+  request_resubmission: "Request resubmission",
+};
+
+export const recommendationTone: Record<string, Tone> = {
+  accept: "success",
+  reject: "error",
+  request_resubmission: "warning",
+};
+
+export const proposalStatusLabel: Record<string, string> = {
+  uploaded: "Uploaded",
+  in_screening: "In screening",
+  accepted: "Accepted",
+  rejected: "Rejected",
+  resubmission_requested: "Resubmission requested",
+  evaluating: "Being evaluated",
+  evaluated: "Evaluated",
+  superseded: "Replaced by a newer version",
+};
+
+export const proposalStatusTone: Record<string, Tone> = {
+  uploaded: "neutral",
+  in_screening: "info",
+  accepted: "success",
+  rejected: "error",
+  resubmission_requested: "warning",
+  evaluating: "info",
+  evaluated: "success",
+  superseded: "neutral",
+};

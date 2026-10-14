@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import {
   Button,
   EmptyState,
@@ -158,6 +158,8 @@ export function Vendors() {
           <VendorCard
             key={tv.id}
             tv={tv}
+            tenderId={tenderId!}
+            isMember={me.user.role === "member"}
             canUpload={tv.actions?.upload_proposal?.allowed === true}
             onChanged={list.reload}
           />
@@ -169,10 +171,14 @@ export function Vendors() {
 
 function VendorCard({
   tv,
+  tenderId,
+  isMember,
   canUpload,
   onChanged,
 }: {
   tv: TenderVendor;
+  tenderId: string;
+  isMember: boolean;
   canUpload: boolean;
   onChanged: () => void;
 }) {
@@ -240,6 +246,13 @@ function VendorCard({
       {versions.state.status === "loading" && <Loading label="Loading proposal versions" />}
       {current ? (
         <>
+          {isMember && (
+            <p>
+              <Link to={`/tenders/${tenderId}/vendors/${tv.id}/screening`}>
+                Screen this proposal
+              </Link>
+            </p>
+          )}
           <p className="help">
             {current.files.length} file{current.files.length === 1 ? "" : "s"} in version{" "}
             {current.version_no}.

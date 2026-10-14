@@ -7,6 +7,7 @@ import { Baseline } from "./pages/Baseline";
 import { Documents } from "./pages/Documents";
 import { Jobs } from "./pages/Jobs";
 import { Requirements } from "./pages/Requirements";
+import { Screening } from "./pages/Screening";
 import { TenderForm } from "./pages/TenderForm";
 import { TenderHome } from "./pages/TenderHome";
 import { TenderProgress } from "./pages/TenderProgress";
@@ -36,6 +37,7 @@ export function AppRoutes() {
         <Route path="tenders/:tenderId/documents" element={<Documents />} />
         <Route path="tenders/:tenderId/vendors" element={<Vendors />} />
         <Route path="tenders/:tenderId/requirements" element={<Requirements />} />
+        <Route path="tenders/:tenderId/vendors/:tenderVendorId/screening" element={<Screening />} />
         <Route path="tenders/:tenderId/baseline" element={<Baseline />} />
         <Route path="documents/:versionId/view" element={<Viewer />} />
         <Route path="jobs" element={<Jobs />} />

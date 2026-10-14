@@ -93,7 +93,7 @@ Decisions for this phase: notification centre and email move to Phase 5; Chair r
 | P4-2 Conflict declaration and proposal access (PG-13) | done | P4-2 | `ConflictDeclarationApiIT` (3), audit scenario, vitest (65) | P72; closes G8 |
 | P4-3a Screening API (checklist, checks, recommendations, decision, reinstate) | done | P4-3a | `ScreeningApiIT` (5), 5 audit scenarios | P73 |
 | P4-3b Pre-check job (backend, worker graph, stub) | done | P4-3b | worker 124, backend 275, `infra/scripts/screening-smoke.sh` 16/16 on the stack | P74 |
-| P4-3c Screen PG-14 | not started | | | |
+| P4-3c Screen PG-14 | done | P4-3c | vitest 68 (3 new, axe clean); journey in P4-7 | P75 |
 | P4-4 Evaluation backend (job, grades handler, member rows, outdated) | not started | | | |
 | P4-5 Evaluation graph (retrieval, grade, verify absence, repair, resume) | not started | | | |
 | P4-6 Member evaluation API | not started | | | |
