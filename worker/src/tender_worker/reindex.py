@@ -28,13 +28,7 @@ async def reindex(collection: str) -> int:
         s.QDRANT_URL,
         s.QDRANT_API_KEY.get_secret_value(),
         collection,
-        EmbeddingClient(
-            base_url=s.EMBEDDING_BASE_URL or "",
-            model=s.EMBEDDING_MODEL or "",
-            api_key=s.EMBEDDING_API_KEY.get_secret_value() if s.EMBEDDING_API_KEY else "",
-            dimensions=s.EMBEDDING_DIMENSIONS or 0,
-            batch_size=s.EMBEDDING_BATCH_SIZE,
-        ),
+        EmbeddingClient.from_settings(s),
         upsert_batch=s.QDRANT_UPSERT_BATCH_SIZE,
     )
     done = 0

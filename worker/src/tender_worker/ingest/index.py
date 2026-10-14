@@ -64,8 +64,29 @@ class EmbeddingClient:
     dimensions: int
     batch_size: int = 64
     timeout: float = 30.0
+    # Retrieval models such as Nemotron want a role marker on each input ("passage: ", "query: ").
+    # Empty by default, so the hash stub and any model without markers are unchanged.
+    document_prefix: str = ""
+    query_prefix: str = ""
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    @classmethod
+    def from_settings(cls, s, *, timeout: float | None = None) -> EmbeddingClient:
+        return cls(
+            base_url=s.EMBEDDING_BASE_URL or "",
+            model=s.EMBEDDING_MODEL or "",
+            api_key=s.EMBEDDING_API_KEY.get_secret_value() if s.EMBEDDING_API_KEY else "",
+            dimensions=s.EMBEDDING_DIMENSIONS or 0,
+            batch_size=s.EMBEDDING_BATCH_SIZE,
+            timeout=timeout if timeout is not None else s.DEP_TIMEOUT_SECONDS,
+            document_prefix=s.EMBEDDING_DOCUMENT_PREFIX,
+            query_prefix=s.EMBEDDING_QUERY_PREFIX,
+        )
+
+    async def embed(self, texts: list[str], kind: str = "document") -> list[list[float]]:
+        """`kind` is "document" (indexed text and symmetric comparisons) or "query" (a search)."""
+        prefix = self.query_prefix if kind == "query" else self.document_prefix
+        if prefix:
+            texts = [prefix + t for t in texts]
         out: list[list[float]] = []
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=self.timeout),

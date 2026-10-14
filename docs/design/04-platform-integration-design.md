@@ -611,6 +611,7 @@ One image, two deployments: `WORKER_ROLE` chooses the code path. Numeric default
 | `INGEST_CONVERT_TIMEOUT_SECONDS` | ingest | config | `300` | Limit for one DOCX to PDF conversion. |
 | `PASSAGE_MIN_CHARS`, `PASSAGE_MAX_CHARS` | ingest | config | `200`, `1200` | Bounds of a passage. |
 | `EMBEDDING_BATCH_SIZE`, `QDRANT_UPSERT_BATCH_SIZE` | ingest | config | `64`, `128` | Batch sizes while indexing. |
+| `EMBEDDING_DOCUMENT_PREFIX`, `EMBEDDING_QUERY_PREFIX` | both | config | empty | Role markers some retrieval models require (Nemotron: `passage: ` and `query: `). Indexing and symmetric comparisons use the document prefix, searches use the query prefix. Part of the model identity: changing either needs a new collection and a re-index. |
 | `INGEST_PAGE_MIN_CHARS`, `INGEST_MAX_TEXTLESS_SHARE` | ingest | config | `20`, `0.5` | A page with fewer characters counts as empty. A document with more than this share of empty pages fails with `no_selectable_text`. |
 | `LLM_BASE_URL` | agent | config | required | OpenAI-compatible chat endpoint. |
 | `LLM_API_KEY` | agent | secret | OpenBao `worker-agent/llm` | Its key. |

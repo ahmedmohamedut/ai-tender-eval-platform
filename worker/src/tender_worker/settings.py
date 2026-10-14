@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     EMBEDDING_DIMENSIONS: int | None = Field(default=None, ge=8)
     EMBEDDING_API_KEY: SecretStr | None = None
     EMBEDDING_BATCH_SIZE: int = Field(default=64, ge=1)
+    EMBEDDING_DOCUMENT_PREFIX: str = ""
+    EMBEDDING_QUERY_PREFIX: str = ""
     QDRANT_UPSERT_BATCH_SIZE: int = Field(default=128, ge=1)
 
     LLM_BASE_URL: str | None = None

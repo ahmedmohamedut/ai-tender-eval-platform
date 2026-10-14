@@ -173,14 +173,7 @@ class Runner:
                 s.QDRANT_URL,
                 s.QDRANT_API_KEY.get_secret_value(),
                 s.QDRANT_COLLECTION,
-                EmbeddingClient(
-                    base_url=s.EMBEDDING_BASE_URL or "",
-                    model=s.EMBEDDING_MODEL or "",
-                    api_key=s.EMBEDDING_API_KEY.get_secret_value() if s.EMBEDDING_API_KEY else "",
-                    dimensions=s.EMBEDDING_DIMENSIONS or 0,
-                    batch_size=s.EMBEDDING_BATCH_SIZE,
-                    timeout=s.DEP_TIMEOUT_SECONDS,
-                ),
+                EmbeddingClient.from_settings(s),
                 upsert_batch=s.QDRANT_UPSERT_BATCH_SIZE,
                 timeout=s.DEP_TIMEOUT_SECONDS,
             )
@@ -270,14 +263,7 @@ class Runner:
         async def cancelled(job_id) -> bool:
             return await NatsKv().get(f"cancel.{job_id}") is not None
 
-        embeddings = EmbeddingClient(
-            base_url=s.EMBEDDING_BASE_URL or "",
-            model=s.EMBEDDING_MODEL or "",
-            api_key=s.EMBEDDING_API_KEY.get_secret_value() if s.EMBEDDING_API_KEY else "",
-            dimensions=s.EMBEDDING_DIMENSIONS or 0,
-            batch_size=s.EMBEDDING_BATCH_SIZE,
-            timeout=s.DEP_TIMEOUT_SECONDS,
-        )
+        embeddings = EmbeddingClient.from_settings(s)
         llm = OpenAiCompatible(
             base_url=s.LLM_BASE_URL,
             api_key=s.LLM_API_KEY.get_secret_value(),

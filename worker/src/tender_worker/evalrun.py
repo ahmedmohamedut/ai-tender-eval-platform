@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import uuid
 from dataclasses import dataclass
@@ -61,11 +62,16 @@ class _Source:
         return self._p
 
 
+_EMBEDDER = None  # an EmbeddingClient when a real embedding endpoint is given; else the hash stub
+
+
 async def _embed(texts: list[str]) -> list[list[float]]:
+    if _EMBEDDER is not None:
+        return await _EMBEDDER.embed(texts)
     return [stub_embedding.embed(t) for t in texts]
 
 
-async def run_case(data: dict, llm) -> CaseResult:
+async def run_case(data: dict, llm, window_chars: int = 4000) -> CaseResult:
     passages = [
         PassageRef(
             id=p["id"],
@@ -84,7 +90,7 @@ async def run_case(data: dict, llm) -> CaseResult:
         embed=_embed,
         tender_id=TENDER,
         job_id=JOB,
-        settings=ExtractionSettings(window_chars=4000, overlap_passages=1),
+        settings=ExtractionSettings(window_chars=window_chars, overlap_passages=1),
     )
     items, counters = await graph.run([ScopeItem(version_id=VERSION)], data["categories"], [])
     expected = data["expected"]
@@ -118,6 +124,8 @@ async def run_case(data: dict, llm) -> CaseResult:
         other = produced_for.get(e[other_key])
         if item is None or other is None:
             return False
+        if kind == "possible_duplicate" and item is other:
+            return True  # the model stated the requirement once and cited both passages
         return any(
             f["flag_type"] == kind and f.get("related_item_id") == other.item_id for f in item.flags
         ) or any(
@@ -146,18 +154,27 @@ def _pct(a: int, b: int) -> str:
     return "n/a" if b == 0 else f"{100 * a / b:.0f} %"
 
 
-def render(results: list[CaseResult], model: str, endpoint: str) -> str:
+def render(
+    results: list[CaseResult],
+    model: str,
+    endpoint: str,
+    embedding: str = "hash stub (256)",
+    window_chars: int = 4000,
+    max_tokens: int = 4096,
+) -> str:
     tot = lambda f: sum(getattr(r, f) for r in results)  # noqa: E731
     lines = [
         "# Extraction evaluation",
         "",
         f"- Run: {datetime.now(UTC):%Y-%m-%d %H:%M} UTC",
         f"- Model: `{model}` at `{endpoint}`",
+        f"- Embedding: {embedding}",
+        f"- Window: {window_chars} characters, output limit {max_tokens} tokens",
         f"- Prompt: `{EXTRACTION_VERSION}` (bundle `{bundle_hash()[:12]}`)",
         "- Documents: synthetic (evalset/extraction)",
         "",
         "| Case | Expected | Produced | Recall | Precision | Verbatim sources | Importance | "
-        "Duplicates flagged | Conflicts flagged | Dropped |",
+        "Duplicates handled | Conflicts flagged | Dropped |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     rows = [*results]
@@ -200,8 +217,22 @@ def _row(name: str, r: CaseResult) -> str:
 
 
 async def main_async(args: argparse.Namespace) -> int:
+    global _EMBEDDER
     server = None
     base_url, api_key, model = args.base_url, args.api_key, args.model
+    embedding_label = "hash stub (256)"
+    if args.embedding_base_url:
+        from tender_worker.ingest.index import EmbeddingClient
+
+        _EMBEDDER = EmbeddingClient(
+            base_url=args.embedding_base_url,
+            model=args.embedding_model or "",
+            api_key=args.embedding_api_key or "none",
+            dimensions=args.embedding_dimensions,
+            document_prefix=args.embedding_document_prefix,
+            timeout=args.timeout,
+        )
+        embedding_label = f"{args.embedding_model} ({args.embedding_dimensions})"
     if not base_url:
         server = TestServer(stub_llm.app())
         await server.start_server()
@@ -213,21 +244,31 @@ async def main_async(args: argparse.Namespace) -> int:
         model=model or "unknown",
         structured_output=args.mode,
         timeout=args.timeout,
+        max_tokens=args.max_output_tokens,
         retries=3,
     )
     results = []
     try:
         for path in sorted(SET_DIR.glob("*.json")):
-            results.append(await run_case(json.loads(path.read_text()), llm))
+            results.append(await run_case(json.loads(path.read_text()), llm, args.window_chars))
     finally:
         if server is not None:
             await server.close()
-    text = render(results, model or "unknown", args.base_url or "in-process stub")
+    text = render(
+        results,
+        model or "unknown",
+        args.base_url or "in-process stub",
+        embedding_label,
+        args.window_chars,
+        args.max_output_tokens,
+    )
     sys.stdout.write(text)
     if args.write:
         out = ROOT.parent / "docs" / "releases"
         out.mkdir(parents=True, exist_ok=True)
         slug = (model or "stub").replace("/", "_")
+        if args.embedding_base_url:
+            slug += "-" + (args.embedding_model or "embedding").replace("/", "_")
         target = out / f"extraction-eval-{datetime.now(UTC):%Y%m%d}-{slug}.md"
         target.write_text(text)
         sys.stderr.write(f"wrote {target}\n")
@@ -241,9 +282,16 @@ def main() -> None:
     p.add_argument("set", choices=["extraction"])
     p.add_argument("--base-url")
     p.add_argument("--model")
-    p.add_argument("--api-key")
+    p.add_argument("--api-key", default=os.environ.get("EVAL_LLM_API_KEY"))
     p.add_argument("--mode", default="json_schema", choices=["json_schema", "function_calling"])
     p.add_argument("--timeout", type=int, default=180)
+    p.add_argument("--embedding-base-url")
+    p.add_argument("--embedding-model")
+    p.add_argument("--embedding-api-key", default=os.environ.get("EVAL_EMBEDDING_API_KEY"))
+    p.add_argument("--embedding-dimensions", type=int, default=256)
+    p.add_argument("--embedding-document-prefix", default="")
+    p.add_argument("--window-chars", type=int, default=4000)
+    p.add_argument("--max-output-tokens", type=int, default=4096)
     p.add_argument("--write", action="store_true")
     args = p.parse_args()
     raise SystemExit(asyncio.run(main_async(args)))

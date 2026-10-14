@@ -198,3 +198,61 @@ async def test_an_unreachable_embedding_service_is_llm_unavailable(services):
     with pytest.raises(IngestFailure) as err:
         await idx.index(ref(), passages, sections)
     assert err.value.code == "llm_unavailable"
+
+
+async def test_role_prefixes_are_added_to_documents_and_queries():
+    seen: list[list[str]] = []
+
+    async def handler(request):
+        body = await request.json()
+        seen.append(body["input"])
+        return web.json_response(
+            {"data": [{"index": i, "embedding": [0.0] * 8} for i, _ in enumerate(body["input"])]}
+        )
+
+    app = web.Application()
+    app.router.add_post("/v1/embeddings", handler)
+    server = TestServer(app)
+    await server.start_server()
+    try:
+        client = EmbeddingClient(
+            base_url=str(server.make_url("/v1")).rstrip("/"),
+            model="m",
+            api_key="k",
+            dimensions=8,
+            document_prefix="passage: ",
+            query_prefix="query: ",
+        )
+        await client.embed(["a", "b"])
+        await client.embed(["q"], kind="query")
+        plain = EmbeddingClient(
+            base_url=str(server.make_url("/v1")).rstrip("/"), model="m", api_key="k", dimensions=8
+        )
+        await plain.embed(["c"])
+    finally:
+        await server.close()
+    assert seen == [["passage: a", "passage: b"], ["query: q"], ["c"]]
+
+
+async def test_a_wrong_dimension_is_refused():
+    async def handler(request):
+        body = await request.json()
+        return web.json_response(
+            {"data": [{"index": i, "embedding": [0.0] * 5} for i, _ in enumerate(body["input"])]}
+        )
+
+    app = web.Application()
+    app.router.add_post("/v1/embeddings", handler)
+    server = TestServer(app)
+    await server.start_server()
+    try:
+        client = EmbeddingClient(
+            base_url=str(server.make_url("/v1")).rstrip("/"),
+            model="m",
+            api_key="k",
+            dimensions=8,
+        )
+        with pytest.raises(Exception):  # noqa: B017 - shape error, retried then surfaced
+            await client.embed(["a"])
+    finally:
+        await server.close()

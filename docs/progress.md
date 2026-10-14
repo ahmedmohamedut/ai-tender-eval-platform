@@ -17,7 +17,7 @@ Status words: **done** (built, tested, committed), **partial** (built with a sta
 | 1 Platform spine | done | Browser journey, policy and audit-coverage tests |
 | 2 Documents and ingestion | done | Clean-clone gate, drills 8 of 8, 300-page run |
 | 3 Requirements | done, with gaps (below) | Gate run on the running stack: lint, api, contracts, unit, integration, e2e (3 journeys), verify-env, smoke-ingest, eval, extraction-smoke; extraction drills 6 of 6 |
-| 4 Screening and evaluation | not started (plan to be written and approved first) | |
+| 4 Screening and evaluation | in progress (plan approved 2026-10-14; milestones P4-0 to P4-8, see below) | |
 | 5 Consolidation and reporting | not started | |
 | 6, 7 | not started, see roadmap | |
 
@@ -82,9 +82,21 @@ Status words: **done** (built, tested, committed), **partial** (built with a sta
 | Screens PG-10, PG-11, PG-12 | done | P3-7 | vitest (62), `e2e/phase3.spec.ts` | P68; text-selection scope not in the screens |
 | Failure drills for extraction, extraction retry, gate | done | P3-8 | `DRILL_SET=extraction make drills` (6 of 6), gate run | P69 |
 
-### Phase 4 and later
+### Phase 4: Screening and evaluation (plan: P4-0 to P4-8)
 
-Not started. Phase 4 starts with a plan for review (it adds tables that hold member decisions and independence policies, which `AGENTS.md` says to stop and ask about).
+Decisions for this phase: notification centre and email move to Phase 5; Chair reads peers like a member (Q3 default); other open data questions take the documented defaults (P70 and the Phase 4 entries that follow).
+
+| Work item | Status | Commit | Verified by | Notes |
+| --- | --- | --- | --- | --- |
+| P4-0 Embeddings and models (Nemotron prefixes, eval tooling, release record) | done, defaults not switched | P4-0 | worker unit tests (118), `docs/releases/extraction-eval-20261014-gemma-4-12b-nemotron-embed-8b.md` | P70; containers cannot reach the gateway (I12) |
+| P4-1 Schema and RLS (ten tables, policies, triggers) | not started | | | Pauses for review before merge |
+| P4-2 Conflict declaration and proposal access (PG-13) | not started | | | Closes G8 |
+| P4-3 Screening and pre-check job (PG-14) | not started | | | |
+| P4-4 Evaluation backend (job, grades handler, member rows, outdated) | not started | | | |
+| P4-5 Evaluation graph (retrieval, grade, verify absence, repair, resume) | not started | | | |
+| P4-6 Member evaluation API | not started | | | |
+| P4-7 Screens PG-15, PG-16 | not started | | | |
+| P4-8 Evaluation sets, security tests, drills, gate | not started | | | |
 
 ## Issues and fixes
 
@@ -103,6 +115,7 @@ Notable problems found while building, how each was found and what guards agains
 | I9 | 3 | A failed extraction could not be retried | `retryJob` answered 501 for AI jobs; found by the outage drill | Retry creates a new job over the same scope with `retry_of_job_id` (P69) | `ExtractionApiIT`, `AuditWriteCoverageIT`, drill 8 |
 | I10 | 3 | Extraction drills could not start a job | The drill uploaded the RFP as type `other`, so the tender would not open | Upload with `doc_type=rfp` | `DRILL_SET=extraction make drills` |
 | I11 | 3 | Kill drill killed nothing | One window, so the stub answered before the kill | Stub delay control, 20 s delay | Drill 7 |
+| I12 | 4 | Real model unreachable from containers; real extraction failed with `LlmUnavailable` | The gateway listens on `127.0.0.1` (refused from `host.docker.internal`); `gemma-4-12b` has a 4096-token context, so a 4096-token output limit overflowed it and 1,800 to 2,300 token outputs were cut or overflowed with 2,000 to 4,000 character windows | Eval run from the host with 1,200-character windows and 1,800 output tokens; settings recorded in P70 | `make eval` with `--window-chars`/`--max-output-tokens` |
 
 ## Open gaps
 
@@ -119,4 +132,5 @@ Notable problems found while building, how each was found and what guards agains
 | G9 | `render` buffers the whole PDF in memory | Large documents | Stream with Range |
 | G10 | Parts are published together after the graph finishes, so a cancel keeps nothing or whole parts (P69) | Long extractions | Design change if incremental results are wanted |
 | G11 | A gate from a wiped clone was not repeated for Phase 3 (`make clean` deletes local data) | Phase 3 sign-off | `git clone`, `make up`, then the gate |
+| G13 | The containers cannot use the real model gateway (loopback only) and the chat model has a 4096-token context | Real end-to-end runs and grading quality | Bind the gateway to the Docker bridge or forward it; serve a model with a larger context |
 | G12 | Decision owners and dates (Phase 0 table) are not recorded | Phase 0 exit criterion | Name an owner for each row |
