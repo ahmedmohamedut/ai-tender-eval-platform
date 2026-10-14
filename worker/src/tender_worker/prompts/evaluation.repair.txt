@@ -1,0 +1,17 @@
+Requirement {number} ({importance}, category: {category}):
+{text}
+
+Acceptance criteria:
+{criteria}
+
+Passages of the proposal:
+{passages}
+
+Your earlier answer was rejected for these reasons:
+{problems}
+
+Your earlier answer:
+{previous}
+
+Grade the requirement again. Correct only what was rejected, quote word for word from the passages,
+and cite only passage ids you were given.

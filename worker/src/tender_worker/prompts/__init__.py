@@ -9,6 +9,7 @@ from pathlib import Path
 
 EXTRACTION_VERSION = "extraction-1.0.0"
 PRECHECK_VERSION = "precheck-1.0.0"
+EVALUATION_VERSION = "evaluation-1.0.0"
 _DIR = Path(__file__).parent
 
 

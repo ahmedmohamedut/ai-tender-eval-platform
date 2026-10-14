@@ -1,0 +1,10 @@
+Requirement {number} ({importance}, category: {category}):
+{text}
+
+Acceptance criteria:
+{criteria}
+
+Passages of the proposal:
+{passages}
+
+Grade the requirement.

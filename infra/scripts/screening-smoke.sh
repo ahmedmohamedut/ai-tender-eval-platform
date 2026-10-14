@@ -47,7 +47,7 @@ wait_version "$rfp" && ok "RFP ready" || { bad "RFP not ready"; exit 1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$GW/tenders/$tender/open")
 [ "$code" = 200 ] && ok "tender opened" || { bad "open: $code"; exit 1; }
 
-tv=$(api "$ADMIN_TOKEN" POST "/tenders/$tender/vendors" '{"new_vendor":{"name":"Smoke Vendor"}}' | jq -r .id)
+tv=$(api "$ADMIN_TOKEN" POST "/tenders/$tender/vendors" "{\"new_vendor\":{\"name\":\"Smoke Vendor $RANDOM$RANDOM\",\"confirm_duplicate\":true}}" | jq -r .id)
 [ -n "$tv" ] && [ "$tv" != null ] && ok "vendor $tv" || { bad "vendor"; exit 1; }
 up=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" -H "Idempotency-Key: smoke-$RANDOM$RANDOM" -F file_roles=main -F "files=@$DIR/proposal-structured.pdf" "$GW/tender-vendors/$tv/proposal-versions")
 pv=$(echo "$up" | jq -r .id)

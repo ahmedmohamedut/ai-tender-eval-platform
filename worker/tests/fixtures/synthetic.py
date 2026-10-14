@@ -250,7 +250,18 @@ def make_structured_proposal(present: list[str]) -> bytes:
     return make_structured(
         "Proposal: managed platform",
         [
-            (name, [f"This section describes our {name.lower()} in detail for the ministry."])
+            (
+                name,
+                [f"This section describes our {name.lower()} in detail for the ministry."]
+                + (
+                    [
+                        "We encrypt all customer data at rest using AES-256 in every region.",
+                        "Support is provided during working hours by a named service team.",
+                    ]
+                    if name == "Technical solution"
+                    else []
+                ),
+            )
             for name in present
         ],
     )

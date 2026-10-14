@@ -270,3 +270,31 @@ async def handle_precheck(
         )
     except BadInput as exc:
         raise DeadLetter(str(exc)) from exc
+
+
+async def handle_evaluation(
+    ctx: Context,
+    body: bytes,
+    schema_header: str | None,
+    deliveries: int,
+    traceparent: str | None,
+) -> None:
+    """documents.analysis.requested.evaluation (PI 5.4)."""
+    check_schema(schema_header, SCHEMA_COMMAND)
+    try:
+        command = Command.model_validate_json(body)
+    except ValidationError as exc:
+        raise DeadLetter("invalid command body") from exc
+    if command.job_type != "evaluation":
+        raise DeadLetter(f"unknown job type {command.job_type}")
+    if ctx.agent is None or ctx.cancelled is None:
+        log.info("evaluation command seen; no model endpoint is configured")
+        return
+    from tender_worker.agent.runtime import run_evaluation
+
+    try:
+        await run_evaluation(
+            ctx.agent, command, deliveries, traceparent or new_traceparent(), ctx.cancelled
+        )
+    except BadInput as exc:
+        raise DeadLetter(str(exc)) from exc

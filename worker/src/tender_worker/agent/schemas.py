@@ -47,3 +47,22 @@ class SectionMatch(BaseModel):
     found: bool
     matched_title: str | None = Field(default=None, max_length=300)
     passage_ids: list[str] = Field(default_factory=list, max_length=6)
+
+
+class GradeCitation(BaseModel):
+    passage_id: str
+    quote: str = Field(max_length=600)
+
+
+class GradeDraft(BaseModel):
+    grade: Literal["fully_compliant", "partially_compliant", "non_compliant"]
+    non_compliance_reason: Literal["explicitly_excluded", "not_addressed"] | None = None
+    rationale_summary: str = Field(max_length=400)
+    rationale: str = Field(max_length=2400)
+    missing_elements: list[str] = Field(default_factory=list, max_length=8)
+    citations: list[GradeCitation] = Field(default_factory=list, max_length=4)
+    certainty: Literal["high", "medium", "low"] = "medium"
+
+
+class QueryPlan(BaseModel):
+    queries: list[str] = Field(default_factory=list, max_length=3)

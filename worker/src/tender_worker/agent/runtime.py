@@ -7,16 +7,22 @@ the final marker republishes the sealed parts unchanged and never calls the mode
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
 from uuid import UUID
 
 from tender_worker import metrics
+from tender_worker.agent.evaluation import (
+    EvaluationGraph,
+    EvaluationSettings,
+    Requirement,
+)
 from tender_worker.agent.extraction import (
     ExtractionGraph,
     ExtractionSettings,
@@ -26,6 +32,7 @@ from tender_worker.agent.extraction import (
 from tender_worker.agent.llm import LlmUnavailable, StructuredLlm
 from tender_worker.agent.precheck import PrecheckGraph
 from tender_worker.agent.retrieval import PassageSource, ScopeItem
+from tender_worker.agent.search import Searcher
 from tender_worker.messages import (
     SCHEMA_RESULT,
     SCHEMA_STATUS,
@@ -37,7 +44,7 @@ from tender_worker.messages import (
     WorkerInfo,
 )
 from tender_worker.messages import Warning_ as StatusWarning
-from tender_worker.prompts import EXTRACTION_VERSION, PRECHECK_VERSION
+from tender_worker.prompts import EVALUATION_VERSION, EXTRACTION_VERSION, PRECHECK_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +52,7 @@ STATUS_SUBJECT = "documents.analysis.status.{}"
 RESULT_SUBJECT = "documents.analysis.result.{}"
 STEPS = ["load_scope", "plan_windows", "extract", "merge", "compare", "flag", "seal"]
 PRECHECK_STEPS = ["load_scope", "find_format", "list_expected", "match", "seal"]
+EVALUATION_STEPS = ["load_input", "retrieve", "grade", "validate", "seal"]
 BATCH_BYTES = 256 * 1024
 
 
@@ -79,6 +87,11 @@ class AgentDeps:
     batch_max_items: int = 50
     cancel_check_seconds: float = 10.0
     precheck_model: str | None = None
+    evaluation_model: str | None = None
+    search: Searcher | None = None
+    embed_query: Callable[[list[str]], Awaitable[list[list[float]]]] | None = None
+    evaluation_settings: EvaluationSettings = field(default_factory=EvaluationSettings)
+    concurrency: int = 8
 
 
 class BadInput(Exception):
@@ -419,3 +432,180 @@ async def run_precheck(
     await deps.kv.put(f"part.{job}.final", json.dumps(final).encode())
     await _republish(deps, emitter, job, final)
     metrics.inc("precheck_jobs_total", outcome="completed")
+
+
+async def _sealed_parts(deps: AgentDeps, job: UUID) -> list[list[dict]]:
+    """The parts already sealed for this job, in order (a restart reads them, never redoes them)."""
+    parts: list[list[dict]] = []
+    n = 1
+    while True:
+        raw = await deps.kv.get(f"part.{job}.{n}")
+        if raw is None:
+            return parts
+        parts.append(json.loads(raw))
+        n += 1
+
+
+def _grade_warnings(items: list[dict], injected: int) -> list[StatusWarning]:
+    out: list[StatusWarning] = []
+    failed = sum(1 for i in items if i.get("outcome") == "failed")
+    if failed:
+        out.append(
+            StatusWarning(
+                code="row_failed",
+                message="Some requirements could not be graded with evidence",
+                count=failed,
+            )
+        )
+    if injected:
+        out.append(
+            StatusWarning(
+                code="suspected_injection",
+                message="Some passages held instruction-like text; those grades are low confidence",
+                count=injected,
+            )
+        )
+    return out
+
+
+async def run_evaluation(
+    deps: AgentDeps,
+    command: Command,
+    deliveries: int,
+    traceparent: str,
+    cancelled: Callable[[UUID], Awaitable[bool]],
+) -> None:
+    """The evaluation job (AI 4.2, 2.5): rows are graded in parallel and sealed as they finish.
+
+    Every 50 rows (or at the end, or on a cancel) a part is sealed in JOB_CONTROL and then
+    published, so rows reach the reviewers while the job runs. A restart republishes the sealed
+    parts and grades only the requirements no sealed part holds.
+    """
+    emitter = _Emitter(command, deps, deliveries, traceparent)
+    job = command.job_id
+    if await cancelled(job):
+        await emitter.status("cancelled")
+        return
+    if deps.search is None or deps.embed_query is None:
+        raise BadInput("retrieval is not configured")
+
+    data = await _load_input(deps, command)
+    versions = [str(v) for v in data.get("proposal_document_version_ids", [])]
+    if not versions:
+        raise BadInput("the proposal has no files in scope")
+    requirements = [
+        Requirement(
+            id=str(r["id"]),
+            number=str(r.get("number", "")),
+            text=str(r["text"]),
+            acceptance_criteria=str(r.get("acceptance_criteria") or ""),
+            importance=str(r.get("importance") or "mandatory"),
+            category=r.get("category"),
+            requirement_hash=str(r["requirement_hash"]),
+        )
+        for r in data.get("requirements", [])
+    ]
+    run = RunInfo(
+        model_name=deps.evaluation_model or deps.model_name,
+        model_version=deps.model_version,
+        prompt_version=EVALUATION_VERSION,
+        input_scope={
+            "baseline_id": data.get("baseline_id"),
+            "proposal_version_id": data.get("proposal_version_id"),
+            "document_versions": sorted(versions),
+            "requirements": len(requirements),
+        },
+    )
+    await emitter.status(
+        "running", step="load_input", progress_percent=2, steps=EVALUATION_STEPS, run=run
+    )
+
+    # What is sealed stays; it is published again (the ids make that harmless).
+    sealed = await _sealed_parts(deps, job)
+    done_ids = {i["requirement_id"] for part in sealed for i in part}
+    all_items: list[dict] = [i for part in sealed for i in part]
+    for n, part in enumerate(sealed, start=1):
+        await emitter.batch(n, False, part, "grades")
+    todo = [r for r in requirements if r.id not in done_ids]
+    total = len(requirements)
+    injected = 0
+    part_no = len(sealed)
+
+    graph = EvaluationGraph(
+        llm=deps.llm,
+        search=deps.search,
+        embed_query=deps.embed_query,
+        tender_id=command.tender_id,
+        job_id=job,
+        version_ids=versions,
+        settings=deps.evaluation_settings,
+        model=deps.evaluation_model,
+    )
+    gate = asyncio.Semaphore(max(1, deps.concurrency))
+    buffer: list[dict] = []
+    lock = asyncio.Lock()
+    stop = asyncio.Event()
+    state = {"cancel_at": 0.0, "stopped": False}
+
+    async def seal() -> None:
+        nonlocal part_no, buffer
+        if not buffer:
+            return
+        part_no += 1
+        part, buffer = buffer, []
+        await deps.kv.put(f"part.{job}.{part_no}", json.dumps(part).encode())
+        await emitter.batch(part_no, False, part, "grades")
+
+    async def one(req: Requirement) -> None:
+        nonlocal injected
+        async with gate:
+            if stop.is_set():
+                return
+            loop_time = asyncio.get_running_loop().time()
+            if loop_time - state["cancel_at"] >= deps.cancel_check_seconds:
+                state["cancel_at"] = loop_time
+                if await cancelled(job):
+                    stop.set()
+                    return
+            row = await graph.grade_requirement(req)
+        async with lock:
+            buffer.append(row.item)
+            all_items.append(row.item)
+            if row.injection and row.item.get("outcome") == "graded":
+                injected += 1
+            if len(buffer) >= deps.batch_max_items:
+                await seal()
+            percent = 5 + int(90 * len(all_items) / max(1, total))
+            await emitter.status("running", step="grade", progress_percent=min(95, percent))
+
+    try:
+        await asyncio.gather(*(one(r) for r in todo))
+    except LlmUnavailable:
+        stop.set()
+        async with lock:
+            await seal()
+        await emitter.status(
+            "failed",
+            failure=Failure(
+                code="llm_unavailable", message="The model did not answer", retryable=True
+            ),
+        )
+        metrics.inc("evaluation_jobs_total", outcome="llm_unavailable")
+        return
+    async with lock:
+        await seal()
+    if stop.is_set() or await cancelled(job):
+        await emitter.status("cancelled")
+        metrics.inc("evaluation_jobs_total", outcome="cancelled")
+        return
+
+    warnings = _grade_warnings(all_items, injected)
+    await emitter.status(
+        "completed_with_warnings" if warnings else "completed",
+        step="seal",
+        progress_percent=100,
+        result_parts=part_no,
+        counts={"grades": len(all_items)},
+        warnings=warnings or None,
+    )
+    metrics.inc("evaluation_jobs_total", outcome="completed")

@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     EXTRACTION_WINDOW_CHARS: int = Field(default=8000, ge=500)
     EXTRACTION_WINDOW_OVERLAP_PASSAGES: int = Field(default=2, ge=0)
     DEDUP_SIMILARITY_THRESHOLD: float = Field(default=0.85, ge=0, le=1)
+    LLM_MODEL_EVALUATION: str | None = None
+    RETRIEVAL_TOP_K: int = Field(default=8, ge=1, le=50)
+    RETRIEVAL_MIN_SCORE: float | None = None
+    RETRIEVAL_CONTEXT_NEIGHBORS: int = Field(default=1, ge=0, le=3)
+    GRADE_CONTEXT_MAX_CHARS: int = Field(default=12000, ge=1000)
+    VERIFY_ABSENCE_MAX_SEARCHES: int = Field(default=3, ge=0, le=5)
     GROUNDING_MAX_REPAIR_ATTEMPTS: int = Field(default=1, ge=0, le=3)
     RESULT_BATCH_MAX_ITEMS: int = Field(default=50, ge=1, le=50)
     CANCEL_CHECK_SECONDS: int = Field(default=10, ge=1)

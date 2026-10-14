@@ -19,7 +19,10 @@ from nats.aio.msg import Msg
 from nats.errors import TimeoutError as NatsTimeout
 from nats.js.errors import APIError, KeyNotFoundError
 
+from tender_worker.agent.evaluation import EvaluationSettings
+from tender_worker.agent.search import QdrantSearch
 from tender_worker.consumers import (
+    AGENT_EVALUATION,
     AGENT_EXTRACTION,
     AGENT_PRECHECK,
     INGEST_COMMANDS,
@@ -32,6 +35,7 @@ from tender_worker.handlers import (
     Context,
     DeadLetter,
     handle_command,
+    handle_evaluation,
     handle_extraction,
     handle_precheck,
     handle_uploaded,
@@ -277,6 +281,10 @@ class Runner:
             structured_output=s.LLM_STRUCTURED_OUTPUT,
             breaker=Breaker(give_up_seconds=s.LLM_OUTAGE_GIVE_UP_SECONDS),
         )
+
+        async def embed_query(texts: list[str]) -> list[list[float]]:
+            return await embeddings.embed(texts, kind="query")
+
         deps = AgentDeps(
             publisher=publisher,
             kv=NatsKv(),
@@ -293,6 +301,23 @@ class Runner:
             bucket_jobs=s.S3_BUCKET_JOBS,
             model_name=s.LLM_MODEL_EXTRACTION,
             precheck_model=s.LLM_MODEL_PRECHECK,
+            evaluation_model=s.LLM_MODEL_EVALUATION,
+            search=QdrantSearch(
+                s.QDRANT_URL,
+                s.QDRANT_API_KEY.get_secret_value(),
+                s.QDRANT_COLLECTION,
+                timeout=s.DEP_TIMEOUT_SECONDS,
+                min_score=s.RETRIEVAL_MIN_SCORE,
+            ),
+            embed_query=embed_query,
+            evaluation_settings=EvaluationSettings(
+                top_k=s.RETRIEVAL_TOP_K,
+                context_neighbors=s.RETRIEVAL_CONTEXT_NEIGHBORS,
+                context_max_chars=s.GRADE_CONTEXT_MAX_CHARS,
+                max_searches=s.VERIFY_ABSENCE_MAX_SEARCHES,
+                max_repairs=s.GROUNDING_MAX_REPAIR_ATTEMPTS,
+            ),
+            concurrency=s.LLM_MAX_CONCURRENCY,
             model_version=s.LLM_MODEL_VERSION,
             settings=ExtractionSettings(
                 window_chars=s.EXTRACTION_WINDOW_CHARS,
@@ -363,8 +388,11 @@ class Runner:
                 await handle_precheck(
                     ctx, msg.data, headers.get("Tender-Schema"), deliveries, traceparent
                 )
+            elif spec is AGENT_EVALUATION:
+                await handle_evaluation(
+                    ctx, msg.data, headers.get("Tender-Schema"), deliveries, traceparent
+                )
             else:
-                # The evaluation graph arrives with the next milestone.
                 log.info("agent command seen", extra={"durable": spec.durable})
             await msg.ack()
         except DeadLetter as exc:
