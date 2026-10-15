@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { accessibilityViolations, fakeApi, makeMe, renderPage } from "../test/helpers";
 import { Notifications } from "./Notifications";
 import { ChairPanel } from "./ChairPanel";
+import { Report } from "./Report";
+import { Route, Routes } from "react-router";
 
 const T = "22222222-2222-4222-8222-222222222222";
 const TV = "33333333-3333-4333-8333-333333333333";
@@ -128,5 +130,234 @@ describe("Chair panel", () => {
     expect(
       screen.queryByRole("heading", { name: "Evaluations by member" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("PG-19 Consolidated report", () => {
+  const R1 = "77777777-7777-4777-8777-777777777777";
+  const header = (over: Record<string, unknown> = {}) => ({
+    tender_id: T,
+    tender_name: "Cloud platform",
+    version_no: 1,
+    status: "in_progress",
+    baseline_version: 2,
+    scoring_model: {
+      points_fully: 1,
+      points_partially: 0.5,
+      points_non: 0,
+      mandatory_rule: "flag_only",
+      weights: [],
+      locked: true,
+    },
+    committee: [{ id: U1, display_name: "Mia Member" }],
+    disagreement_count: 1,
+    ai_model_versions: ["stub 1"],
+    actions: {
+      finalize: { allowed: false, reason: "1 disagreements still need a final grade" },
+      export: { allowed: true },
+    },
+    ...over,
+  });
+  const tender = {
+    id: T,
+    name: "Cloud platform",
+    status: "consolidation",
+    chair: { id: ME, display_name: "Chair Person" },
+    actions: {},
+    row_version: 1,
+  };
+  const handler = (extra: (call: string, init?: Record<string, unknown>) => unknown) =>
+    fakeApi((call, init) => {
+      const out = extra(call, init);
+      if (out !== undefined) return out;
+      switch (call) {
+        case "GET /tenders/{tenderId}":
+          return { data: tender };
+        case "GET /tenders/{tenderId}/report":
+          return { data: header() };
+        case "GET /tenders/{tenderId}/report/overview":
+          return {
+            data: {
+              vendors: [
+                {
+                  tender_vendor_id: TV,
+                  vendor_name: "Acme Cloud",
+                  available: true,
+                  outcome: "evaluated",
+                  rank: 1,
+                  final_score: 25,
+                  compliance_percent: 0,
+                  mandatory_failures: 1,
+                  fails_mandatory: true,
+                  counts: { fully_compliant: 0, partially_compliant: 1, non_compliant: 1 },
+                  agreement_level: 50,
+                  awaiting: [],
+                },
+              ],
+            },
+          };
+        case "GET /tenders/{tenderId}/report/matrix":
+          return {
+            data: {
+              vendors: [{ tender_vendor_id: TV, name: "Acme Cloud" }],
+              rows: [
+                {
+                  requirement: {
+                    id: R1,
+                    display_no: "REQ-001",
+                    text: "Encrypt data at rest",
+                    category: "",
+                    importance: "mandatory",
+                  },
+                  cells: [{ tender_vendor_id: TV, available: true, has_disagreement: true }],
+                },
+              ],
+            },
+          };
+        case "GET /tenders/{tenderId}/report/matrix/{requirementId}/{tenderVendorId}":
+          return {
+            data: {
+              requirement: {
+                id: R1,
+                display_no: "REQ-001",
+                text: "Encrypt data at rest",
+                category: "",
+                importance: "mandatory",
+              },
+              tender_vendor_id: TV,
+              final_grade: null,
+              member_grades: [
+                {
+                  member: { id: U1, display_name: "Mia Member" },
+                  grade: "fully_compliant",
+                  review_state: "agreed",
+                },
+                {
+                  member: { id: "other", display_name: "Omar Member" },
+                  grade: "partially_compliant",
+                  review_state: "overridden",
+                  note: "Backups only",
+                },
+              ],
+              ai: null,
+            },
+          };
+        case "GET /tenders/{tenderId}/report/versions":
+          return { data: [{ version_no: 1, status: "in_progress" }] };
+        case "GET /tenders/{tenderId}/report/screening-outcomes":
+          return { data: [] };
+        case "GET /tenders/{tenderId}/report/appendix":
+          return {
+            data: {
+              clarification_lists: [],
+              override_stats: [{ tender_vendor_id: TV, overridden: 1, total: 2, percent: 50 }],
+              ai_model_versions: [],
+              audit_summary: { events: 0 },
+            },
+          };
+        case "GET /tenders/{tenderId}/report/progress":
+          return { status: 403, error: { title: "Forbidden", code: "forbidden", status: 403 } };
+        default:
+          return { data: undefined };
+      }
+    });
+
+  function chair() {
+    const me = makeMe("member");
+    me.user.id = ME;
+    return me;
+  }
+
+  function page() {
+    return (
+      <Routes>
+        <Route path="/tenders/:tenderId/report" element={<Report />} />
+      </Routes>
+    );
+  }
+
+  it("shows the Chair the status, ranking and a disabled finalize with its reason", async () => {
+    const api = handler(() => undefined);
+    const { container } = renderPage(page(), {
+      api,
+      me: chair(),
+      route: `/tenders/${T}/report`,
+    });
+    expect(await screen.findByText("Report version 1")).toBeInTheDocument();
+    expect(screen.getAllByText("Acme Cloud", { selector: "th" }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/1 failed \(flag\)/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Finalize report" })).toBeDisabled();
+    expect(screen.getByText("1 disagreements still need a final grade")).toBeInTheDocument();
+    expect(await accessibilityViolations(container)).toEqual([]);
+  });
+
+  it("records a final grade only with a grade and a justification", async () => {
+    const puts: unknown[] = [];
+    const api = handler((call, init) => {
+      if (call === "PUT /tenders/{tenderId}/report/grades/{tenderVendorId}/{requirementId}") {
+        puts.push((init as { body: unknown }).body);
+        return { data: {} };
+      }
+      return undefined;
+    });
+    renderPage(page(), { api, me: chair(), route: `/tenders/${T}/report` });
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Open REQ-001 for Acme Cloud/ }),
+    );
+    expect(await screen.findByText("Backups only")).toBeInTheDocument();
+    const record = screen.getByRole("button", { name: "Record final grade" });
+    expect(record).toBeDisabled();
+    await userEvent.click(screen.getByRole("radio", { name: "Partially compliant" }));
+    await userEvent.type(
+      screen.getByLabelText("Justification (required)"),
+      "Backups only is partial coverage",
+    );
+    await userEvent.click(record);
+    await waitFor(() => expect(puts).toHaveLength(1));
+    expect(puts[0]).toEqual({
+      final_grade: "partially_compliant",
+      justification: "Backups only is partial coverage",
+    });
+  });
+
+  it("lists what is missing when finalizing is refused", async () => {
+    const api = handler((call) => {
+      if (call === "GET /tenders/{tenderId}/report")
+        return {
+          data: header({ actions: { finalize: { allowed: true }, export: { allowed: true } } }),
+        };
+      if (call === "POST /tenders/{tenderId}/report/finalize")
+        return {
+          status: 422,
+          error: {
+            title: "The report is not ready to be finalized",
+            code: "precheck_failed",
+            status: 422,
+            failures: [
+              {
+                code: "disagreements_undecided",
+                message: "Acme Cloud: 1 disagreements have no final grade",
+              },
+            ],
+          },
+        };
+      return undefined;
+    });
+    renderPage(page(), { api, me: chair(), route: `/tenders/${T}/report` });
+    await userEvent.click(await screen.findByRole("button", { name: "Finalize report" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "Finalize report" }).at(-1)!);
+    expect(
+      await screen.findByText("Acme Cloud: 1 disagreements have no final grade"),
+    ).toBeInTheDocument();
+  });
+
+  it("tells a member that an unfinalized report is not available", async () => {
+    const api = handler((call) =>
+      call === "GET /tenders/{tenderId}/report"
+        ? { status: 404, error: { title: "Not found", code: "not_found", status: 404 } }
+        : undefined,
+    );
+    renderPage(page(), { api, me: makeMe("member"), route: `/tenders/${T}/report` });
+    expect(await screen.findByText("The report is not available yet")).toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ import { ApiProvider, type ApiClient } from "./lib/api";
 import { Baseline } from "./pages/Baseline";
 import { Documents } from "./pages/Documents";
 import { Jobs } from "./pages/Jobs";
+import { Report } from "./pages/Report";
 import { Notifications } from "./pages/Notifications";
 import { Requirements } from "./pages/Requirements";
 import { CrossVendor } from "./pages/CrossVendor";
@@ -54,6 +55,7 @@ export function AppRoutes() {
         />
         <Route path="tenders/:tenderId/baseline" element={<Baseline />} />
         <Route path="documents/:versionId/view" element={<Viewer />} />
+        <Route path="tenders/:tenderId/report" element={<Report />} />
         <Route path="jobs" element={<Jobs />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="users" element={<Users />} />

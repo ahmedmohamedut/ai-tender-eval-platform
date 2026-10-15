@@ -627,3 +627,35 @@ tr[aria-selected="true"] {
   padding: 8px 12px;
   margin: 8px 0;
 }
+
+/* PG-19 print layout (UX-RPT-12): the report alone, on white, without controls. */
+@media print {
+  .topbar,
+  .leftnav,
+  .skip-link,
+  .tabs,
+  .stepper,
+  .next-step,
+  .report-actions,
+  .filter-bar,
+  .export-button,
+  button.link {
+    display: none !important;
+  }
+  .shell {
+    display: block;
+  }
+  .content {
+    padding: 0;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+  .report table {
+    page-break-inside: auto;
+  }
+  .report tr {
+    page-break-inside: avoid;
+  }
+}
