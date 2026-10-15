@@ -7,6 +7,7 @@ import { Baseline } from "./pages/Baseline";
 import { Documents } from "./pages/Documents";
 import { Jobs } from "./pages/Jobs";
 import { Report } from "./pages/Report";
+import { Audit } from "./pages/Audit";
 import { Notifications } from "./pages/Notifications";
 import { Requirements } from "./pages/Requirements";
 import { CrossVendor } from "./pages/CrossVendor";
@@ -58,6 +59,7 @@ export function AppRoutes() {
         <Route path="tenders/:tenderId/report" element={<Report />} />
         <Route path="jobs" element={<Jobs />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="audit" element={<Audit />} />
         <Route path="users" element={<Users />} />
         <Route path="categories" element={<Categories />} />
         <Route

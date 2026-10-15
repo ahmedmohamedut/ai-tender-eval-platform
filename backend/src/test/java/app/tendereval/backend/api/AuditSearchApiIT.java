@@ -55,4 +55,41 @@ class AuditSearchApiIT extends AbstractApiIT {
         .jsonPath("$.items.length()")
         .isEqualTo(0);
   }
+
+  @Test
+  void accessLogIsFilteredByTenderAndUserAndRefusesMembers() {
+    World w = ReportWorld.create();
+    UUID dv =
+        (UUID)
+            app.tendereval.backend.testsupport.TestUsers.scalar(
+                "SELECT dv.id FROM document_versions dv JOIN documents d ON d.id = dv.document_id"
+                    + " WHERE d.tender_id = ? LIMIT 1",
+                w.tender());
+    app.tendereval.backend.testsupport.TestUsers.sql(
+        "INSERT INTO document_access_events (user_id, document_version_id, watermark_shown)"
+            + " VALUES (?, ?, true)",
+        w.m1().id(),
+        dv);
+    String q = "/document-access-events?tender_id=" + w.tender() + "&user_id=" + w.m1().id();
+    call("GET", q, w.admin())
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.items.length()")
+        .isEqualTo(1)
+        .jsonPath("$.items[0].user.id")
+        .isEqualTo(w.m1().id().toString())
+        .jsonPath("$.items[0].document_version_id")
+        .isEqualTo(dv.toString())
+        .jsonPath("$.items[0].watermark_shown")
+        .isEqualTo(true);
+    call("GET", q, w.observer()).exchange().expectStatus().isOk();
+    call("GET", q, w.m2()).exchange().expectStatus().isForbidden();
+    call("GET", "/document-access-events?user_id=" + w.m2().id(), w.admin())
+        .exchange()
+        .expectBody()
+        .jsonPath("$.items.length()")
+        .isEqualTo(0);
+  }
 }

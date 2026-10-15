@@ -296,7 +296,7 @@ export function Report() {
               >
                 Finalize report
               </Button>{" "}
-              {!finalize.allowed && finalize.reason && (
+              {!finalize.allowed && finalize.reason && h.disagreement_count === 0 && (
                 <span className="help">{finalize.reason}</span>
               )}
             </>
@@ -507,9 +507,6 @@ export function Report() {
                           <button
                             type="button"
                             className="link"
-                            aria-label={`Open ${r.requirement.display_no} for ${
-                              m.vendors.find((v) => v.tender_vendor_id === c.tender_vendor_id)?.name
-                            }`}
                             onClick={() =>
                               setCellOf({
                                 requirementId: r.requirement.id,
@@ -517,6 +514,14 @@ export function Report() {
                               })
                             }
                           >
+                            <span className="visually-hidden">
+                              Open {r.requirement.display_no} for{" "}
+                              {
+                                m.vendors.find((v) => v.tender_vendor_id === c.tender_vendor_id)
+                                  ?.name
+                              }
+                              :{" "}
+                            </span>
                             {c.has_disagreement && (
                               <StatusChip tone="warning" label="Disagreement" />
                             )}{" "}

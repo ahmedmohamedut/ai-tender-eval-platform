@@ -173,22 +173,6 @@ class MeApiIT extends AbstractApiIT {
   }
 
   @Test
-  void anOperationNotBuiltYetAnswers501AsProblemJson() {
-    TestUser admin = TestUsers.create("admin");
-    get("/document-access-events", admin)
-        .exchange()
-        .expectStatus()
-        .isEqualTo(501)
-        .expectHeader()
-        .contentTypeCompatibleWith("application/problem+json")
-        .expectBody()
-        .jsonPath("$.code")
-        .isEqualTo("not_implemented")
-        .jsonPath("$.trace_id")
-        .isNotEmpty();
-  }
-
-  @Test
   void errorsNeverCarryTheCallersDataOrInternals() {
     TestUser member = TestUsers.create("member");
     String body =

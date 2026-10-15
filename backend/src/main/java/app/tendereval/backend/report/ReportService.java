@@ -704,10 +704,15 @@ public class ReportService {
                                       Actions act = Actions.builder();
                                       act.when(
                                           "finalize",
-                                          chair && v.live() && "consolidation".equals(a.stage()),
                                           chair
-                                              ? "The tender is not in consolidation"
-                                              : "Only the Chair finalizes");
+                                              && v.live()
+                                              && "consolidation".equals(a.stage())
+                                              && open == 0,
+                                          !chair
+                                              ? "Only the Chair finalizes"
+                                              : open > 0
+                                                  ? open + " disagreements still need a final grade"
+                                                  : "The tender is not in consolidation");
                                       act.when(
                                           "reopen",
                                           chair

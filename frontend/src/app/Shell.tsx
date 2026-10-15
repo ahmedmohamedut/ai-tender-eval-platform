@@ -15,13 +15,17 @@ export function Shell() {
           { to: "/jobs", label: "Jobs" },
           { to: "/users", label: "Users" },
           { to: "/categories", label: "Categories" },
+          { to: "/audit", label: "Audit trail" },
         ]
       : role === "member"
         ? [
             { to: "/my-tenders", label: "My tenders" },
             { to: "/jobs", label: "Jobs" },
           ]
-        : [{ to: "/tenders", label: "Tenders" }];
+        : [
+            { to: "/tenders", label: "Tenders" },
+            { to: "/audit", label: "Audit trail" },
+          ];
 
   return (
     <div className="shell">

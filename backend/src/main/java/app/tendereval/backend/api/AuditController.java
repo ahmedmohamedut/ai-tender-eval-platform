@@ -10,8 +10,8 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 /**
- * The Audit group. The export of the filtered trail (UX-AUD-03) is built; the search arrives with
- * the audit screen and answers 501 until then.
+ * The Audit group: search of the trail and of the document access log (UX-AUD-01, UX-NFR-07) and
+ * the export of the filtered trail (UX-AUD-03).
  */
 @RestController
 public class AuditController implements AuditApi {
@@ -19,14 +19,32 @@ public class AuditController implements AuditApi {
   private final ExportService exports;
   private final app.tendereval.backend.db.RequestTransaction tx;
   private final app.tendereval.backend.audit.AuditSearch search;
+  private final app.tendereval.backend.audit.AccessSearch accessSearch;
 
   public AuditController(
       ExportService exports,
       app.tendereval.backend.db.RequestTransaction tx,
-      app.tendereval.backend.audit.AuditSearch search) {
+      app.tendereval.backend.audit.AuditSearch search,
+      app.tendereval.backend.audit.AccessSearch accessSearch) {
     this.exports = exports;
     this.tx = tx;
     this.search = search;
+    this.accessSearch = accessSearch;
+  }
+
+  @Override
+  public Mono<ResponseEntity<app.tendereval.backend.api.model.AccessEventPage>>
+      listDocumentAccessEvents(
+          Integer limit,
+          String cursor,
+          java.util.UUID tenderId,
+          java.util.UUID userId,
+          java.time.OffsetDateTime from,
+          java.time.OffsetDateTime to,
+          ServerWebExchange exchange) {
+    return tx.inRequestTransaction(
+            db -> accessSearch.search(db, limit, cursor, tenderId, userId, from, to))
+        .map(ResponseEntity::ok);
   }
 
   @Override

@@ -140,7 +140,19 @@ class ReportApiIT extends AbstractApiIT {
         .jsonPath("$.failures[0].code")
         .isEqualTo("disagreements_undecided");
     call("POST", base(w) + "/finalize", w.m1()).exchange().expectStatus().isForbidden();
+    call("GET", base(w), w.chair())
+        .exchange()
+        .expectBody()
+        .jsonPath("$.actions.finalize.allowed")
+        .isEqualTo(false)
+        .jsonPath("$.actions.finalize.reason")
+        .isEqualTo("1 disagreements still need a final grade");
     decide(w, w.chair(), 200);
+    call("GET", base(w), w.chair())
+        .exchange()
+        .expectBody()
+        .jsonPath("$.actions.finalize.allowed")
+        .isEqualTo(true);
     call("POST", base(w) + "/finalize", w.chair())
         .exchange()
         .expectStatus()

@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { accessibilityViolations, fakeApi, makeMe, renderPage } from "../test/helpers";
+import { Audit } from "./Audit";
 import { Notifications } from "./Notifications";
 import { ChairPanel } from "./ChairPanel";
 import { Report } from "./Report";
@@ -287,7 +288,7 @@ describe("PG-19 Consolidated report", () => {
     expect(screen.getAllByText("Acme Cloud", { selector: "th" }).length).toBeGreaterThan(0);
     expect(screen.getByText(/1 failed \(flag\)/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Finalize report" })).toBeDisabled();
-    expect(screen.getByText("1 disagreements still need a final grade")).toBeInTheDocument();
+    expect(screen.getByText(/1 disagreements still need a final grade/)).toBeInTheDocument();
     expect(await accessibilityViolations(container)).toEqual([]);
   });
 
@@ -359,5 +360,61 @@ describe("PG-19 Consolidated report", () => {
     );
     renderPage(page(), { api, me: makeMe("member"), route: `/tenders/${T}/report` });
     expect(await screen.findByText("The report is not available yet")).toBeInTheDocument();
+  });
+});
+
+describe("PG-20 Audit trail", () => {
+  it("filters the trail, pages it and switches to the access log", async () => {
+    const queries: Record<string, unknown>[] = [];
+    const api = fakeApi((call, init) => {
+      const query = (init as { params?: { query?: Record<string, unknown> } })?.params?.query ?? {};
+      if (call === "GET /tenders")
+        return { data: { items: [{ id: T, name: "Cloud platform" }], next_cursor: null } };
+      if (call === "GET /audit-events") {
+        queries.push(query);
+        return {
+          data: {
+            items: [
+              {
+                id: "a1",
+                occurred_at: "2026-10-15T10:00:00Z",
+                actor: { id: U1, display_name: "Mia Member" },
+                actor_role: "member",
+                source: "person",
+                object_type: "report",
+                action: "report_finalized",
+                note: null,
+              },
+            ],
+            next_cursor: null,
+          },
+        };
+      }
+      if (call === "GET /document-access-events")
+        return {
+          data: {
+            items: [
+              {
+                id: "x1",
+                user: { id: U1, display_name: "Mia Member" },
+                document_version_id: "dv-1",
+                opened_at: "2026-10-15T09:00:00Z",
+                watermark_shown: true,
+              },
+            ],
+            next_cursor: null,
+          },
+        };
+      return { data: undefined };
+    });
+    const { container } = renderPage(<Audit />, { api, me: makeMe("admin") });
+    expect(await screen.findByText("Report finalized", { selector: "th" })).toBeInTheDocument();
+    expect(await accessibilityViolations(container)).toEqual([]);
+    await userEvent.selectOptions(screen.getByLabelText("Tender"), T);
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    await waitFor(() => expect(queries.some((q) => q.tender_id === T)).toBe(true));
+    await userEvent.click(screen.getByRole("tab", { name: "Proposal access" }));
+    expect(await screen.findByText("Shown")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export CSV" })).not.toBeInTheDocument();
   });
 });
