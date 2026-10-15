@@ -288,6 +288,12 @@ services:
       S3_PATH_STYLE: ${S3_PATH_STYLE}
       S3_BUCKET_DOCUMENTS: ${S3_BUCKET_DOCUMENTS}
       S3_BUCKET_DERIVED: ${S3_BUCKET_DERIVED}
+      # Email notifications (UX-NOT-03): the development mail catcher; production sets a real relay
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
       KEYCLOAK_ADMIN_BASE_URL: http://keycloak:8080/admin/realms/tender-eval
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
       APP_DEV_ENDPOINTS: "true"

@@ -8,7 +8,7 @@ AI Tender Evaluation Platform. A procurement committee uploads an RFP and vendor
 
 Components: React SPA, Spring Boot reactive REST API (the only writer of business data), PostgreSQL with row-level security, Keycloak, OpenBao, RustFS (S3), NATS JetStream, one Python worker image in two roles (`ingest`, `agent`), Qdrant, Arize Phoenix.
 
-Status: design complete; Phase 0 (scaffold), Phase 1 (platform spine: identity, tenders, committees, audit, row-level security, SPA shell) and Phase 2 (documents, vendors and proposals, ingestion, index, viewer, job center, push) are built; Phase 3 (requirements, extraction, baseline, scoring) are built; screening, evaluation and the report are not built yet. `docs/progress.md` has the task-level status. Check the repository before assuming a file exists.
+Status: design complete; Phase 0 (scaffold), Phase 1 (platform spine: identity, tenders, committees, audit, row-level security, SPA shell) and Phase 2 (documents, vendors and proposals, ingestion, index, viewer, job center, push) are built; Phase 3 (requirements, extraction, baseline, scoring), Phase 4 (screening and evaluation; its evaluation sets, security tests and gate are still open, see P4-8) and Phase 5 (consolidation, scoring, report, exports, notifications, audit trail) are built; hardening and release readiness (Phase 6) are not. `docs/progress.md` has the task-level status. Check the repository before assuming a file exists.
 
 ## Read before you change anything
 

@@ -171,7 +171,7 @@ Goal: the Chair settles disagreements and finalizes; everyone can read and expor
 
 | Work | Size | Screens, requirements |
 | --- | --- | --- |
-| Report model: progress matrix, per-vendor results, disagreements, final grades with justification | L | UX-RPT-01 to 16 |
+| Report model: progress matrix, per-vendor results, disagreements, final grades with justification | L | UX-RPT-01 to 13 |
 | Scoring: formula, ties, agreement level, mandatory-failure flag; shown with its explanation | M | UX-SCO-03; DM Q7 (decide first) |
 | Finalize and reopen: snapshot into a report version; reopening creates a new version | M | UX-RPT-08 |
 | Exports: report, requirements list, clarification list, audit log as PDF, Excel and CSV | L | PI 4.1 `tender-exports` |

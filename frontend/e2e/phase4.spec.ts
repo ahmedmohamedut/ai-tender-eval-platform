@@ -165,11 +165,11 @@ test("two members review one vendor independently and see each other after submi
 
 async function admin_check(tender: string, tv: string) {
   // the administrator reads nothing of the rows through the audit trail before release; both
-  // members have submitted, but the Chair has (member 1 is the Chair), so the rows are released
+  // members have submitted, so the tender moves to consolidation (Phase 5)
   expect(
     sql(
       `select count(*) from member_evaluations where tender_vendor_id = '${tv}' and status = 'submitted'`,
     )[0],
   ).toBe("2");
-  expect(sql(`select status from tenders where id = '${tender}'`)[0]).toBe("evaluation");
+  expect(sql(`select status from tenders where id = '${tender}'`)[0]).toBe("consolidation");
 }
