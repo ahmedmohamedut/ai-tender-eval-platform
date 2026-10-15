@@ -5304,6 +5304,7 @@ components:
       - report_finalized
       - report_reopened
       - export_created
+      - reminders_sent
       - ai_run_completed
       - job_status_changed
     FieldError:

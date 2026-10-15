@@ -40,10 +40,31 @@ public class BaselineService {
   private final app.tendereval.backend.evaluation.EvaluationService evaluation;
   private final JsonMapper json = JsonMapper.builder().build();
 
+  private final app.tendereval.backend.notifications.NotificationService notifications;
+
   public BaselineService(
-      AuditService audit, app.tendereval.backend.evaluation.EvaluationService evaluation) {
+      AuditService audit,
+      app.tendereval.backend.evaluation.EvaluationService evaluation,
+      app.tendereval.backend.notifications.NotificationService notifications) {
     this.audit = audit;
     this.evaluation = evaluation;
+    this.notifications = notifications;
+  }
+
+  private Mono<Void> tellCommittee(
+      DatabaseClient db, UUID tenderId, String type, UUID baseline, int version) {
+    return notifications
+        .activeMembers(db, tenderId)
+        .flatMap(
+            users ->
+                notifications.notify(
+                    db,
+                    tenderId,
+                    type,
+                    "baseline",
+                    baseline,
+                    Map.of("version_no", version),
+                    users));
   }
 
   // ---- baselines --------------------------------------------------------------------------------
@@ -378,6 +399,8 @@ public class BaselineService {
                                 .build()))
                     // accepted vendors wait for this baseline; evaluated ones get what changed
                     .then(evaluation.onBaselineConfirmed(db, actor, tenderId, version))
+                    .then(
+                        tellCommittee(db, tenderId, "requirements_confirmed", baselineId, version))
                     .then(byId(db, baselineId)));
   }
 
@@ -453,6 +476,9 @@ public class BaselineService {
                               .created(Map.of("version_no", b[1]))
                               .note(reason)
                               .build()))
+                  .then(
+                      tellCommittee(
+                          db, tenderId, "requirements_reopened", (UUID) b[0], (Integer) b[1]))
                   .then(byId(db, (UUID) b[0]));
             });
   }

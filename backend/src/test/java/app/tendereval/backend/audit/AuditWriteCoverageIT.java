@@ -330,7 +330,14 @@ class AuditWriteCoverageIT extends AbstractApiIT {
   }
 
   /** Operations that write nothing the data model asks to audit, with the reason. */
-  static final Map<String, String> NOT_AUDITED = Map.of();
+  static final Map<String, String> NOT_AUDITED =
+      Map.of(
+          "markNotificationRead",
+          "a person's own read marker: view state, not a change to business data (DM Audit trail)",
+          "markAllNotificationsRead",
+          "a person's own read markers: view state, not a change to business data",
+          "putNotificationPreferences",
+          "a person's own email preference: personal setting, not business data");
 
   private static long auditCount() {
     return ((Number) TestUsers.scalar("SELECT count(*) FROM audit_events")).longValue();
@@ -2277,6 +2284,40 @@ class AuditWriteCoverageIT extends AbstractApiIT {
           @Override
           public void refused() {
             exportCall("/audit-events/export", w.m1())
+                .bodyValue(Map.of())
+                .exchange()
+                .expectStatus()
+                .isForbidden();
+          }
+        });
+    m.put(
+        "sendReportReminders",
+        new Scenario() {
+          final ReportWorld.World w = ReportWorld.create();
+
+          {
+            TestUsers.sql(
+                "UPDATE member_evaluations SET status = 'reopened', reopened_at = now(),"
+                    + " reopen_reason = 'Please look again at this.', reopened_by = ?"
+                    + " WHERE tender_vendor_id = ? AND user_id = ?",
+                w.chair().id(),
+                w.tv(),
+                w.m2().id());
+          }
+
+          @Override
+          public int success() {
+            reportCall("POST", "/reminders", w)
+                .bodyValue(Map.of())
+                .exchange()
+                .expectStatus()
+                .isNoContent();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            exportCall("/tenders/" + w.tender() + "/report/reminders", w.m1())
                 .bodyValue(Map.of())
                 .exchange()
                 .expectStatus()

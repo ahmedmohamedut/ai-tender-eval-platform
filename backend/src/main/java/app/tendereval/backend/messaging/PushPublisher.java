@@ -62,4 +62,36 @@ public class PushPublisher {
         .onErrorResume(e -> Mono.empty())
         .then();
   }
+
+  /**
+   * An event for one person ({@code ui.push.user.{id}}): a notification arrived. The body carries
+   * ids only; the browser fetches the notification itself through row-level security.
+   */
+  public Mono<Void> user(UUID userId, String type, Map<String, Object> data) {
+    return Mono.fromCallable(
+            () -> {
+              Map<String, Object> body = new java.util.LinkedHashMap<>();
+              body.put("type", type);
+              body.put("user_id", userId.toString());
+              body.put("data", data == null ? Map.of() : data);
+              Headers headers = new Headers();
+              headers.add("Nats-Msg-Id", "push:" + UUID.randomUUID());
+              NatsMessage message =
+                  NatsMessage.builder()
+                      .subject("ui.push.user." + userId)
+                      .headers(headers)
+                      .data(json.writeValueAsString(body).getBytes(StandardCharsets.UTF_8))
+                      .build();
+              return js.publish(message);
+            })
+        .subscribeOn(Schedulers.boundedElastic())
+        .doOnError(
+            e ->
+                log.warn(
+                    "push event not published type={} error={}",
+                    type,
+                    e.getClass().getSimpleName()))
+        .onErrorResume(e -> Mono.empty())
+        .then();
+  }
 }

@@ -195,4 +195,25 @@ public class ReportController implements ReportApi {
         .flatMap(in -> tx.asUser((db, user) -> service.reopen(db, user, tenderId, in.getReason())))
         .map(v -> ResponseEntity.status(HttpStatus.CREATED).body(v));
   }
+
+  @Override
+  public Mono<ResponseEntity<Void>> sendReportReminders(
+      UUID tenderId,
+      Mono<app.tendereval.backend.api.model.ReminderRequest> reminderRequest,
+      ServerWebExchange exchange) {
+    return reminderRequest
+        .map(java.util.Optional::of)
+        .defaultIfEmpty(java.util.Optional.empty())
+        .flatMap(
+            in ->
+                tx.asUser(
+                    (db, user) ->
+                        service.remind(
+                            db,
+                            user,
+                            tenderId,
+                            in.map(r -> r.getTenderVendorIds()).orElse(null),
+                            in.map(r -> r.getUserIds()).orElse(null))))
+        .then(Mono.just(ResponseEntity.noContent().<Void>build()));
+  }
 }

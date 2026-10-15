@@ -584,6 +584,7 @@ Dynamic database users live 24 hours and are renewed at two thirds of their life
 | `USER_STATUS_CACHE_SECONDS` | config | `30` | How long an active status is trusted (3.4). |
 | `EXPORT_RETENTION_DAYS` | config | `90` | Matches the lifecycle rule on `tender-exports`. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_USER` | config | required, `587`, required, required | Notification emails. |
+| `SMTP_PASSWORD` | secret (OpenBao `secret/tender-eval/smtp`; `.env` in development) | none | Notification email login. With `SMTP_HOST` empty no email is sent and pending rows wait. |
 | `SMTP_PASSWORD` | secret | OpenBao `backend/smtp` | Mail relay password. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `LOG_LEVEL` | config | none, `tender-backend`, `info` | Traces, service name, log level. |
 

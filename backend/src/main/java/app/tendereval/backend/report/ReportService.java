@@ -74,9 +74,12 @@ public class ReportService {
           + "   ORDER BY x.version_no DESC LIMIT 1) p ON true";
 
   private final AuditService audit;
+  private final app.tendereval.backend.notifications.NotificationService notifications;
 
-  public ReportService(AuditService audit) {
+  public ReportService(
+      AuditService audit, app.tendereval.backend.notifications.NotificationService notifications) {
     this.audit = audit;
+    this.notifications = notifications;
   }
 
   // ---- who and which version ---------------------------------------------------------------
@@ -1773,6 +1776,19 @@ public class ReportService {
                     .created(Map.of("version_no", v.no(), "baseline_version", v.baselineNo()))
                     .build()))
         .then(
+            notifications
+                .activeMembers(db, a.tenderId())
+                .flatMap(
+                    users ->
+                        notifications.notify(
+                            db,
+                            a.tenderId(),
+                            "report_finalized",
+                            "report_version",
+                            v.id(),
+                            Map.of("version_no", v.no()),
+                            users)))
+        .then(
             versions(db, a.tenderId())
                 .flatMap(
                     all ->
@@ -1910,5 +1926,60 @@ public class ReportService {
                                 .note("Report reopened by the Chair")
                                 .build()))
                     .thenReturn(versionDto(nv, null)));
+  }
+
+  /** The Chair or the administrator reminds the members who have not submitted (UX-RPT-02). */
+  public Mono<Void> remind(
+      DatabaseClient db,
+      CurrentUser user,
+      UUID tenderId,
+      List<UUID> vendorFilter,
+      List<UUID> userFilter) {
+    return access(db, tenderId)
+        .flatMap(
+            a -> {
+              if (!a.privileged()) {
+                return Mono.<Void>error(
+                    ApiException.forbidden(
+                        "forbidden", "Only the Chair and the administrator send reminders"));
+              }
+              return awaiting(db, tenderId)
+                  .flatMap(
+                      waiting -> {
+                        Set<UUID> recipients = new LinkedHashSet<>();
+                        waiting.forEach(
+                            (tv, users) -> {
+                              if (vendorFilter != null
+                                  && !vendorFilter.isEmpty()
+                                  && !vendorFilter.contains(tv)) {
+                                return;
+                              }
+                              for (UserRef u : users) {
+                                if (userFilter == null
+                                    || userFilter.isEmpty()
+                                    || userFilter.contains(u.getId())) {
+                                  recipients.add(u.getId());
+                                }
+                              }
+                            });
+                        return notifications
+                            .notify(
+                                db,
+                                tenderId,
+                                "manual_reminder",
+                                "tender",
+                                tenderId,
+                                Map.of(),
+                                recipients)
+                            .then(
+                                audit.record(
+                                    db,
+                                    user,
+                                    AuditEntry.of("reminders_sent", "tender", tenderId)
+                                        .tender(tenderId)
+                                        .created(Map.of("recipients", recipients.size()))
+                                        .build()));
+                      });
+            });
   }
 }

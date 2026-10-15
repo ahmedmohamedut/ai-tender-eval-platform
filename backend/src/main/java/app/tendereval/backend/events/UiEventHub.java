@@ -35,7 +35,11 @@ public class UiEventHub implements SmartLifecycle {
   static final int REPLAY_CAP = 1000;
 
   /** One push event of a tender. */
-  public record UiEvent(long seq, UUID tenderId, String type, String json) {}
+  public record UiEvent(long seq, UUID tenderId, String type, String json, UUID userId) {
+    public UiEvent(long seq, UUID tenderId, String type, String json) {
+      this(seq, tenderId, type, json, null);
+    }
+  }
 
   private final Connection connection;
   private final JetStream js;
@@ -46,6 +50,7 @@ public class UiEventHub implements SmartLifecycle {
   private volatile boolean running;
   private Dispatcher dispatcher;
   private JetStreamSubscription subscription;
+  private JetStreamSubscription userSubscription;
 
   public UiEventHub(Connection connection, JetStream js, JetStreamManagement jsm) {
     this.connection = connection;
@@ -69,6 +74,13 @@ public class UiEventHub implements SmartLifecycle {
               this::onMessage,
               false,
               PushSubscribeOptions.builder().stream(STREAM).configuration(cc).build());
+      userSubscription =
+          js.subscribe(
+              "ui.push.user.*",
+              dispatcher,
+              this::onMessage,
+              false,
+              PushSubscribeOptions.builder().stream(STREAM).configuration(cc).build());
       running = true;
     } catch (Exception e) {
       throw new IllegalStateException("cannot start the UI event hub", e);
@@ -88,15 +100,20 @@ public class UiEventHub implements SmartLifecycle {
 
   UiEvent toEvent(long seq, String subject, byte[] data) {
     String last = subject.substring(subject.lastIndexOf('.') + 1);
-    UUID tender;
+    UUID id;
     try {
-      tender = UUID.fromString(last);
+      id = UUID.fromString(last);
     } catch (IllegalArgumentException e) {
       return null;
     }
     String json = new String(data, StandardCharsets.UTF_8);
-    String type = mapper.readTree(json).path("type").asString("tender.changed");
-    return new UiEvent(seq, tender, type, json);
+    boolean user = subject.startsWith("ui.push.user.");
+    String type =
+        mapper
+            .readTree(json)
+            .path("type")
+            .asString(user ? "notification.created" : "tender.changed");
+    return user ? new UiEvent(seq, null, type, json, id) : new UiEvent(seq, id, type, json, null);
   }
 
   /** Live events of this instance. */

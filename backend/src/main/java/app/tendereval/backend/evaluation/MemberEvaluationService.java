@@ -77,11 +77,59 @@ public class MemberEvaluationService {
 
   private final AuditService audit;
   private final JobsService jobs;
+  private final app.tendereval.backend.notifications.NotificationService notifications;
   private final JsonMapper json = JsonMapper.builder().build();
 
-  public MemberEvaluationService(AuditService audit, JobsService jobs) {
+  public MemberEvaluationService(
+      AuditService audit,
+      JobsService jobs,
+      app.tendereval.backend.notifications.NotificationService notifications) {
     this.audit = audit;
     this.jobs = jobs;
+    this.notifications = notifications;
+  }
+
+  /** A reopened evaluation is announced to its owner. */
+  private Mono<Void> tellOwner(
+      DatabaseClient db, UUID tenderId, UUID tenderVendorId, UUID memberEvaluationId) {
+    return db.sql("SELECT user_id FROM member_evaluations WHERE id = :id")
+        .bind("id", memberEvaluationId)
+        .map((r, m) -> r.get("user_id", UUID.class))
+        .one()
+        .flatMap(
+            owner ->
+                notifications.notify(
+                    db,
+                    tenderId,
+                    "evaluation_reopened",
+                    "tender_vendor",
+                    tenderVendorId,
+                    Map.of(),
+                    List.of(owner)));
+  }
+
+  /** The Chair hears when the last member of a vendor has submitted. */
+  private Mono<Void> tellChairIfComplete(DatabaseClient db, UUID tenderId, UUID tenderVendorId) {
+    return db.sql("SELECT app_all_submitted_or_excluded(:v) AS done")
+        .bind("v", tenderVendorId)
+        .map((r, m) -> Boolean.TRUE.equals(r.get("done", Boolean.class)))
+        .one()
+        .flatMap(
+            done ->
+                !done
+                    ? Mono.<Void>empty()
+                    : notifications
+                        .chairs(db, tenderId)
+                        .flatMap(
+                            chairs ->
+                                notifications.notify(
+                                    db,
+                                    tenderId,
+                                    "all_members_submitted",
+                                    "tender_vendor",
+                                    tenderVendorId,
+                                    Map.of(),
+                                    chairs)));
   }
 
   // ---- context
@@ -1191,6 +1239,7 @@ public class MemberEvaluationService {
                                           .build()))
                               // The last submission moves the tender to consolidation (V24).
                               .then(advance(db, c.tenderId()))
+                              .then(tellChairIfComplete(db, c.tenderId(), tenderVendorId))
                               .then(mine(db, tenderVendorId));
                         }));
   }
@@ -1286,6 +1335,12 @@ public class MemberEvaluationService {
                                                                 .vendor(ids[2])
                                                                 .note(reason)
                                                                 .build())
+                                                        .then(
+                                                            tellOwner(
+                                                                db,
+                                                                ids[1],
+                                                                ids[2],
+                                                                memberEvaluationId))
                                                         .then(shell(db, memberEvaluationId)));
                                   }));
             });

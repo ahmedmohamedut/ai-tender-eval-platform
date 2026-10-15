@@ -42,6 +42,10 @@ public class EventsController {
       @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
       @RequestParam(value = "tender_id", required = false) UUID tenderId) {
     Long after = parse(lastEventId);
+    return RequestTransaction.currentUser().flatMapMany(u -> stream(after, tenderId, u.id()));
+  }
+
+  private Flux<ServerSentEvent<String>> stream(Long after, UUID tenderId, UUID me) {
     AtomicReference<Set<UUID>> allowed = new AtomicReference<>(Set.of());
     Mono<Set<UUID>> load =
         tx.inRequestTransaction(
@@ -82,9 +86,11 @@ public class EventsController {
                   replayed
                       .filter(
                           e ->
-                              e.tenderId() == null
-                                  || (allowed.get().contains(e.tenderId())
-                                      && (tenderId == null || tenderId.equals(e.tenderId()))))
+                              e.userId() != null
+                                  ? e.userId().equals(me)
+                                  : e.tenderId() == null
+                                      || (allowed.get().contains(e.tenderId())
+                                          && (tenderId == null || tenderId.equals(e.tenderId()))))
                       .map(
                           e ->
                               ServerSentEvent.<String>builder()
