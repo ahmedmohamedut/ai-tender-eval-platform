@@ -321,6 +321,81 @@ describe("PG-19 Consolidated report", () => {
     });
   });
 
+  it("changes a recorded decision with its version, shows the earlier ones, and reloads on a stale save", async () => {
+    const puts: { header: unknown }[] = [];
+    let stale = true;
+    const api = handler((call, init) => {
+      if (call === "GET /tenders/{tenderId}/report/matrix/{requirementId}/{tenderVendorId}")
+        return {
+          data: {
+            requirement: {
+              id: "r1",
+              display_no: "REQ-001",
+              text: "Encrypt data",
+              importance: "mandatory",
+              category: "",
+            },
+            tender_vendor_id: TV,
+            final_grade: "non_compliant",
+            basis: "chair_decision",
+            justification: "On second reading nothing is encrypted.",
+            decided_by: { id: ME, display_name: "Chair Person" },
+            decided_at: "2026-10-15T10:00:00Z",
+            row_version: 2,
+            history: [
+              {
+                final_grade: "partially_compliant",
+                justification: "Backups only is partial coverage.",
+                decided_by: { id: ME, display_name: "Chair Person" },
+                decided_at: "2026-10-15T09:00:00Z",
+                superseded_at: "2026-10-15T10:00:00Z",
+              },
+            ],
+            member_grades: [
+              {
+                member: { id: U1, display_name: "Mia Member" },
+                grade: "fully_compliant",
+                review_state: "agreed",
+              },
+              {
+                member: { id: ME, display_name: "Chair Person" },
+                grade: "non_compliant",
+                review_state: "overridden",
+              },
+            ],
+          },
+        };
+      if (call === "PUT /tenders/{tenderId}/report/grades/{tenderVendorId}/{requirementId}") {
+        puts.push({ header: (init as { params: { header: unknown } }).params.header });
+        if (stale) {
+          stale = false;
+          return {
+            status: 412,
+            error: { title: "Changed", code: "precondition_failed", status: 412 },
+          };
+        }
+        return { data: {} };
+      }
+      return undefined;
+    });
+    renderPage(page(), { api, me: chair(), route: `/tenders/${T}/report` });
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Open REQ-001 for Acme Cloud/ }),
+    );
+    expect(await screen.findByText("Backups only is partial coverage.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "Fully compliant" }));
+    await userEvent.type(
+      screen.getByLabelText("Justification (required)"),
+      "The clarification shows full coverage",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Record final grade" }));
+    await waitFor(() => expect(puts).toHaveLength(1));
+    expect(puts[0].header).toEqual({ "If-Match": '"2"' });
+    // refused as stale: the cell reloads and the form stays for another try
+    await userEvent.click(screen.getByRole("button", { name: "Record final grade" }));
+    await waitFor(() => expect(puts).toHaveLength(2));
+  });
+
   it("lists what is missing when finalizing is refused", async () => {
     const api = handler((call) => {
       if (call === "GET /tenders/{tenderId}/report")

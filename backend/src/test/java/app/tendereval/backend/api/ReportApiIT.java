@@ -330,4 +330,135 @@ class ReportApiIT extends AbstractApiIT {
         .anyMatch(b -> b.contains("report_reopened"))
         .noneMatch(b -> b.contains("partially_compliant") || b.contains("Backups"));
   }
+
+  private WebTestClient.RequestBodySpec withMatch(String uri, TestUser u, String match) {
+    WebTestClient.RequestBodySpec c = call("PUT", uri, u);
+    return match == null ? c : (WebTestClient.RequestBodySpec) c.header("If-Match", match);
+  }
+
+  private static Map<String, String> grade(String g, String why) {
+    return Map.of("final_grade", g, "justification", why);
+  }
+
+  @Test
+  void changingARecordedFinalGradeNeedsItsVersionAndKeepsTheEarlierDecision() {
+    World w = ReportWorld.create();
+    String uri = base(w) + "/grades/" + w.tv() + "/" + w.r1();
+    // the first decision needs no version
+    byte[] first =
+        withMatch(uri, w.chair(), null)
+            .bodyValue(grade("partially_compliant", "Backups only is partial coverage."))
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectHeader()
+            .exists("ETag")
+            .expectBody()
+            .jsonPath("$.row_version")
+            .isEqualTo(1)
+            .jsonPath("$.history.length()")
+            .isEqualTo(0)
+            .returnResult()
+            .getResponseBody();
+    org.assertj.core.api.Assertions.assertThat(first).isNotNull();
+    // a change without the version is refused, and so is a stale one
+    withMatch(uri, w.chair(), null)
+        .bodyValue(grade("non_compliant", "On second reading nothing is encrypted."))
+        .exchange()
+        .expectStatus()
+        .isEqualTo(428);
+    withMatch(uri, w.chair(), "\"7\"")
+        .bodyValue(grade("non_compliant", "On second reading nothing is encrypted."))
+        .exchange()
+        .expectStatus()
+        .isEqualTo(412);
+    // with the right version it is saved, the version moves on, and the first decision is history
+    withMatch(uri, w.chair(), "\"1\"")
+        .bodyValue(grade("non_compliant", "On second reading nothing is encrypted."))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.final_grade")
+        .isEqualTo("non_compliant")
+        .jsonPath("$.row_version")
+        .isEqualTo(2)
+        .jsonPath("$.history.length()")
+        .isEqualTo(1)
+        .jsonPath("$.history[0].final_grade")
+        .isEqualTo("partially_compliant")
+        .jsonPath("$.history[0].justification")
+        .isEqualTo("Backups only is partial coverage.")
+        .jsonPath("$.history[0].decided_by.id")
+        .isEqualTo(w.chair().id().toString());
+    // the second tab, still holding version 1, cannot overwrite it
+    withMatch(uri, w.chair(), "\"1\"")
+        .bodyValue(grade("fully_compliant", "A stale tab saving over the decision."))
+        .exchange()
+        .expectStatus()
+        .isEqualTo(412);
+    // members read the history once the report is finalized
+    call("GET", base(w) + "/matrix/" + w.r1() + "/" + w.tv(), w.m1())
+        .exchange()
+        .expectStatus()
+        .isNotFound();
+    call("POST", base(w) + "/finalize", w.chair()).exchange().expectStatus().isOk();
+    call("GET", base(w) + "/matrix/" + w.r1() + "/" + w.tv(), w.m1())
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.history.length()")
+        .isEqualTo(1)
+        .jsonPath("$.history[0].final_grade")
+        .isEqualTo("partially_compliant");
+  }
+
+  @Test
+  void aReopenedReportKeepsTheOriginalDeciderUntilTheCurrentChairChangesIt() {
+    World w = ReportWorld.create();
+    String uri = base(w) + "/grades/" + w.tv() + "/" + w.r1();
+    withMatch(uri, w.chair(), null)
+        .bodyValue(grade("partially_compliant", "Backups only is partial coverage."))
+        .exchange()
+        .expectStatus()
+        .isOk();
+    call("POST", base(w) + "/finalize", w.chair()).exchange().expectStatus().isOk();
+    // another member becomes the Chair of the tender, then reopens
+    TestUsers.sql(
+        "UPDATE tender_members SET is_chair = false WHERE tender_id = ? AND user_id = ?",
+        w.tender(),
+        w.chair().id());
+    TestUsers.sql(
+        "UPDATE tender_members SET is_chair = true WHERE tender_id = ? AND user_id = ?",
+        w.tender(),
+        w.m1().id());
+    call("POST", base(w) + "/reopen", w.m1())
+        .bodyValue(Map.of("reason", "New evidence arrived."))
+        .exchange()
+        .expectStatus()
+        .isCreated();
+    String cell = base(w) + "/matrix/" + w.r1() + "/" + w.tv();
+    // the carried decision is still the earlier Chair's, at the earlier time
+    call("GET", cell, w.m1())
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.decided_by.id")
+        .isEqualTo(w.chair().id().toString())
+        .jsonPath("$.row_version")
+        .isEqualTo(1);
+    // changing it is the new Chair's decision, in their name; the earlier one goes to the history
+    withMatch(uri, w.m1(), "\"1\"")
+        .bodyValue(grade("fully_compliant", "The clarification shows full coverage."))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.decided_by.id")
+        .isEqualTo(w.m1().id().toString())
+        .jsonPath("$.history[0].decided_by.id")
+        .isEqualTo(w.chair().id().toString());
+  }
 }

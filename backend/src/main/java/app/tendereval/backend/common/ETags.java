@@ -17,6 +17,12 @@ public final class ETags {
     return "\"" + rowVersion + "\"";
   }
 
+  /** The version named by If-Match, or null when the header is absent (the caller decides). */
+  public static Integer optionalIfMatch(ServerHttpRequest request) {
+    String header = request.getHeaders().getFirst("If-Match");
+    return header == null || header.isBlank() ? null : requireIfMatch(request);
+  }
+
   public static int requireIfMatch(ServerHttpRequest request) {
     String header = request.getHeaders().getFirst("If-Match");
     if (header == null || header.isBlank()) {

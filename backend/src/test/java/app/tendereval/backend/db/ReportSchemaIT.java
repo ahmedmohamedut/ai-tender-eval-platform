@@ -432,6 +432,184 @@ class ReportSchemaIT {
     assertThat(failure(owner, GRADE, v, w.tv(), UUID.randomUUID(), chair)).isNotNull();
   }
 
+  @Test
+  void aReplacedFinalGradeStaysInAnAppendOnlyHistoryReadByTheSameAudience() {
+    World w = world();
+    UUID v = version(w);
+    for (UUID u : new UUID[] {chair, m1, m2}) {
+      memberEvaluation(w, u, true);
+    }
+    exec(owner, GRADE, v, w.tv(), w.requirement(), chair);
+    assertThat(
+            one(
+                owner,
+                "SELECT count(*) FROM report_grade_history h JOIN report_grades g ON g.id ="
+                    + " h.report_grade_id WHERE g.report_version_id = ?",
+                v))
+        .isEqualTo(0L);
+    exec(
+        owner,
+        "UPDATE report_grades SET final_grade = 'partially_compliant', justification ="
+            + " 'After reading the annex again.', decided_by = ?, decided_at = now()"
+            + " WHERE report_version_id = ?",
+        chair,
+        v);
+    UUID gradeId = uuid(one(owner, "SELECT id FROM report_grades WHERE report_version_id = ?", v));
+    assertThat(
+            one(
+                owner,
+                "SELECT final_grade || ':' || justification FROM report_grade_history"
+                    + " WHERE report_grade_id = ?",
+                gradeId))
+        .isEqualTo("non_compliant:The vendor excludes it in section 4.");
+    // an unchanged save adds nothing; the history is never edited or deleted
+    exec(owner, "UPDATE report_grades SET updated_at = now() WHERE id = ?", gradeId);
+    assertThat(
+            one(
+                owner,
+                "SELECT count(*) FROM report_grade_history WHERE report_grade_id = ?",
+                gradeId))
+        .isEqualTo(1L);
+    assertThat(failure(owner, "UPDATE report_grade_history SET justification = 'x'")).isNotNull();
+    assertThat(failure(owner, "DELETE FROM report_grade_history")).isNotNull();
+    // the application role writes no history row itself
+    assertThat(
+            as(
+                chair,
+                "member",
+                c ->
+                    failure(
+                        c,
+                        "INSERT INTO report_grade_history (report_grade_id, final_grade, justification)"
+                            + " VALUES (?, 'non_compliant', 'forged history entry')",
+                        gradeId)))
+        .isNotNull();
+    // turning a decision into a derived grade is refused while it carries a decider, and a decision
+    // that does become derived is kept in the history too
+    assertThat(
+            failure(
+                owner,
+                "UPDATE report_grades SET basis = 'all_agree', has_disagreement = false"
+                    + " WHERE id = ?",
+                gradeId))
+        .isNotNull();
+    String fn = "SELECT count(*) FROM app_report_grade_history(?, ?, ?)";
+    assertThat(as(chair, "member", c -> one(c, fn, v, w.tv(), w.requirement()))).isEqualTo(1L);
+    assertThat(as(m1, "member", c -> one(c, fn, v, w.tv(), w.requirement()))).isEqualTo(0L);
+    assertThat(
+            as(
+                m1,
+                "member",
+                c ->
+                    one(
+                        c,
+                        "SELECT count(*) FROM report_grade_history WHERE report_grade_id = ?",
+                        gradeId)))
+        .isEqualTo(0L);
+    finalize(w, v);
+    assertThat(as(m1, "member", c -> one(c, fn, v, w.tv(), w.requirement()))).isEqualTo(1L);
+    assertThat(as(admin, "admin", c -> one(c, fn, v, w.tv(), w.requirement()))).isEqualTo(1L);
+  }
+
+  @Test
+  void aReopenCarriesDecisionsWithTheirOriginalDeciderAndNothingElseIsCarried() {
+    World w = world();
+    exec(
+        owner,
+        "INSERT INTO baseline_requirements (baseline_id, requirement_id, display_no, text, importance,"
+            + " content_hash) SELECT ?, id, 'REQ-001', text, importance, repeat('c', 64)"
+            + " FROM requirements WHERE id = ?",
+        w.baseline(),
+        w.requirement());
+    UUID v1 = version(w);
+    for (UUID u : new UUID[] {chair, m1, m2}) {
+      memberEvaluation(w, u, true);
+    }
+    exec(owner, GRADE, v1, w.tv(), w.requirement(), chair);
+    finalize(w, v1);
+    UUID v2 = UUID.randomUUID();
+    exec(
+        owner,
+        "INSERT INTO report_versions (id, tender_id, version_no, baseline_id, scoring_model_id, created_by,"
+            + " reopened_from_version_id, reopen_reason) VALUES (?, ?, 2, ?, ?, ?, ?, ?)",
+        v2,
+        w.tender(),
+        w.baseline(),
+        w.model(),
+        chair,
+        v1,
+        "Vendor sent a clarification");
+    // the committee's Chair changes; the new Chair reopens
+    exec(
+        owner,
+        "UPDATE tender_members SET is_chair = false WHERE tender_id = ? AND user_id = ?",
+        w.tender(),
+        chair);
+    exec(
+        owner,
+        "UPDATE tender_members SET is_chair = true WHERE tender_id = ? AND user_id = ?",
+        w.tender(),
+        m1);
+    String copy =
+        "INSERT INTO report_grades (report_version_id, tender_vendor_id, requirement_id, final_grade,"
+            + " basis, justification, decided_by, decided_at, has_disagreement)"
+            + " SELECT ?, o.tender_vendor_id, o.requirement_id, o.final_grade, 'chair_decision',"
+            + " ?, o.decided_by, o.decided_at, true FROM report_grades o WHERE o.report_version_id = ?";
+    // a copy with another justification, or in another person's name, is not a copy
+    assertThat(as(m1, "member", c -> failure(c, copy, v2, "Rewritten to say something else.", v1)))
+        .isNotNull();
+    assertThat(
+            as(
+                m1,
+                "member",
+                c ->
+                    failure(
+                        c,
+                        "INSERT INTO report_grades (report_version_id, tender_vendor_id, requirement_id,"
+                            + " final_grade, basis, justification, decided_by, decided_at, has_disagreement)"
+                            + " SELECT ?, o.tender_vendor_id, o.requirement_id, 'fully_compliant',"
+                            + " 'chair_decision', o.justification, o.decided_by, o.decided_at, true"
+                            + " FROM report_grades o WHERE o.report_version_id = ?",
+                        v2,
+                        v1)))
+        .isNotNull();
+    // the exact decision carries over with its original decider and time
+    assertThat(
+            as(m1, "member", c -> failure(c, copy, v2, "The vendor excludes it in section 4.", v1)))
+        .isNull();
+    exec(owner, copy, v2, "The vendor excludes it in section 4.", v1);
+    assertThat(one(owner, "SELECT decided_by FROM report_grades WHERE report_version_id = ?", v2))
+        .isEqualTo(chair);
+    // changing it is the new Chair's own decision, in their own name, and keeps the old one
+    assertThat(
+            as(
+                m1,
+                "member",
+                c ->
+                    failure(
+                        c,
+                        "UPDATE report_grades SET final_grade = 'fully_compliant', justification ="
+                            + " 'After the clarification the vendor complies.', decided_by = ?,"
+                            + " decided_at = now() WHERE report_version_id = ?",
+                        chair,
+                        v2)))
+        .isEqualTo("23000");
+    exec(
+        owner,
+        "UPDATE report_grades SET final_grade = 'fully_compliant', justification ="
+            + " 'After the clarification the vendor complies.', decided_by = ?,"
+            + " decided_at = now() WHERE report_version_id = ?",
+        m1,
+        v2);
+    assertThat(
+            one(
+                owner,
+                "SELECT h.decided_by FROM report_grade_history h JOIN report_grades g ON g.id ="
+                    + " h.report_grade_id WHERE g.report_version_id = ?",
+                v2))
+        .isEqualTo(chair);
+  }
+
   // ---- reading the results (UX-RPT-01)
   // --------------------------------------------------------------
 

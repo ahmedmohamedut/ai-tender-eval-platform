@@ -165,17 +165,25 @@ public class ReportController implements ReportApi {
       UUID tenderVendorId,
       UUID requirementId,
       Mono<FinalGradeInput> finalGradeInput,
+      String ifMatch,
       ServerWebExchange exchange) {
+    Integer version = app.tendereval.backend.common.ETags.optionalIfMatch(exchange.getRequest());
     return finalGradeInput
         .flatMap(
             in ->
                 tx.asUser(
                     (db, user) ->
                         service.recordFinalGrade(
-                            db, user, tenderId, tenderVendorId, requirementId, in)))
+                            db, user, tenderId, tenderVendorId, requirementId, version, in)))
         // after the commit: open report pages refetch (ids only, no grades)
         .flatMap(c -> changed(tenderId, "final_grade_recorded").thenReturn(c))
-        .map(ResponseEntity::ok);
+        .map(
+            c ->
+                c.getRowVersion() == null
+                    ? ResponseEntity.ok(c)
+                    : ResponseEntity.ok()
+                        .eTag(app.tendereval.backend.common.ETags.of(c.getRowVersion()))
+                        .body(c));
   }
 
   @Override

@@ -3547,11 +3547,20 @@ paths:
       x-ux:
       - UX-RPT-06
       description: Only for rows where members differ, and only after every member has submitted the vendor. The
-        justification is required. Where all agree the final grade is derived and cannot be set.
+        justification is required. Where all agree the final grade is derived and cannot be set. Changing a grade the
+        Chair already recorded needs If-Match with the row_version read from the cell (412 when another tab changed it,
+        428 when missing); the earlier decision stays in the cell's history (rule 11).
       parameters:
       - $ref: '#/components/parameters/tenderId'
       - $ref: '#/components/parameters/tenderVendorId'
       - $ref: '#/components/parameters/requirementId'
+      - name: If-Match
+        in: header
+        description: The row_version of the Chair's earlier decision as a strong ETag. Not needed for the first
+          decision on a row.
+        required: false
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -3573,8 +3582,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
   /tenders/{tenderId}/report/matrix:
     get:
       operationId: getReportMatrix
@@ -8173,10 +8186,43 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MemberGrade'
+        row_version:
+          type:
+          - integer
+          - 'null'
+          description: Version of the Chair's decision; send it as If-Match to change it. Null when no decision exists.
+        history:
+          type: array
+          description: Earlier decisions of the Chair on this row, newest first.
+          items:
+            $ref: '#/components/schemas/GradeDecision'
       required:
       - requirement
       - tender_vendor_id
       - member_grades
+    GradeDecision:
+      type: object
+      properties:
+        final_grade:
+          $ref: '#/components/schemas/Grade'
+        justification:
+          type: string
+        decided_by:
+          oneOf:
+          - $ref: '#/components/schemas/UserRef'
+          - type: 'null'
+        decided_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        superseded_at:
+          type: string
+          format: date-time
+      required:
+      - final_grade
+      - justification
+      - superseded_at
     Disagreement:
       type: object
       properties:

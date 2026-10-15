@@ -641,6 +641,8 @@ function CellDialog({
               tenderVendorId: cell.tenderVendorId,
               requirementId: cell.requirementId,
             },
+            // Changing a recorded decision names the version that was read (G15).
+            header: d?.row_version != null ? { "If-Match": `"${d.row_version}"` } : {},
           },
           body: { final_grade: grade as S["Grade"], justification: why.trim() },
         }),
@@ -649,7 +651,12 @@ function CellDialog({
       onDecided();
       onClose();
     } catch (e) {
-      announce(e instanceof Error ? e.message : "The final grade could not be recorded");
+      if (e instanceof ApiError && (e.status === 412 || e.status === 428)) {
+        announce("Someone else changed this grade. It was reloaded; check it and record again.");
+        detail.reload();
+      } else {
+        announce(e instanceof Error ? e.message : "The final grade could not be recorded");
+      }
     } finally {
       setBusy(false);
     }
@@ -683,8 +690,32 @@ function CellDialog({
               {d.justification && (
                 <p>
                   <strong>Chair's justification:</strong> {d.justification}
-                  {d.decided_by ? ` (${d.decided_by.display_name})` : ""}
+                  {d.decided_by ? ` (${d.decided_by.display_name}` : ""}
+                  {d.decided_by && d.decided_at
+                    ? `, ${new Date(d.decided_at).toLocaleString()})`
+                    : d.decided_by
+                      ? ")"
+                      : ""}
                 </p>
+              )}
+              {(d.history?.length ?? 0) > 0 && (
+                <section aria-label="Earlier decisions">
+                  <h3>Earlier decisions</h3>
+                  <ul>
+                    {d.history!.map((h, i) => (
+                      <li key={i}>
+                        <Grade grade={h.final_grade} /> {h.justification}{" "}
+                        <span className="help">
+                          {h.decided_by ? `${h.decided_by.display_name}, ` : ""}
+                          {h.decided_at
+                            ? `decided ${new Date(h.decided_at).toLocaleString()}, `
+                            : ""}
+                          replaced {new Date(h.superseded_at).toLocaleString()}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               )}
               {d.ai && (
                 <section aria-label="AI grade">

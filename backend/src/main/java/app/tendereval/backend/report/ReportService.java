@@ -11,6 +11,7 @@ import app.tendereval.backend.api.model.DisagreementPage;
 import app.tendereval.backend.api.model.FinalGradeInput;
 import app.tendereval.backend.api.model.Grade;
 import app.tendereval.backend.api.model.GradeBasis;
+import app.tendereval.backend.api.model.GradeDecision;
 import app.tendereval.backend.api.model.Importance;
 import app.tendereval.backend.api.model.Matrix;
 import app.tendereval.backend.api.model.MatrixCell;
@@ -36,6 +37,7 @@ import app.tendereval.backend.audit.AuditEntry;
 import app.tendereval.backend.audit.AuditService;
 import app.tendereval.backend.common.Actions;
 import app.tendereval.backend.common.Cursor;
+import app.tendereval.backend.common.ETags;
 import app.tendereval.backend.common.Settings;
 import app.tendereval.backend.report.ScoringService.Points;
 import app.tendereval.backend.report.ScoringService.Ranked;
@@ -1252,11 +1254,64 @@ public class ReportService {
                     ApiException.notFound("this cell: the vendor is not complete yet"));
               }
               Cell c = cs.get(0);
-              return ai(db, c.aiGradeId)
-                  .map(java.util.Optional::of)
-                  .defaultIfEmpty(java.util.Optional.empty())
-                  .map(ai -> detail(c, ai.orElse(null)));
+              return Mono.zip(
+                      ai(db, c.aiGradeId)
+                          .map(java.util.Optional::of)
+                          .defaultIfEmpty(java.util.Optional.empty()),
+                      decisionVersion(db, v, tenderVendorId, requirementId)
+                          .map(java.util.Optional::of)
+                          .defaultIfEmpty(java.util.Optional.empty()),
+                      history(db, v, tenderVendorId, requirementId))
+                  .map(
+                      z -> {
+                        MatrixCellDetail d = detail(c, z.getT1().orElse(null));
+                        d.setRowVersion(z.getT2().orElse(null));
+                        d.setHistory(z.getT3());
+                        return d;
+                      });
             });
+  }
+
+  /** Version of the Chair's decision on the row, for If-Match; only readers of the grade see it. */
+  private Mono<Integer> decisionVersion(
+      DatabaseClient db, Ver v, UUID tenderVendorId, UUID requirementId) {
+    if (v.id() == null) {
+      return Mono.empty();
+    }
+    return db.sql(
+            "SELECT row_version FROM report_grades WHERE report_version_id = :rv"
+                + " AND tender_vendor_id = :tv AND requirement_id = :rq AND basis = 'chair_decision'")
+        .bind("rv", v.id())
+        .bind("tv", tenderVendorId)
+        .bind("rq", requirementId)
+        .map((r, m) -> r.get("row_version", Integer.class))
+        .one();
+  }
+
+  private Mono<List<GradeDecision>> history(
+      DatabaseClient db, Ver v, UUID tenderVendorId, UUID requirementId) {
+    if (v.id() == null) {
+      return Mono.just(List.of());
+    }
+    return db.sql(
+            "SELECT final_grade, justification, decided_by, decided_by_name, decided_at,"
+                + " superseded_at FROM app_report_grade_history(:rv, :tv, :rq)")
+        .bind("rv", v.id())
+        .bind("tv", tenderVendorId)
+        .bind("rq", requirementId)
+        .map(
+            (r, m) ->
+                new GradeDecision()
+                    .finalGrade(Grade.fromValue(r.get("final_grade", String.class)))
+                    .justification(r.get("justification", String.class))
+                    .decidedBy(
+                        ref(
+                            r.get("decided_by", UUID.class),
+                            r.get("decided_by_name", String.class)))
+                    .decidedAt(r.get("decided_at", OffsetDateTime.class))
+                    .supersededAt(r.get("superseded_at", OffsetDateTime.class)))
+        .all()
+        .collectList();
   }
 
   public Mono<DisagreementPage> disagreements(
@@ -1550,6 +1605,7 @@ public class ReportService {
       UUID tenderId,
       UUID tenderVendorId,
       UUID requirementId,
+      Integer ifMatch,
       FinalGradeInput in) {
     String justification = in.getJustification() == null ? "" : in.getJustification().strip();
     return access(db, tenderId)
@@ -1581,6 +1637,7 @@ public class ReportService {
                                                     cs,
                                                     tenderVendorId,
                                                     requirementId,
+                                                    ifMatch,
                                                     in,
                                                     justification)));
                       });
@@ -1595,6 +1652,7 @@ public class ReportService {
       List<Cell> cs,
       UUID tenderVendorId,
       UUID requirementId,
+      Integer ifMatch,
       FinalGradeInput in,
       String justification) {
     if (cs.isEmpty() || !cs.get(0).complete) {
@@ -1610,30 +1668,36 @@ public class ReportService {
               "no_disagreement",
               "All members agree on this row: the final grade is derived and cannot be set"));
     }
-    DatabaseClient.GenericExecuteSpec spec =
-        db.sql(
-                "INSERT INTO report_grades (report_version_id, tender_vendor_id, requirement_id,"
-                    + " ai_grade_id, ai_grade, final_grade, basis, justification, decided_by,"
-                    + " decided_at, has_disagreement)"
-                    + " VALUES (:rv, :tv, :rq, :ag, :aig, :fg, 'chair_decision', :j, :u, now(), true)"
-                    + " ON CONFLICT (report_version_id, tender_vendor_id, requirement_id) DO UPDATE"
-                    + " SET final_grade = EXCLUDED.final_grade, basis = 'chair_decision',"
-                    + " justification = EXCLUDED.justification, decided_by = EXCLUDED.decided_by,"
-                    + " decided_at = now() RETURNING id")
-            .bind("rv", v.id())
-            .bind("tv", tenderVendorId)
-            .bind("rq", requirementId)
-            .bind("fg", in.getFinalGrade().getValue())
-            .bind("j", justification)
-            .bind("u", user.id());
-    spec =
-        c.aiGradeId == null
-            ? spec.bindNull("ag", UUID.class).bindNull("aig", String.class)
-            : c.aiGrade == null
-                ? spec.bind("ag", c.aiGradeId).bindNull("aig", String.class)
-                : spec.bind("ag", c.aiGradeId).bind("aig", c.aiGrade);
-    return spec.map((r, m) -> r.get("id", UUID.class))
+    // An earlier decision of the Chair is changed only knowing its version (G15); the trigger keeps
+    // it
+    // in the row's history.
+    return db.sql(
+            "SELECT row_version, basis FROM report_grades WHERE report_version_id = :rv"
+                + " AND tender_vendor_id = :tv AND requirement_id = :rq")
+        .bind("rv", v.id())
+        .bind("tv", tenderVendorId)
+        .bind("rq", requirementId)
+        .map((r, m) -> r.get("row_version", Integer.class))
         .one()
+        .map(java.util.Optional::of)
+        .defaultIfEmpty(java.util.Optional.empty())
+        .flatMap(
+            current -> {
+              if (current.isPresent()) {
+                if (ifMatch == null) {
+                  return Mono.<UUID>error(
+                      new ApiException(
+                          HttpStatus.PRECONDITION_REQUIRED,
+                          "precondition_required",
+                          "If-Match is required to change a recorded final grade"));
+                }
+                if (!current.get().equals(ifMatch)) {
+                  return Mono.<UUID>error(ETags.stale());
+                }
+              }
+              return upsert(
+                  db, user, v, c, tenderVendorId, requirementId, in, justification, ifMatch);
+            })
         .flatMap(
             id ->
                 audit.record(
@@ -1647,6 +1711,44 @@ public class ReportService {
                         .note("Final grade recorded by the Chair")
                         .build()))
         .then(cellOf(db, a, v, requirementId, tenderVendorId));
+  }
+
+  private Mono<UUID> upsert(
+      DatabaseClient db,
+      CurrentUser user,
+      Ver v,
+      Cell c,
+      UUID tenderVendorId,
+      UUID requirementId,
+      FinalGradeInput in,
+      String justification,
+      Integer ifMatch) {
+    DatabaseClient.GenericExecuteSpec spec =
+        db.sql(
+                "INSERT INTO report_grades (report_version_id, tender_vendor_id, requirement_id,"
+                    + " ai_grade_id, ai_grade, final_grade, basis, justification, decided_by,"
+                    + " decided_at, has_disagreement)"
+                    + " VALUES (:rv, :tv, :rq, :ag, :aig, :fg, 'chair_decision', :j, :u, now(), true)"
+                    + " ON CONFLICT (report_version_id, tender_vendor_id, requirement_id) DO UPDATE"
+                    + " SET final_grade = EXCLUDED.final_grade, basis = 'chair_decision',"
+                    + " justification = EXCLUDED.justification, decided_by = EXCLUDED.decided_by,"
+                    + " decided_at = now() WHERE report_grades.row_version = :ifm RETURNING id")
+            .bind("rv", v.id())
+            .bind("tv", tenderVendorId)
+            .bind("rq", requirementId)
+            .bind("fg", in.getFinalGrade().getValue())
+            .bind("j", justification)
+            .bind("u", user.id());
+    spec = ifMatch == null ? spec.bind("ifm", 0) : spec.bind("ifm", ifMatch);
+    spec =
+        c.aiGradeId == null
+            ? spec.bindNull("ag", UUID.class).bindNull("aig", String.class)
+            : c.aiGrade == null
+                ? spec.bind("ag", c.aiGradeId).bindNull("aig", String.class)
+                : spec.bind("ag", c.aiGradeId).bind("aig", c.aiGrade);
+    return spec.map((r, m) -> r.get("id", UUID.class))
+        .one()
+        .switchIfEmpty(Mono.error(ETags.stale()));
   }
 
   public Mono<ReportVersion> finalizeReport(DatabaseClient db, CurrentUser user, UUID tenderId) {
@@ -1914,13 +2016,12 @@ public class ReportService {
                             + " requirement_id, ai_grade_id, ai_grade, final_grade, basis,"
                             + " justification, decided_by, decided_at, has_disagreement)"
                             + " SELECT :new, o.tender_vendor_id, o.requirement_id, o.ai_grade_id,"
-                            + " o.ai_grade, o.final_grade, 'chair_decision', o.justification, :u,"
-                            + " now(), true FROM report_grades o"
+                            + " o.ai_grade, o.final_grade, 'chair_decision', o.justification,"
+                            + " o.decided_by, o.decided_at, true FROM report_grades o"
                             + " JOIN baseline_requirements br ON br.baseline_id = :b"
                             + "   AND br.requirement_id = o.requirement_id"
                             + " WHERE o.report_version_id = :old AND o.basis = 'chair_decision'")
                     .bind("new", nv.id())
-                    .bind("u", user.id())
                     .bind("b", nv.baselineId())
                     .bind("old", from.id())
                     .fetch()
