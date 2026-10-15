@@ -237,8 +237,8 @@ Phase 2 added six operational columns to jobs for the message loop (PI 5.5 to 5.
 | **report_versions** | tender_id, version_no, baseline_id, scoring_model_id, status, created_by, finalized_by, finalized_at, reopened_from_version_id, reopen_reason | status is in_progress, finalized or superseded. A tender has at most one in_progress and one finalized version at a time. A finalized version is locked: triggers refuse any change to it or to its child rows. Reopening adds the next version as in_progress with the final grades copied and a required reason. The earlier version stays finalized until the new one is finalized, then becomes superseded. |
 | **report_grades** | report_version_id, tender_vendor_id, requirement_id, ai_grade_id, ai_grade, final_grade, basis, justification, decided_by, decided_at, has_disagreement | One row per vendor and requirement. basis is all_agree or chair_decision. A chair_decision needs a justification of at least 10 characters and decided_by equal to the Chair. While the version is in progress only the Chair's decisions on disagreements exist, and the other rows are written at finalization. All values are copies, so the report cannot change when source rows do. |
 | **report_member_grades** | report_grade_id, user_id, member_grade, note, review_state | A copy of each member's grade and note for that cell, written at finalization and shown in the expanded matrix cell. Append-only. |
-| **report_vendor_results** | report_version_id, tender_vendor_id, outcome, rank, final_score, compliance_percent, mandatory_failures, count_fully, count_partially, count_non, agreement_level, override_count, override_percent, category_scores, reason | outcome is evaluated or rejected_at_screening, and a rejected vendor keeps its screening reason and has no rank. Computed once at finalization from the final grades and the locked scoring model, so an export always matches the screen. |
-| **exports** | tender_id, export_type, source_type, source_id, format, requested_by, status, storage_key, context, created_at | export_type is report, requirements_list, clarification_list or audit_log. format is pdf, xlsx or csv. context records what the file states about itself: committee, baseline version, scoring model, AI model version and finalization date. The generated file is kept so the same export can be shown again and audited. |
+| **report_vendor_results** | report_version_id, tender_vendor_id, outcome, rank, final_score, compliance_percent, mandatory_failures, count_fully, count_partially, count_non, agreement_level, override_count, override_percent, category_scores, explanation, reason | explanation holds the inputs of the score so the screen and the export show the same formula (UX-SCO-03). outcome is evaluated or rejected_at_screening, and a rejected vendor keeps its screening reason and has no rank. Computed once at finalization from the final grades and the locked scoring model, so an export always matches the screen. |
+| **exports** | tender_id, export_type, source_type, source_id, format, requested_by, status, storage_key, failure_code, context, created_at | export_type is report, requirements_list, clarification_list or audit_log. format is pdf, xlsx or csv. context records what the file states about itself: committee, baseline version, scoring model, AI model version and finalization date. The generated file is kept so the same export can be shown again and audited. |
 
 ### Notifications
 
@@ -347,6 +347,9 @@ A trigger on each table refuses any move that is not listed here. A retry of a f
 | baselines.status | reopened | superseded | The Chair confirms the next version |
 | report_versions.status | in_progress | finalized | The Chair finalizes |
 | report_versions.status | finalized | superseded | The next version is finalized |
+| exports.status | pending | ready, failed | The file is written, or could not be written |
+| notifications.email_status | pending | sent, failed | The mail was delivered to the relay, or delivery failed after retries |
+| notifications.email_status | failed | pending | An administrator retries |
 
 ## Versioning, locking and Outdated
 
