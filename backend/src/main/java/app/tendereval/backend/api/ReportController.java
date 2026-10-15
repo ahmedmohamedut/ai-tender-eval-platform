@@ -15,6 +15,7 @@ import app.tendereval.backend.api.model.ReportVersion;
 import app.tendereval.backend.api.model.ScreeningOutcome;
 import app.tendereval.backend.common.Idempotency;
 import app.tendereval.backend.db.RequestTransaction;
+import app.tendereval.backend.messaging.PushPublisher;
 import app.tendereval.backend.report.ReportService;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -35,12 +36,15 @@ public class ReportController implements ReportApi {
   private final ReportService service;
   private final Idempotency idempotency;
   private final app.tendereval.backend.exports.ExportService exports;
+  private final PushPublisher push;
 
   public ReportController(
       RequestTransaction tx,
       ReportService service,
       Idempotency idempotency,
-      app.tendereval.backend.exports.ExportService exports) {
+      app.tendereval.backend.exports.ExportService exports,
+      PushPublisher push) {
+    this.push = push;
     this.tx = tx;
     this.service = service;
     this.idempotency = idempotency;
@@ -169,6 +173,8 @@ public class ReportController implements ReportApi {
                     (db, user) ->
                         service.recordFinalGrade(
                             db, user, tenderId, tenderVendorId, requirementId, in)))
+        // after the commit: open report pages refetch (ids only, no grades)
+        .flatMap(c -> changed(tenderId, "final_grade_recorded").thenReturn(c))
         .map(ResponseEntity::ok);
   }
 
@@ -177,15 +183,16 @@ public class ReportController implements ReportApi {
       UUID tenderId, String idempotencyKey, ServerWebExchange exchange) {
     String key = Idempotency.requireKey(idempotencyKey);
     return tx.asUser(
-        (db, user) ->
-            idempotency.run(
-                db,
-                user.id(),
-                key,
-                "POST /tenders/{id}/report/finalize:" + tenderId,
-                Idempotency.hash("finalizeReport", tenderId.toString()),
-                ReportVersion.class,
-                () -> service.finalizeReport(db, user, tenderId).map(ResponseEntity::ok)));
+            (db, user) ->
+                idempotency.run(
+                    db,
+                    user.id(),
+                    key,
+                    "POST /tenders/{id}/report/finalize:" + tenderId,
+                    Idempotency.hash("finalizeReport", tenderId.toString()),
+                    ReportVersion.class,
+                    () -> service.finalizeReport(db, user, tenderId).map(ResponseEntity::ok)))
+        .flatMap(r -> changed(tenderId, "report_finalized").thenReturn(r));
   }
 
   @Override
@@ -193,7 +200,13 @@ public class ReportController implements ReportApi {
       UUID tenderId, Mono<ReasonBody> reasonBody, ServerWebExchange exchange) {
     return reasonBody
         .flatMap(in -> tx.asUser((db, user) -> service.reopen(db, user, tenderId, in.getReason())))
+        .flatMap(v -> changed(tenderId, "report_reopened").thenReturn(v))
         .map(v -> ResponseEntity.status(HttpStatus.CREATED).body(v));
+  }
+
+  private Mono<Void> changed(UUID tenderId, String reason) {
+    return push.tender(
+        tenderId, "report.changed", "tender", tenderId, java.util.Map.of("reason", reason));
   }
 
   @Override

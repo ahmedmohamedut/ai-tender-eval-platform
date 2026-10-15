@@ -18,6 +18,8 @@ import org.springframework.test.web.reactive.server.WebTestClient;
  */
 class ReportApiIT extends AbstractApiIT {
 
+  @org.springframework.beans.factory.annotation.Autowired io.nats.client.JetStream js;
+
   private WebTestClient.RequestBodySpec call(String method, String uri, TestUser u) {
     return web.method(HttpMethod.valueOf(method))
         .uri(uri)
@@ -301,5 +303,31 @@ class ReportApiIT extends AbstractApiIT {
         .jsonPath("$.vendors[0].awaiting.length()")
         .isEqualTo(1);
     decide(w, w.chair(), 409);
+  }
+
+  @Test
+  void aFinalGradeAndFinalizeAndReopenPublishReportChangedAfterTheCommit() throws Exception {
+    World w = ReportWorld.create();
+    decide(w, w.chair(), 200);
+    call("POST", base(w) + "/finalize", w.chair()).exchange().expectStatus().isOk();
+    call("POST", base(w) + "/reopen", w.chair())
+        .bodyValue(Map.of("reason", "A late clarification changes the grade"))
+        .exchange()
+        .expectStatus()
+        .isCreated();
+    org.mockito.ArgumentCaptor<io.nats.client.Message> sent =
+        org.mockito.ArgumentCaptor.forClass(io.nats.client.Message.class);
+    org.mockito.Mockito.verify(js, org.mockito.Mockito.atLeast(3)).publish(sent.capture());
+    List<String> reasons =
+        sent.getAllValues().stream()
+            .filter(m -> m.getSubject().equals("ui.push.tender." + w.tender()))
+            .map(m -> new String(m.getData(), java.nio.charset.StandardCharsets.UTF_8))
+            .filter(b -> b.contains("\"report.changed\""))
+            .toList();
+    org.assertj.core.api.Assertions.assertThat(reasons)
+        .anyMatch(b -> b.contains("final_grade_recorded"))
+        .anyMatch(b -> b.contains("report_finalized"))
+        .anyMatch(b -> b.contains("report_reopened"))
+        .noneMatch(b -> b.contains("partially_compliant") || b.contains("Backups"));
   }
 }
