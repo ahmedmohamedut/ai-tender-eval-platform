@@ -182,7 +182,16 @@ public class ReportService {
                     .filter(v -> v.no() == requested && (a.privileged() || !v.live()))
                     .findFirst()
                     .map(Mono::just)
-                    .orElseGet(() -> Mono.error(ApiException.notFound("report version")));
+                    .orElseGet(
+                        () ->
+                            // the version the Chair has not opened yet
+                            a.privileged()
+                                    && ("evaluation".equals(a.stage())
+                                        || "consolidation".equals(a.stage()))
+                                    && requested == (all.isEmpty() ? 1 : all.get(0).no() + 1)
+                                    && all.stream().noneMatch(Ver::live)
+                                ? openingVersion(db, a.tenderId(), requested)
+                                : Mono.<Ver>error(ApiException.notFound("report version")));
               }
               if (a.privileged()) {
                 var open = all.stream().filter(Ver::live).findFirst();

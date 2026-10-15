@@ -2189,7 +2189,110 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isEqualTo(422);
           }
         });
+    m.put(
+        "exportReport",
+        new Scenario() {
+          final ReportWorld.World w = ReportWorld.create();
+
+          @Override
+          public int success() {
+            reportCall("POST", "/exports", w)
+                .bodyValue(Map.of("format", "xlsx"))
+                .exchange()
+                .expectStatus()
+                .isAccepted();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            reportCall("POST", "/exports", w)
+                .bodyValue(Map.of("format", "docx"))
+                .exchange()
+                .expectStatus()
+                .is4xxClientError();
+          }
+        });
+    m.put(
+        "exportRequirements",
+        new Scenario() {
+          final ReportWorld.World w = ReportWorld.create();
+
+          @Override
+          public int success() {
+            exportCall("/tenders/" + w.tender() + "/requirements/export", w.m1())
+                .exchange()
+                .expectStatus()
+                .isAccepted();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            exportCall("/tenders/" + UUID.randomUUID() + "/requirements/export", w.m1())
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+          }
+        });
+    m.put(
+        "exportClarifications",
+        new Scenario() {
+          final ReportWorld.World w = ReportWorld.create();
+
+          @Override
+          public int success() {
+            exportCall("/tender-vendors/" + w.tv() + "/evaluation/clarifications/export", w.m1())
+                .exchange()
+                .expectStatus()
+                .isAccepted();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            exportCall(
+                    "/tender-vendors/" + UUID.randomUUID() + "/evaluation/clarifications/export",
+                    w.m1())
+                .exchange()
+                .expectStatus()
+                .isNotFound();
+          }
+        });
+    m.put(
+        "exportAuditEvents",
+        new Scenario() {
+          final ReportWorld.World w = ReportWorld.create();
+
+          @Override
+          public int success() {
+            exportCall("/audit-events/export", w.admin())
+                .bodyValue(Map.of())
+                .exchange()
+                .expectStatus()
+                .isAccepted();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            exportCall("/audit-events/export", w.m1())
+                .bodyValue(Map.of())
+                .exchange()
+                .expectStatus()
+                .isForbidden();
+          }
+        });
     return m;
+  }
+
+  private org.springframework.test.web.reactive.server.WebTestClient.RequestBodySpec exportCall(
+      String path, app.tendereval.backend.testsupport.TestUsers.TestUser user) {
+    return web.post()
+        .uri(path)
+        .header("Authorization", "Bearer " + tokenFor(user))
+        .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+        .contentType(MediaType.APPLICATION_JSON);
   }
 
   private org.springframework.test.web.reactive.server.WebTestClient.RequestBodySpec reportCall(

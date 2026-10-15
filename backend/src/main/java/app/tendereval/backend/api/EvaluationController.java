@@ -48,6 +48,7 @@ public class EvaluationController implements EvaluationApi {
   private final Idempotency idempotency;
   private final RateLimiter limiter;
   private final MemberEvaluationService member;
+  private final app.tendereval.backend.exports.ExportService exports;
 
   public EvaluationController(
       RequestTransaction tx,
@@ -55,13 +56,26 @@ public class EvaluationController implements EvaluationApi {
       JobDispatcher dispatcher,
       Idempotency idempotency,
       RateLimiter limiter,
-      MemberEvaluationService member) {
+      MemberEvaluationService member,
+      app.tendereval.backend.exports.ExportService exports) {
     this.tx = tx;
     this.service = service;
     this.dispatcher = dispatcher;
     this.idempotency = idempotency;
     this.limiter = limiter;
     this.member = member;
+    this.exports = exports;
+  }
+
+  @Override
+  public Mono<ResponseEntity<app.tendereval.backend.api.model.Export>> exportClarifications(
+      UUID tenderVendorId, String idempotencyKey, ServerWebExchange exchange) {
+    String key = Idempotency.requireKey(idempotencyKey);
+    return exports.start(
+        key,
+        "POST /tender-vendors/{id}/evaluation/clarifications/export:" + tenderVendorId,
+        Idempotency.hash("exportClarifications", tenderVendorId.toString()),
+        (db, user) -> exports.clarificationsSpec(db, tenderVendorId));
   }
 
   @Override

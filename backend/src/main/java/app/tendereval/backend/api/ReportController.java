@@ -34,11 +34,35 @@ public class ReportController implements ReportApi {
   private final RequestTransaction tx;
   private final ReportService service;
   private final Idempotency idempotency;
+  private final app.tendereval.backend.exports.ExportService exports;
 
-  public ReportController(RequestTransaction tx, ReportService service, Idempotency idempotency) {
+  public ReportController(
+      RequestTransaction tx,
+      ReportService service,
+      Idempotency idempotency,
+      app.tendereval.backend.exports.ExportService exports) {
     this.tx = tx;
     this.service = service;
     this.idempotency = idempotency;
+    this.exports = exports;
+  }
+
+  @Override
+  public Mono<ResponseEntity<app.tendereval.backend.api.model.Export>> exportReport(
+      UUID tenderId,
+      Mono<app.tendereval.backend.api.model.ReportExportRequest> request,
+      String idempotencyKey,
+      ServerWebExchange exchange) {
+    String key = Idempotency.requireKey(idempotencyKey);
+    return request.flatMap(
+        in ->
+            exports.start(
+                key,
+                "POST /tenders/{id}/report/exports:" + tenderId,
+                Idempotency.hash("exportReport", tenderId.toString(), String.valueOf(in)),
+                (db, user) ->
+                    exports.reportSpec(
+                        db, tenderId, in.getFormat().getValue(), in.getVersionNo())));
   }
 
   @Override

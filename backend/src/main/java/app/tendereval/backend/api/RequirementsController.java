@@ -38,10 +38,26 @@ public class RequirementsController implements RequirementsApi {
 
   private final RequestTransaction tx;
   private final RequirementService service;
+  private final app.tendereval.backend.exports.ExportService exports;
 
-  public RequirementsController(RequestTransaction tx, RequirementService service) {
+  public RequirementsController(
+      RequestTransaction tx,
+      RequirementService service,
+      app.tendereval.backend.exports.ExportService exports) {
     this.tx = tx;
     this.service = service;
+    this.exports = exports;
+  }
+
+  @Override
+  public Mono<ResponseEntity<app.tendereval.backend.api.model.Export>> exportRequirements(
+      UUID tenderId, String idempotencyKey, ServerWebExchange exchange) {
+    String key = app.tendereval.backend.common.Idempotency.requireKey(idempotencyKey);
+    return exports.start(
+        key,
+        "POST /tenders/{id}/requirements/export:" + tenderId,
+        app.tendereval.backend.common.Idempotency.hash("exportRequirements", tenderId.toString()),
+        (db, user) -> exports.requirementsSpec(db, tenderId));
   }
 
   private static ResponseEntity<Requirement> tagged(Requirement r) {
