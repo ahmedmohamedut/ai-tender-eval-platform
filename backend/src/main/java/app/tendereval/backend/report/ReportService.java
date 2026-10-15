@@ -306,7 +306,8 @@ public class ReportService {
               + " g.id AS ai_grade_id, g.grade AS ai_grade, rg.final_grade AS fin_grade, rg.basis,"
               + " rg.justification, rg.decided_by, du.display_name AS decider, rg.decided_at,"
               + " CASE WHEN rg.id IS NULL THEN NULL ELSE rg.has_disagreement END AS has_dis,"
-              + " app_all_submitted_or_excluded(tv.id) AS complete,"
+              + " (app_all_submitted_or_excluded(tv.id)"
+              + "  AND EXISTS (SELECT 1 FROM member_evaluations ae WHERE ae.tender_vendor_id = tv.id AND ae.excluded_at IS NULL AND ae.status = 'submitted')) AS complete,"
               + " e.user_id AS m_user, mu.display_name AS m_name, r.member_grade AS m_grade,"
               + " r.note AS m_note, r.review_state AS m_state"
               + " FROM tender_vendors tv JOIN vendors v ON v.id = tv.vendor_id"
@@ -392,7 +393,7 @@ public class ReportService {
   /** Vendors with a proposal in or past evaluation, and whether every member has finished. */
   private Mono<List<Vendor>> vendors(DatabaseClient db, UUID tenderId) {
     return db.sql(
-            "SELECT tv.id AS tv, v.name, p.status, app_all_submitted_or_excluded(tv.id) AS done"
+            "SELECT tv.id AS tv, v.name, p.status, (app_all_submitted_or_excluded(tv.id) AND EXISTS (SELECT 1 FROM member_evaluations ae WHERE ae.tender_vendor_id = tv.id AND ae.excluded_at IS NULL AND ae.status = 'submitted')) AS done"
                 + " FROM tender_vendors tv JOIN vendors v ON v.id = tv.vendor_id"
                 + ACTIVE_PROPOSAL
                 + " WHERE tv.tender_id = :t AND tv.removed_at IS NULL ORDER BY v.name")
@@ -1330,8 +1331,15 @@ public class ReportService {
       DatabaseClient db, UUID tenderId, Ver v) {
     return db.sql(
             "SELECT action, count(*) AS n FROM audit_events WHERE tender_id = :t"
-                + " AND object_type <> 'member_evaluation_row' GROUP BY action ORDER BY action")
+                + " AND object_type <> 'member_evaluation_row'"
+                + " AND occurred_at <= :cut"
+                + " GROUP BY action ORDER BY action")
         .bind("t", tenderId)
+        .bind(
+            "cut",
+            v.finalizedAt() == null
+                ? OffsetDateTime.parse("9999-12-31T00:00:00Z")
+                : v.finalizedAt())
         .map((r, m) -> Map.entry(r.get("action", String.class), r.get("n", Long.class)))
         .all()
         .collectList()
@@ -1502,7 +1510,16 @@ public class ReportService {
               int next = all.isEmpty() ? 1 : all.get(0).no() + 1;
               return openingVersion(db, a.tenderId(), next)
                   .flatMap(o -> insertVersion(db, user, a, o, null, null));
-            });
+            })
+        // Two first actions at once: the loser reads the version the winner opened.
+        .onErrorResume(
+            org.springframework.dao.DataIntegrityViolationException.class,
+            e ->
+                versions(db, a.tenderId())
+                    .flatMap(
+                        all ->
+                            Mono.justOrEmpty(all.stream().filter(Ver::live).findFirst())
+                                .switchIfEmpty(Mono.error(e))));
   }
 
   public Mono<MatrixCellDetail> recordFinalGrade(
@@ -1604,7 +1621,6 @@ public class ReportService {
                     // the audit trail before release (UX-RPT-01), so only the fact is recorded.
                     AuditEntry.of("report_grade_recorded", "report_grade", id)
                         .tender(a.tenderId())
-                        .vendor(tenderVendorId)
                         .created(Map.of("basis", "chair_decision", "version_no", v.no()))
                         .note("Final grade recorded by the Chair")
                         .build()))
@@ -1882,7 +1898,7 @@ public class ReportService {
                                 .tender(a.tenderId())
                                 .created(
                                     Map.of("version_no", nv.no(), "from_version_no", from.no()))
-                                .note(reason)
+                                .note("Report reopened by the Chair")
                                 .build()))
                     .thenReturn(versionDto(nv, null)));
   }

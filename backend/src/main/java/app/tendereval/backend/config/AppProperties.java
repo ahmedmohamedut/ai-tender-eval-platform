@@ -38,6 +38,7 @@ public record AppProperties(
     String s3BucketDocuments,
     String s3BucketDerived,
     String s3BucketJobs,
+    String s3BucketExports,
     int s3MultipartPartMb,
     @NotBlank String dbIngestUsername,
     @NotBlank String dbIngestPassword,
