@@ -18,7 +18,7 @@ Status words: **done** (built, tested, committed), **partial** (built with a sta
 | 2 Documents and ingestion | done | Clean-clone gate, drills 8 of 8, 300-page run |
 | 3 Requirements | done, with gaps (below) | Gate run on the running stack: lint, api, contracts, unit, integration, e2e (3 journeys), verify-env, smoke-ingest, eval, extraction-smoke; extraction drills 6 of 6 |
 | 4 Screening and evaluation | in progress (plan approved 2026-10-14; milestones P4-0 to P4-8, see below) | |
-| 5 Consolidation and reporting | not started | |
+| 5 Consolidation and reporting | built; gate passed 2026-10-15 (open: G15, G16, G17, G18) | |
 | 6, 7 | not started, see roadmap | |
 
 ## Task status
