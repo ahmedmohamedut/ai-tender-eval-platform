@@ -7969,6 +7969,12 @@ components:
                 $ref: '#/components/schemas/MemberEvaluationStatus'
               excluded:
                 type: boolean
+              member_evaluation_id:
+                type:
+                - string
+                - 'null'
+                format: uuid
+                description: The evaluation the Chair reopens or excludes; null before it exists.
             required:
             - tender_vendor_id
             - user_id

@@ -17,9 +17,35 @@ import reactor.core.publisher.Mono;
 public class AuditController implements AuditApi {
 
   private final ExportService exports;
+  private final app.tendereval.backend.db.RequestTransaction tx;
+  private final app.tendereval.backend.audit.AuditSearch search;
 
-  public AuditController(ExportService exports) {
+  public AuditController(
+      ExportService exports,
+      app.tendereval.backend.db.RequestTransaction tx,
+      app.tendereval.backend.audit.AuditSearch search) {
     this.exports = exports;
+    this.tx = tx;
+    this.search = search;
+  }
+
+  @Override
+  public Mono<ResponseEntity<app.tendereval.backend.api.model.AuditEventPage>> listAuditEvents(
+      Integer limit,
+      String cursor,
+      java.util.UUID tenderId,
+      java.util.UUID tenderVendorId,
+      java.util.UUID userId,
+      app.tendereval.backend.api.model.AuditAction action,
+      app.tendereval.backend.api.model.AuditSource source,
+      java.time.OffsetDateTime from,
+      java.time.OffsetDateTime to,
+      ServerWebExchange exchange) {
+    return tx.inRequestTransaction(
+            db ->
+                search.search(
+                    db, limit, cursor, tenderId, tenderVendorId, userId, action, source, from, to))
+        .map(ResponseEntity::ok);
   }
 
   @Override

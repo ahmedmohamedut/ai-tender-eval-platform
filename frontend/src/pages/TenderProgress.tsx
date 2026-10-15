@@ -2,6 +2,8 @@ import { useParams } from "react-router";
 import { EmptyState, ErrorNotice, Loading } from "../components/ui";
 import { unwrap, useApi } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
+import { useSession } from "../app/Session";
+import { ChairPanel } from "./ChairPanel";
 import { TenderHeader, useTender } from "./TenderHome";
 
 /** PG-06 Tender progress board, first version: stage and members. It shows progress, never grades. */
@@ -9,6 +11,7 @@ export function TenderProgress() {
   const { tenderId } = useParams();
   const api = useApi();
   const tender = useTender(tenderId);
+  const { me } = useSession();
   const board = useAsync(
     () =>
       unwrap(
@@ -66,6 +69,9 @@ export function TenderProgress() {
           ? "No jobs are running."
           : `${b.running_jobs.length} jobs running.`}
       </p>
+      {(me.user.role === "admin" || tender.state.data.chair?.id === me.user.id) && (
+        <ChairPanel tenderId={tenderId!} isChair={tender.state.data.chair?.id === me.user.id} />
+      )}
     </>
   );
 }

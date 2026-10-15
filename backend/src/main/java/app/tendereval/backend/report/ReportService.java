@@ -781,7 +781,7 @@ public class ReportService {
                       vendors(db, tenderId),
                       committee(db, tenderId),
                       db.sql(
-                              "SELECT tv.id AS tv, m.user_id, coalesce(e.status, 'not_started') AS status,"
+                              "SELECT tv.id AS tv, m.user_id, e.id AS me, coalesce(e.status, 'not_started') AS status,"
                                   + " (e.excluded_at IS NOT NULL) AS excluded"
                                   + " FROM tender_vendors tv"
                                   + ACTIVE_PROPOSAL
@@ -792,13 +792,17 @@ public class ReportService {
                                   + " WHERE tv.tender_id = :t AND tv.removed_at IS NULL")
                           .bind("t", tenderId)
                           .map(
-                              (r, m) ->
-                                  Map.<String, Object>of(
-                                      "tv", r.get("tv", UUID.class),
-                                      "user", r.get("user_id", UUID.class),
-                                      "status", r.get("status", String.class),
-                                      "excluded",
-                                          Boolean.TRUE.equals(r.get("excluded", Boolean.class))))
+                              (r, m) -> {
+                                Map<String, Object> cell = new LinkedHashMap<>();
+                                cell.put("tv", r.get("tv", UUID.class));
+                                cell.put("user", r.get("user_id", UUID.class));
+                                cell.put("me", r.get("me", UUID.class));
+                                cell.put("status", r.get("status", String.class));
+                                cell.put(
+                                    "excluded",
+                                    Boolean.TRUE.equals(r.get("excluded", Boolean.class)));
+                                return cell;
+                              })
                           .all()
                           .collectList())
                   .map(
@@ -820,7 +824,8 @@ public class ReportService {
                                   .userId((UUID) c.get("user"))
                                   .status(
                                       MemberEvaluationStatus.fromValue((String) c.get("status")))
-                                  .excluded((Boolean) c.get("excluded")));
+                                  .excluded((Boolean) c.get("excluded"))
+                                  .memberEvaluationId((UUID) c.get("me")));
                         }
                         return pm;
                       });

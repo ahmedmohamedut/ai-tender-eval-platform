@@ -175,7 +175,7 @@ class MeApiIT extends AbstractApiIT {
   @Test
   void anOperationNotBuiltYetAnswers501AsProblemJson() {
     TestUser admin = TestUsers.create("admin");
-    get("/audit-events", admin)
+    get("/document-access-events", admin)
         .exchange()
         .expectStatus()
         .isEqualTo(501)

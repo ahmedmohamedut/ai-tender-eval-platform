@@ -1,5 +1,6 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { NavLink, Outlet } from "react-router";
+import { NotificationBell } from "../components/NotificationBell";
 import { roleLabel } from "../lib/labels";
 import { useSession } from "./Session";
 
@@ -29,6 +30,7 @@ export function Shell() {
       </a>
       <header className="topbar">
         <span className="product">AI Tender Evaluation Platform</span>
+        <NotificationBell />
         <Menu.Root>
           <Menu.Trigger asChild>
             <button
