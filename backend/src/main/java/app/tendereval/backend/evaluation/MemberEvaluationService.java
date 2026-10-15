@@ -1189,8 +1189,19 @@ public class MemberEvaluationService {
                                           .vendor(c.tenderVendorId())
                                           .created(Map.of("rows", t.total()))
                                           .build()))
+                              // The last submission moves the tender to consolidation (V24).
+                              .then(advance(db, c.tenderId()))
                               .then(mine(db, tenderVendorId));
                         }));
+  }
+
+  /** Moves the tender from evaluation to consolidation when the rule now holds. */
+  private Mono<Void> advance(DatabaseClient db, UUID tenderId) {
+    return db.sql("SELECT app_advance_to_consolidation(:t)")
+        .bind("t", tenderId)
+        .fetch()
+        .rowsUpdated()
+        .then();
   }
 
   private static Map<String, Object> failure(String code, String message, Ctx c) {
@@ -1333,6 +1344,7 @@ public class MemberEvaluationService {
                                                                 .vendor(ids[2])
                                                                 .note(reason)
                                                                 .build())
+                                                        .then(advance(db, ids[1]))
                                                         .then(shell(db, memberEvaluationId)));
                                   }));
             });

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import app.tendereval.backend.testsupport.AbstractApiIT;
 import app.tendereval.backend.testsupport.Fixtures;
+import app.tendereval.backend.testsupport.ReportWorld;
 import app.tendereval.backend.testsupport.TestUsers;
 import app.tendereval.backend.testsupport.TestUsers.TestUser;
 import java.lang.reflect.Method;
@@ -2110,7 +2111,104 @@ class AuditWriteCoverageIT extends AbstractApiIT {
                 .isEqualTo(422);
           }
         });
+    m.put(
+        "recordFinalGrade",
+        new Scenario() {
+          final ReportWorld.World w = ReportWorld.create();
+
+          @Override
+          public int success() {
+            reportCall("PUT", "/grades/" + w.tv() + "/" + w.r1(), w)
+                .bodyValue(
+                    Map.of(
+                        "final_grade",
+                        "partially_compliant",
+                        "justification",
+                        "Backups only is partial coverage."))
+                .exchange()
+                .expectStatus()
+                .isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            reportCall("PUT", "/grades/" + w.tv() + "/" + w.r1(), w)
+                .bodyValue(Map.of("final_grade", "partially_compliant", "justification", "short"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
+    m.put(
+        "finalizeReport",
+        new Scenario() {
+          final ReportWorld.World w = ReportWorld.create();
+
+          {
+            decided(w);
+          }
+
+          @Override
+          public int success() {
+            reportCall("POST", "/finalize", w).exchange().expectStatus().isOk();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            reportCall("POST", "/finalize", w).exchange().expectStatus().isEqualTo(409);
+          }
+        });
+    m.put(
+        "reopenReport",
+        new Scenario() {
+          final ReportWorld.World w = ReportWorld.create();
+
+          {
+            decided(w);
+            reportCall("POST", "/finalize", w).exchange().expectStatus().isOk();
+          }
+
+          @Override
+          public int success() {
+            reportCall("POST", "/reopen", w)
+                .bodyValue(Map.of("reason", "New evidence arrived."))
+                .exchange()
+                .expectStatus()
+                .isCreated();
+            return 1;
+          }
+
+          @Override
+          public void refused() {
+            reportCall("POST", "/reopen", w)
+                .bodyValue(Map.of("reason", "short"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(422);
+          }
+        });
     return m;
+  }
+
+  private org.springframework.test.web.reactive.server.WebTestClient.RequestBodySpec reportCall(
+      String method, String path, ReportWorld.World w) {
+    return web.method(org.springframework.http.HttpMethod.valueOf(method))
+        .uri("/tenders/" + w.tender() + "/report" + path)
+        .header("Authorization", "Bearer " + tokenFor(w.chair()))
+        .header("Idempotency-Key", "cov-" + UUID.randomUUID())
+        .contentType(MediaType.APPLICATION_JSON);
+  }
+
+  private void decided(ReportWorld.World w) {
+    reportCall("PUT", "/grades/" + w.tv() + "/" + w.r1(), w)
+        .bodyValue(
+            Map.of(
+                "final_grade", "partially_compliant", "justification", "Backups only is partial."))
+        .exchange()
+        .expectStatus()
+        .isOk();
   }
 
   @Test
