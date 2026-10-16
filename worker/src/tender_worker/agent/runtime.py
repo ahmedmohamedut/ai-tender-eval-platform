@@ -370,7 +370,35 @@ _PRECHECK_WARNINGS = {
 }
 
 
+def _job_span(command: Command, deps: AgentDeps, deliveries: int, version: str, traceparent: str):
+    """The root span of a job, under the trace the backend started (AI 6.1, level 1)."""
+    return tracing.span(
+        f"job.{command.job_type}",
+        "CHAIN",
+        {
+            "tender.job_id": str(command.job_id),
+            "tender.tender_id": str(command.tender_id),
+            "tender.target_id": str(command.target.id),
+            "tender.worker_version": deps.worker.version,
+            "tender.prompt_version": version,
+            "tender.delivery": deliveries,
+        },
+        traceparent=traceparent,
+    )
+
+
 async def run_precheck(
+    deps: AgentDeps,
+    command: Command,
+    deliveries: int,
+    traceparent: str,
+    cancelled: Callable[[UUID], Awaitable[bool]],
+) -> None:
+    with _job_span(command, deps, deliveries, PRECHECK_VERSION, traceparent):
+        await _run_precheck(deps, command, deliveries, traceparent, cancelled)
+
+
+async def _run_precheck(
     deps: AgentDeps,
     command: Command,
     deliveries: int,
@@ -500,6 +528,17 @@ def _grade_warnings(items: list[dict], injected: int) -> list[StatusWarning]:
 
 
 async def run_evaluation(
+    deps: AgentDeps,
+    command: Command,
+    deliveries: int,
+    traceparent: str,
+    cancelled: Callable[[UUID], Awaitable[bool]],
+) -> None:
+    with _job_span(command, deps, deliveries, EVALUATION_VERSION, traceparent):
+        await _run_evaluation(deps, command, deliveries, traceparent, cancelled)
+
+
+async def _run_evaluation(
     deps: AgentDeps,
     command: Command,
     deliveries: int,

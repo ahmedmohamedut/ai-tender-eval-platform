@@ -11,6 +11,7 @@ Without `PHOENIX_COLLECTOR_ENDPOINT` every call here is a cheap no-op.
 from __future__ import annotations
 
 import contextlib
+import functools
 import hashlib
 import logging
 from collections.abc import Callable, Iterator
@@ -152,6 +153,20 @@ def span(
     finally:
         if token is not None:
             otel_context.detach(token)
+
+
+def step(name: str):
+    """Decorator for an async graph node: runs it inside a `step.{name}` span (AI 6.1, level 2)."""
+
+    def wrap(fn):
+        @functools.wraps(fn)
+        async def run(self, state):
+            with span(f"step.{name}", "CHAIN", {"tender.step": name}):
+                return await fn(self, state)
+
+        return run
+
+    return wrap
 
 
 def set_attributes(attrs: dict[str, Any]) -> None:

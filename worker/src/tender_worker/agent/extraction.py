@@ -8,7 +8,6 @@ accepted and when a loop ends; the model answers one narrow question at a time.
 from __future__ import annotations
 
 import asyncio
-import functools
 import hashlib
 import logging
 import math
@@ -129,18 +128,7 @@ def item_id(job_id: UUID, text: str, passage_ids: list[str]) -> str:
     return str(uuid.uuid5(ITEM_NAMESPACE, f"{job_id}:{key}"))
 
 
-def _step(name: str):
-    """Run a graph node inside a `step.{name}` span (AI 6.1, level 2)."""
-
-    def wrap(fn):
-        @functools.wraps(fn)
-        async def run(self, state):
-            with tracing.span(f"step.{name}", "CHAIN", {"tender.step": name}):
-                return await fn(self, state)
-
-        return run
-
-    return wrap
+_step = tracing.step
 
 
 class ExtractionGraph:

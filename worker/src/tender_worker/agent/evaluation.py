@@ -18,7 +18,7 @@ from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
 
-from tender_worker import metrics
+from tender_worker import metrics, tracing
 from tender_worker.agent.extraction import _passage_block
 from tender_worker.agent.grounding import suspected_injection, verify_quote
 from tender_worker.agent.llm import LlmUnavailable, StructuredLlm
@@ -129,6 +129,23 @@ class EvaluationGraph:
         self._graph = g.compile()
 
     async def grade_requirement(self, req: Requirement) -> RowResult:
+        # ids and outcomes only: the requirement's words and the passages stay out (rule 10)
+        with tracing.span(
+            "row", "CHAIN", {"tender.step": "grade_requirement", "tender.requirement_id": req.id}
+        ):
+            row = await self._grade_requirement(req)
+            item = row.item
+            tracing.set_attributes(
+                {
+                    "tender.row_outcome": item.get("outcome", ""),
+                    "tender.failure_code": item.get("failure_code", ""),
+                    "tender.repaired": row.repaired,
+                    "tender.injection_suspected": row.injection,
+                }
+            )
+            return row
+
+    async def _grade_requirement(self, req: Requirement) -> RowResult:
         state = await self._graph.ainvoke(
             {
                 "req": req,
@@ -156,6 +173,7 @@ class EvaluationGraph:
             self._tender, self._versions, vectors[0], text, self._cfg.top_k
         )
 
+    @tracing.step("retrieve")
     async def _retrieve(self, state: RowState) -> dict[str, Any]:
         req = state["req"]
         queries = [req.text]
@@ -190,6 +208,7 @@ class EvaluationGraph:
             total += len(p.text)
         order = sorted(kept, key=lambda i: (kept[i].version_id, kept[i].ordinal))
         injection = any(suspected_injection(p.text) for p in kept.values())
+        tracing.set_attributes({"tender.hit_count": len(ranked), "tender.shown_count": len(kept)})
         return {"shown": kept, "order": order, "injection": injection}
 
     def _prompt(self, state: RowState, template: str = "evaluation.user.txt") -> str:
@@ -204,11 +223,16 @@ class EvaluationGraph:
             passages=_passage_block(passages) if passages else "(no passage was found)",
         )
 
+    @tracing.step("grade")
     async def _grade(self, state: RowState) -> dict[str, Any]:
         try:
-            draft = await self._llm.generate(
-                load("evaluation.system.txt"), self._prompt(state), GradeDraft, model=self._model
-            )
+            with tracing.purpose("llm.grade"):
+                draft = await self._llm.generate(
+                    load("evaluation.system.txt"),
+                    self._prompt(state),
+                    GradeDraft,
+                    model=self._model,
+                )
         except LlmUnavailable:
             breaker = getattr(self._llm, "breaker", None)
             if breaker is not None and breaker.gave_up():
@@ -232,18 +256,21 @@ class EvaluationGraph:
             return "absence"
         return "validate"
 
+    @tracing.step("absence")
     async def _absence(self, state: RowState) -> dict[str, Any]:
         """One bounded second look: other wording, searched by code, graded once more."""
         req = state["req"]
         try:
-            plan = await self._llm.generate(
-                load("evaluation.absence.system.txt"),
-                load("evaluation.absence.user.txt").format(
-                    text=req.text, criteria=req.acceptance_criteria.strip() or "(none stated)"
-                ),
-                QueryPlan,
-                model=self._model,
-            )
+            with tracing.purpose("llm.verify"):
+                plan = await self._llm.generate(
+                    load("evaluation.absence.system.txt"),
+                    load("evaluation.absence.user.txt").format(
+                        text=req.text,
+                        criteria=req.acceptance_criteria.strip() or "(none stated)",
+                    ),
+                    QueryPlan,
+                    model=self._model,
+                )
         except LlmUnavailable:
             breaker = getattr(self._llm, "breaker", None)
             if breaker is not None and breaker.gave_up():
@@ -330,6 +357,7 @@ class EvaluationGraph:
             pass
         return citations, problems, code
 
+    @tracing.step("validate")
     async def _validate(self, state: RowState) -> dict[str, Any]:
         draft = state.get("draft")
         if draft is None:
@@ -349,6 +377,7 @@ class EvaluationGraph:
             return "repair"
         return "record"
 
+    @tracing.step("repair")
     async def _repair(self, state: RowState) -> dict[str, Any]:
         req = state["req"]
         passages = [state["shown"][i] for i in state["order"]]
@@ -363,9 +392,10 @@ class EvaluationGraph:
             previous=state["draft"].model_dump_json() if state.get("draft") else "{}",
         )
         try:
-            fixed = await self._llm.generate(
-                load("evaluation.system.txt"), prompt, GradeDraft, model=self._model
-            )
+            with tracing.purpose("llm.repair"):
+                fixed = await self._llm.generate(
+                    load("evaluation.system.txt"), prompt, GradeDraft, model=self._model
+                )
         except LlmUnavailable:
             breaker = getattr(self._llm, "breaker", None)
             if breaker is not None and breaker.gave_up():
@@ -373,6 +403,7 @@ class EvaluationGraph:
             return {"repaired": True, "draft": None, "failure": "model_error"}
         return {"repaired": True, "draft": fixed}
 
+    @tracing.step("record")
     async def _record(self, state: RowState) -> dict[str, Any]:
         req = state["req"]
         base = {

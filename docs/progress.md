@@ -148,7 +148,7 @@ Notable problems found while building, how each was found and what guards agains
 | G3 | Workers read secrets from the environment, not OpenBao (D7) | Security review | Closed: `tender_worker/secrets.py` and `load_settings()` read the worker's own OpenBao paths over AppRole at start (P92); compose no longer passes those secrets; `test_secrets.py` (7), `make verify-env` check |
 | G4 | Recall and precision on real RFPs are unmeasured; the only figures are on synthetic RFPs with the stub or the local model | Release gate | An approved endpoint and real or anonymised documents (rule 15) |
 | G5 | Duplicate detection is not exercised well: the development embedding is a hash (duplicates flagged 0 of 2 in the release record) | Extraction quality | A real embedding model, then re-run `make eval` |
-| G6 | Phoenix tracing for the agent: extraction is traced (P80); evaluation and pre-check are not | Observability | Wrap their graph nodes and model calls with `tracing.span` and `tracing.purpose`, as extraction does; keep `TRACE_CAPTURE_CONTENT` off |
+| G6 | Phoenix tracing for the agent: extraction is traced (P80); evaluation and pre-check were not | Observability | Closed: job, step, row and llm spans for both jobs (P93); `tests/test_tracing_jobs.py` (3); export to Phoenix checked on the stack (probe span reached project `tender-eval`) |
 | G7 | Requirements export answered 501 | UX-REQ-15 | Closed in P5-4 (`exportRequirements`) |
 | G8 | Proposal files are visible to members only after Phase 4 conflict declarations | Phase 4 | Closed in P4-2: declaration API and dialog; files open only with a no-conflict declaration |
 | G9 | `render` buffers the whole PDF in memory | Large documents | Stream with Range |

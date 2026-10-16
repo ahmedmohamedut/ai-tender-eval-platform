@@ -19,6 +19,7 @@ from uuid import UUID
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
+from tender_worker import tracing
 from tender_worker.agent.extraction import NoContentInScope, _passage_block
 from tender_worker.agent.llm import StructuredLlm
 from tender_worker.agent.retrieval import PassageRef, PassageSource, ScopeItem
@@ -178,6 +179,7 @@ class PrecheckGraph:
         if self._progress:
             await self._progress(step, percent)
 
+    @tracing.step("load")
     async def _load(self, state: State) -> dict[str, Any]:
         await self._tick("load_scope", 5)
         rfp = await self._source.load(self._tender, state["rfp_scope"])
@@ -186,23 +188,26 @@ class PrecheckGraph:
             raise NoContentInScope()
         return {"rfp": rfp, "proposal": proposal}
 
+    @tracing.step("find_format")
     async def _find_format(self, state: State) -> dict[str, Any]:
         await self._tick("find_format", 15)
         return {"format_passages": find_format_passages(state["rfp"])}
 
+    @tracing.step("list_expected")
     async def _list_expected(self, state: State) -> dict[str, Any]:
         await self._tick("list_expected", 25)
         shown = {p.id: p for p in state["format_passages"]}
         if not shown:
             return {"expected": [], "warnings": ["no_format_found"]}
-        answer = await self._llm.generate(
-            load("precheck.expected.system.txt"),
-            load("precheck.expected.user.txt").format(
-                passages=_passage_block(list(shown.values()))
-            ),
-            ExpectedSections,
-            model=self._model,
-        )
+        with tracing.purpose("llm.expected"):
+            answer = await self._llm.generate(
+                load("precheck.expected.system.txt"),
+                load("precheck.expected.user.txt").format(
+                    passages=_passage_block(list(shown.values()))
+                ),
+                ExpectedSections,
+                model=self._model,
+            )
         expected: list[dict] = []
         seen: set[str] = set()
         for item in answer.items:
@@ -229,6 +234,17 @@ class PrecheckGraph:
         ]
 
     async def _match(self, state: dict) -> dict[str, Any]:
+        # the expected section's name comes from the RFP, so it is content: left out (rule 10)
+        with tracing.span("row", "CHAIN", {"tender.step": "match"}):
+            out = await self._match_one(state)
+            findings = out.get("findings") or []
+            if findings:
+                tracing.set_attributes(
+                    {"tender.found": findings[0]["found"], "tender.row_outcome": "done"}
+                )
+            return out
+
+    async def _match_one(self, state: dict) -> dict[str, Any]:
         expected: dict = state["expected"]
         cands = candidates_for(expected, state["proposal"])
         shown = {p.id: p for p in cands}
@@ -238,16 +254,17 @@ class PrecheckGraph:
             async with self._gate:
                 if self._cancelled and await self._cancelled():
                     return {"findings": []}
-                answer = await self._llm.generate(
-                    load("precheck.match.system.txt"),
-                    load("precheck.match.user.txt").format(
-                        name=expected["name"],
-                        description=expected.get("description") or expected["name"],
-                        passages=_block_with_path(cands),
-                    ),
-                    SectionMatch,
-                    model=self._model,
-                )
+                with tracing.purpose("llm.match"):
+                    answer = await self._llm.generate(
+                        load("precheck.match.system.txt"),
+                        load("precheck.match.user.txt").format(
+                            name=expected["name"],
+                            description=expected.get("description") or expected["name"],
+                            passages=_block_with_path(cands),
+                        ),
+                        SectionMatch,
+                        model=self._model,
+                    )
             cited = [shown[i] for i in answer.passage_ids if i in shown]
             if answer.found and cited:
                 found = True
