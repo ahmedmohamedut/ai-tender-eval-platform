@@ -2,7 +2,13 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
-import { accessibilityViolations, fakeApi, makeMe, renderPage } from "../test/helpers";
+import {
+  accessibilityViolations,
+  dialogTitled,
+  fakeApi,
+  makeMe,
+  renderPage,
+} from "../test/helpers";
 import { Baseline } from "./Baseline";
 import { Requirements } from "./Requirements";
 
@@ -165,7 +171,7 @@ describe("PG-11 Requirements", () => {
       }),
     );
     // the conflict names who changed it and offers both versions
-    const conflict = await screen.findByRole("dialog", { name: "This requirement was changed" });
+    const conflict = await dialogTitled("This requirement was changed");
     expect(
       within(conflict).getByText(/Morgan Member changed this requirement/),
     ).toBeInTheDocument();

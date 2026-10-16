@@ -108,3 +108,12 @@ export async function optionsOf(label: string | RegExp): Promise<string[]> {
   await userEvent.keyboard("{Escape}");
   return items;
 }
+
+/**
+ * The open dialog with this title. In the test build antd gives every modal the same
+ * `aria-labelledby`, so a dialog cannot be found by its accessible name there.
+ */
+export async function dialogTitled(title: string): Promise<HTMLElement> {
+  const heading = await screen.findByText(title, { selector: ".ant-modal-title" });
+  return heading.closest('[role="dialog"]') as HTMLElement;
+}
