@@ -1,3 +1,4 @@
+import { Space, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { Button, useAnnounce } from "./ui";
 import { unwrap, useApi } from "../lib/api";
@@ -100,7 +101,7 @@ export function ExportButton({
   }
 
   return (
-    <span className="export-button">
+    <Space size={8} wrap>
       {phase.kind === "ready" ? (
         <Button
           type="button"
@@ -119,11 +120,10 @@ export function ExportButton({
         </Button>
       )}
       {phase.kind === "failed" && (
-        <span role="alert" className="help">
-          {" "}
+        <Typography.Text role="alert" type="danger">
           {phase.message}
-        </span>
+        </Typography.Text>
       )}
-    </span>
+    </Space>
   );
 }

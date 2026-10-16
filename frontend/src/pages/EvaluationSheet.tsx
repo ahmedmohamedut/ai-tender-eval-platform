@@ -1,3 +1,16 @@
+import {
+  Alert,
+  Button as AntButton,
+  Card,
+  Col,
+  Flex,
+  Input,
+  Row,
+  Select,
+  Space,
+  Table,
+  Typography,
+} from "antd";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import {
@@ -9,6 +22,8 @@ import {
   Loading,
   NoteDialog,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { useSession } from "../app/Session";
@@ -33,7 +48,7 @@ type Row = components["schemas"]["EvaluationRow"];
 type Grade = components["schemas"]["Grade"];
 
 function GradeChip({ grade }: { grade: string | null | undefined }) {
-  if (!grade) return <span className="help">None</span>;
+  if (!grade) return <Typography.Text type="secondary">None</Typography.Text>;
   return (
     <StatusChip
       label={`${gradeIcon[grade] ?? ""} ${gradeLabel[grade] ?? grade}`.trim()}
@@ -218,41 +233,60 @@ export function EvaluationSheet() {
   return (
     <>
       {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
-      <p>
+      <Typography.Paragraph>
         <Link to={`/tenders/${tenderId}/evaluation`}>Back to your evaluations</Link>
-      </p>
-      <h2>
+      </Typography.Paragraph>
+      <Typography.Title level={2} style={{ fontSize: 20 }}>
         {ev.vendor_name}{" "}
         <StatusChip
           label={evaluationStatusLabel[ev.status] ?? ev.status}
           tone={evaluationStatusTone[ev.status] ?? "neutral"}
         />
-      </h2>
-      <p className="help" role="note">
+      </Typography.Title>
+      <Typography.Paragraph type="secondary" role="note">
         Your grades and notes are private. Other members&rsquo; grades open when you submit this
         vendor.
-      </p>
+      </Typography.Paragraph>
       {running && (
-        <p role="status">
-          The AI is still grading this proposal. Rows appear as they are ready
-          {ev.job?.progress_percent != null ? ` (${ev.job.progress_percent} %)` : ""}.
-        </p>
+        <Alert
+          type="info"
+          showIcon
+          role="status"
+          style={{ marginBottom: 16 }}
+          title={`The AI is still grading this proposal. Rows appear as they are ready${
+            ev.job?.progress_percent != null ? ` (${ev.job.progress_percent} %)` : ""
+          }.`}
+        />
       )}
-      {ev.excluded && <p role="alert">You are excluded from this vendor.</p>}
+      {ev.excluded && (
+        <Alert
+          type="warning"
+          showIcon
+          role="alert"
+          style={{ marginBottom: 16 }}
+          title="You are excluded from this vendor."
+        />
+      )}
       {error && <ErrorNotice error={error} />}
       {failures.length > 0 && (
-        <div role="alert" className="card">
-          <h3>Not ready to submit</h3>
-          <ul>
-            {failures.map((f) => (
-              <li key={f.code}>{f.message}</li>
-            ))}
-          </ul>
-        </div>
+        <Alert
+          type="error"
+          showIcon
+          role="alert"
+          style={{ marginBottom: 16 }}
+          title="Not ready to submit"
+          description={
+            <ul>
+              {failures.map((f) => (
+                <li key={f.code}>{f.message}</li>
+              ))}
+            </ul>
+          }
+        />
       )}
 
-      <div className="card">
-        <p aria-live="polite">
+      <Card style={{ marginBottom: 16 }}>
+        <p aria-live="polite" style={{ marginTop: 0 }}>
           <strong>
             {reviewed} of {total} reviewed
           </strong>
@@ -266,14 +300,14 @@ export function EvaluationSheet() {
           )}
         </p>
         {summary?.explanation && (
-          <details>
+          <details style={{ marginBottom: 12 }}>
             <summary>How the score is worked out</summary>
-            <p className="help">
+            <Typography.Paragraph type="secondary">
               {String(summary.explanation.basis ?? "")} Fully compliant counts{" "}
               {String(summary.explanation.points_fully)}, partially{" "}
               {String(summary.explanation.points_partially)}, non-compliant{" "}
               {String(summary.explanation.points_non)}.
-            </p>
+            </Typography.Paragraph>
           </details>
         )}
         <Button
@@ -285,48 +319,68 @@ export function EvaluationSheet() {
         >
           Submit this vendor
         </Button>
-      </div>
+      </Card>
 
-      <div className="filters" role="search">
-        <Field label="Search requirements">
-          {({ id }) => <input id={id} value={q} onChange={(e) => setQ(e.target.value)} />}
-        </Field>
-        <Field label="Grade">
-          {({ id }) => (
-            <select id={id} value={grade} onChange={(e) => setGrade(e.target.value)}>
-              <option value="">Any grade</option>
-              {Object.entries(gradeLabel).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field label="Review state">
-          {({ id }) => (
-            <select id={id} value={state} onChange={(e) => setState(e.target.value)}>
-              <option value="">Any state</option>
-              {Object.entries(memberStateLabel).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field label="Show only">
-          {({ id }) => (
-            <select id={id} value={only} onChange={(e) => setOnly(e.target.value as typeof only)}>
-              <option value="">All rows</option>
-              <option value="overridden">Overridden</option>
-              <option value="flagged">Needs clarification</option>
-              <option value="outdated">Outdated</option>
-              <option value="not_evaluated">Not evaluated</option>
-            </select>
-          )}
-        </Field>
-      </div>
+      <Card style={{ marginBottom: 16 }}>
+        <Flex gap={16} wrap align="flex-end" role="search">
+          <Field label="Search requirements">
+            {({ id }) => (
+              <Input.Search
+                id={id}
+                allowClear
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                style={{ minWidth: 240 }}
+              />
+            )}
+          </Field>
+          <Field label="Grade">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={grade}
+                onChange={(v) => setGrade(v)}
+                style={{ minWidth: 200 }}
+                options={[
+                  { value: "", label: "Any grade" },
+                  ...Object.entries(gradeLabel).map(([v, l]) => ({ value: v, label: l })),
+                ]}
+              />
+            )}
+          </Field>
+          <Field label="Review state">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={state}
+                onChange={(v) => setState(v)}
+                style={{ minWidth: 180 }}
+                options={[
+                  { value: "", label: "Any state" },
+                  ...Object.entries(memberStateLabel).map(([v, l]) => ({ value: v, label: l })),
+                ]}
+              />
+            )}
+          </Field>
+          <Field label="Show only">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={only}
+                onChange={(v) => setOnly(v)}
+                style={{ minWidth: 200 }}
+                options={[
+                  { value: "", label: "All rows" },
+                  { value: "overridden", label: "Overridden" },
+                  { value: "flagged", label: "Needs clarification" },
+                  { value: "outdated", label: "Outdated" },
+                  { value: "not_evaluated", label: "Not evaluated" },
+                ]}
+              />
+            )}
+          </Field>
+        </Flex>
+      </Card>
 
       {rows.state.status === "loading" && <Loading label="Loading rows" />}
       {rows.state.status === "error" && (
@@ -338,294 +392,331 @@ export function EvaluationSheet() {
         </EmptyState>
       )}
       {list.length > 0 && (
-        <div className="split">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Requirement</th>
-                <th scope="col">AI</th>
-                <th scope="col">Mine</th>
-                <th scope="col">Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((r) => (
-                <tr
-                  key={r.requirement.id}
-                  aria-selected={current?.requirement.id === r.requirement.id}
-                >
-                  <th scope="row">
-                    <button
-                      type="button"
-                      className="linklike"
-                      onClick={() => {
-                        setSelected(r.requirement.id);
-                        setShown(null);
-                      }}
-                    >
-                      {r.requirement.display_no}
-                    </button>{" "}
-                    {r.requirement.text.length > 90
-                      ? r.requirement.text.slice(0, 90) + "…"
-                      : r.requirement.text}
-                  </th>
-                  <td>
-                    {r.ai ? (
+        <Row gutter={24}>
+          <Col xs={24} xl={12}>
+            <Table<Row>
+              rowKey={(r) => r.requirement.id}
+              components={rowHeaderComponents}
+              dataSource={list}
+              pagination={false}
+              scroll={{ x: "max-content" }}
+              onRow={(r) => ({ "aria-selected": current?.requirement.id === r.requirement.id })}
+              columns={[
+                {
+                  title: "Requirement",
+                  onCell: rowHeader,
+                  render: (_, r) => (
+                    <>
+                      <AntButton
+                        type="link"
+                        style={{ padding: 0 }}
+                        onClick={() => {
+                          setSelected(r.requirement.id);
+                          setShown(null);
+                        }}
+                      >
+                        {r.requirement.display_no}
+                      </AntButton>{" "}
+                      {r.requirement.text.length > 90
+                        ? r.requirement.text.slice(0, 90) + "…"
+                        : r.requirement.text}
+                    </>
+                  ),
+                },
+                {
+                  title: "AI",
+                  render: (_, r) =>
+                    r.ai ? (
                       <GradeChip grade={r.ai.grade} />
                     ) : (
-                      <span className="help">Waiting</span>
-                    )}
-                  </td>
-                  <td>
-                    {r.member.grade ? (
+                      <Typography.Text type="secondary">Waiting</Typography.Text>
+                    ),
+                },
+                {
+                  title: "Mine",
+                  render: (_, r) =>
+                    r.member.grade ? (
                       <GradeChip grade={r.member.grade} />
                     ) : (
-                      <span className="help">{memberStateLabel[r.member.review_state]}</span>
-                    )}
-                  </td>
-                  <td>
-                    {r.flags.map((f) => (
-                      <StatusChip
-                        key={f}
-                        label={rowFlagText[f] ?? f}
-                        tone={
-                          f === "outdated" || f === "needs_clarification" ? "warning" : "neutral"
-                        }
-                      />
-                    ))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {current && (
-            <aside className="card" aria-label={`Detail of ${current.requirement.display_no}`}>
-              <h3>
-                {current.requirement.display_no}{" "}
-                <StatusChip
-                  label={
-                    importanceLabel[current.requirement.importance] ??
-                    current.requirement.importance
-                  }
-                  tone="neutral"
-                />
-              </h3>
-              <p>{current.requirement.text}</p>
-              {current.requirement.acceptance_criteria && (
-                <p className="help">
-                  Acceptance criteria: {current.requirement.acceptance_criteria}
-                </p>
-              )}
-              <h4>AI assessment</h4>
-              {!current.ai ? (
-                <p className="help">The AI has not graded this requirement yet.</p>
-              ) : current.ai.outcome === "failed" ? (
-                <p>
-                  Not evaluated: the AI could not give a grade with evidence. Grade it yourself.
-                </p>
-              ) : (
-                <>
-                  <p>
-                    <GradeChip grade={current.ai.grade} />{" "}
-                    {current.ai.non_compliance_reason &&
-                      nonComplianceLabel[current.ai.non_compliance_reason]}
-                    {current.ai.confidence != null &&
-                      ` · confidence ${Math.round(Number(current.ai.confidence) * 100)} %`}
-                  </p>
-                  <p>{current.ai.rationale}</p>
-                  {(current.ai.missing_elements?.length ?? 0) > 0 && (
-                    <ul>
-                      {(current.ai.missing_elements ?? []).map((m) => (
-                        <li key={m}>Missing: {m}</li>
+                      <Typography.Text type="secondary">
+                        {memberStateLabel[r.member.review_state]}
+                      </Typography.Text>
+                    ),
+                },
+                {
+                  title: "Notes",
+                  render: (_, r) => (
+                    <Space size={4} wrap>
+                      {r.flags.map((f) => (
+                        <StatusChip
+                          key={f}
+                          label={rowFlagText[f] ?? f}
+                          tone={
+                            f === "outdated" || f === "needs_clarification" ? "warning" : "neutral"
+                          }
+                        />
                       ))}
-                    </ul>
+                    </Space>
+                  ),
+                },
+              ]}
+            />
+          </Col>
+          <Col xs={24} xl={12}>
+            {current && (
+              <aside aria-label={`Detail of ${current.requirement.display_no}`}>
+                <Card>
+                  <Typography.Title level={3} style={{ fontSize: 16, marginTop: 0 }}>
+                    {current.requirement.display_no}{" "}
+                    <StatusChip
+                      label={
+                        importanceLabel[current.requirement.importance] ??
+                        current.requirement.importance
+                      }
+                      tone="neutral"
+                    />
+                  </Typography.Title>
+                  <Typography.Paragraph>{current.requirement.text}</Typography.Paragraph>
+                  {current.requirement.acceptance_criteria && (
+                    <Typography.Paragraph type="secondary">
+                      Acceptance criteria: {current.requirement.acceptance_criteria}
+                    </Typography.Paragraph>
                   )}
-                  {current.ai.citations.length === 0 ? (
-                    <p className="help">No evidence found.</p>
+                  <Typography.Title level={4} style={{ fontSize: 14 }}>
+                    AI assessment
+                  </Typography.Title>
+                  {!current.ai ? (
+                    <Typography.Paragraph type="secondary">
+                      The AI has not graded this requirement yet.
+                    </Typography.Paragraph>
+                  ) : current.ai.outcome === "failed" ? (
+                    <Typography.Paragraph>
+                      Not evaluated: the AI could not give a grade with evidence. Grade it yourself.
+                    </Typography.Paragraph>
                   ) : (
-                    <ul>
-                      {current.ai.citations.map((c) => (
-                        <li key={c.citation_no}>
-                          &ldquo;{c.excerpt}&rdquo; (page {c.page_no}){" "}
-                          <button
-                            type="button"
-                            className="linklike"
-                            onClick={() => void showPassage(c.passage_id)}
-                          >
-                            Show in context
-                          </button>{" "}
-                          <Link
-                            to={`/documents/${c.document_version_id}/view?passage=${c.passage_id}`}
-                          >
-                            Open page {c.page_no}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-              {shown && (
-                <blockquote aria-label="The passage in context">
-                  <p className="help">Page {shown.page}</p>
-                  {shown.text}
-                </blockquote>
-              )}
-
-              <h4>Your decision</h4>
-              <p>
-                <StatusChip label={memberStateLabel[current.member.review_state]} tone="neutral" />{" "}
-                {current.member.grade && <GradeChip grade={current.member.grade} />}
-              </p>
-              {current.member.note && <p>Your note: {current.member.note}</p>}
-              <div className="actions">
-                <Button
-                  onClick={() =>
-                    void patch(current, { action: "agree" }, "Agreed with the AI grade")
-                  }
-                  disabled={busy || !decide || !current.ai || current.ai.outcome === "failed"}
-                  disabledReason={decide ? undefined : (actions.decide_rows?.reason ?? undefined)}
-                >
-                  Agree with AI
-                </Button>
-                <Button onClick={() => setOverriding(true)} disabled={busy || !decide}>
-                  Override
-                </Button>
-                {current.member.needs_clarification ? (
-                  <Button
-                    onClick={() =>
-                      void patch(current, { action: "clear_clarification" }, "Flag cleared")
-                    }
-                    disabled={busy || !decide}
-                  >
-                    Clear flag
-                  </Button>
-                ) : (
-                  <Button onClick={() => setFlagging(true)} disabled={busy || !decide}>
-                    Needs clarification
-                  </Button>
-                )}
-              </div>
-              {current.ai && current.ai.outcome === "graded" && (
-                <p className="help">
-                  Was the AI grade useful?{" "}
-                  <button
-                    type="button"
-                    className="linklike"
-                    onClick={() =>
-                      void run("Thanks for the feedback", () =>
-                        unwrap(
-                          api.POST(
-                            "/tender-vendors/{tenderVendorId}/evaluation/rows/{requirementId}/feedback",
-                            {
-                              params: {
-                                path: {
-                                  tenderVendorId: tenderVendorId!,
-                                  requirementId: current.requirement.id,
-                                },
-                              },
-                              body: { is_useful: true },
-                            },
-                          ),
-                        ),
-                      )
-                    }
-                  >
-                    Yes
-                  </button>{" "}
-                  <button
-                    type="button"
-                    className="linklike"
-                    onClick={() =>
-                      void run("Thanks for the feedback", () =>
-                        unwrap(
-                          api.POST(
-                            "/tender-vendors/{tenderVendorId}/evaluation/rows/{requirementId}/feedback",
-                            {
-                              params: {
-                                path: {
-                                  tenderVendorId: tenderVendorId!,
-                                  requirementId: current.requirement.id,
-                                },
-                              },
-                              body: { is_useful: false },
-                            },
-                          ),
-                        ),
-                      )
-                    }
-                  >
-                    No
-                  </button>
-                </p>
-              )}
-              <p>
-                <Link to={`/tenders/${tenderId}/requirements/${current.requirement.id}/compare`}>
-                  Compare this requirement across vendors
-                </Link>
-              </p>
-              {ev.first_submitted_at && (
-                <div>
-                  <Button
-                    onClick={() =>
-                      void (async () => {
-                        try {
-                          const p = await unwrap(
-                            api.GET("/tender-vendors/{tenderVendorId}/evaluation/peers", {
-                              params: {
-                                path: { tenderVendorId: tenderVendorId! },
-                                query: { requirement_id: current.requirement.id },
-                              },
-                            }),
-                          );
-                          setPeers(p.items);
-                        } catch (e) {
-                          setError(e instanceof Error ? e : new Error("Not available"));
-                        }
-                      })()
-                    }
-                  >
-                    Show other members&rsquo; decisions
-                  </Button>
-                  {peers && (
-                    <ul aria-label="Other members' decisions">
-                      {peers.length === 0 && (
-                        <li className="help">No other member has submitted this vendor yet.</li>
+                    <>
+                      <p>
+                        <GradeChip grade={current.ai.grade} />{" "}
+                        {current.ai.non_compliance_reason &&
+                          nonComplianceLabel[current.ai.non_compliance_reason]}
+                        {current.ai.confidence != null &&
+                          ` · confidence ${Math.round(Number(current.ai.confidence) * 100)} %`}
+                      </p>
+                      <p>{current.ai.rationale}</p>
+                      {(current.ai.missing_elements?.length ?? 0) > 0 && (
+                        <ul>
+                          {(current.ai.missing_elements ?? []).map((m) => (
+                            <li key={m}>Missing: {m}</li>
+                          ))}
+                        </ul>
                       )}
-                      {peers.map((p) => (
-                        <li key={`${p.member.id}`}>
-                          {p.member.display_name}:{" "}
-                          {p.grade
-                            ? (gradeLabel[p.grade] ?? p.grade)
-                            : memberStateLabel[p.review_state]}
-                          {p.note ? ` (${p.note})` : ""}
-                        </li>
-                      ))}
-                    </ul>
+                      {current.ai.citations.length === 0 ? (
+                        <Typography.Paragraph type="secondary">
+                          No evidence found.
+                        </Typography.Paragraph>
+                      ) : (
+                        <ul>
+                          {current.ai.citations.map((c) => (
+                            <li key={c.citation_no}>
+                              &ldquo;{c.excerpt}&rdquo; (page {c.page_no}){" "}
+                              <AntButton
+                                type="link"
+                                style={{ padding: 0 }}
+                                onClick={() => void showPassage(c.passage_id)}
+                              >
+                                Show in context
+                              </AntButton>{" "}
+                              <Link
+                                to={`/documents/${c.document_version_id}/view?passage=${c.passage_id}`}
+                              >
+                                Open page {c.page_no}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
                   )}
-                </div>
-              )}
-              {history.state.status === "ready" && history.state.data && (
-                <details>
-                  <summary>Your history of this row</summary>
-                  {history.state.data.events.length === 0 ? (
-                    <p className="help">No decision yet.</p>
-                  ) : (
-                    <ul>
-                      {history.state.data.events.map((e) => (
-                        <li key={e.id}>
-                          {new Date(e.occurred_at).toLocaleString()}: {e.action.replace(/_/g, " ")}
-                          {e.note ? ` (${e.note})` : ""}
-                        </li>
-                      ))}
-                    </ul>
+                  {shown && (
+                    <blockquote aria-label="The passage in context">
+                      <Typography.Paragraph type="secondary">
+                        Page {shown.page}
+                      </Typography.Paragraph>
+                      {shown.text}
+                    </blockquote>
                   )}
-                </details>
-              )}
-            </aside>
-          )}
-        </div>
+
+                  <Typography.Title level={4} style={{ fontSize: 14 }}>
+                    Your decision
+                  </Typography.Title>
+                  <p>
+                    <StatusChip
+                      label={memberStateLabel[current.member.review_state]}
+                      tone="neutral"
+                    />{" "}
+                    {current.member.grade && <GradeChip grade={current.member.grade} />}
+                  </p>
+                  {current.member.note && <p>Your note: {current.member.note}</p>}
+                  <Space wrap style={{ marginBottom: 12 }}>
+                    <Button
+                      onClick={() =>
+                        void patch(current, { action: "agree" }, "Agreed with the AI grade")
+                      }
+                      disabled={busy || !decide || !current.ai || current.ai.outcome === "failed"}
+                      disabledReason={
+                        decide ? undefined : (actions.decide_rows?.reason ?? undefined)
+                      }
+                    >
+                      Agree with AI
+                    </Button>
+                    <Button onClick={() => setOverriding(true)} disabled={busy || !decide}>
+                      Override
+                    </Button>
+                    {current.member.needs_clarification ? (
+                      <Button
+                        onClick={() =>
+                          void patch(current, { action: "clear_clarification" }, "Flag cleared")
+                        }
+                        disabled={busy || !decide}
+                      >
+                        Clear flag
+                      </Button>
+                    ) : (
+                      <Button onClick={() => setFlagging(true)} disabled={busy || !decide}>
+                        Needs clarification
+                      </Button>
+                    )}
+                  </Space>
+                  {current.ai && current.ai.outcome === "graded" && (
+                    <Typography.Paragraph type="secondary">
+                      Was the AI grade useful?{" "}
+                      <AntButton
+                        type="link"
+                        style={{ padding: 0 }}
+                        onClick={() =>
+                          void run("Thanks for the feedback", () =>
+                            unwrap(
+                              api.POST(
+                                "/tender-vendors/{tenderVendorId}/evaluation/rows/{requirementId}/feedback",
+                                {
+                                  params: {
+                                    path: {
+                                      tenderVendorId: tenderVendorId!,
+                                      requirementId: current.requirement.id,
+                                    },
+                                  },
+                                  body: { is_useful: true },
+                                },
+                              ),
+                            ),
+                          )
+                        }
+                      >
+                        Yes
+                      </AntButton>{" "}
+                      <AntButton
+                        type="link"
+                        style={{ padding: 0 }}
+                        onClick={() =>
+                          void run("Thanks for the feedback", () =>
+                            unwrap(
+                              api.POST(
+                                "/tender-vendors/{tenderVendorId}/evaluation/rows/{requirementId}/feedback",
+                                {
+                                  params: {
+                                    path: {
+                                      tenderVendorId: tenderVendorId!,
+                                      requirementId: current.requirement.id,
+                                    },
+                                  },
+                                  body: { is_useful: false },
+                                },
+                              ),
+                            ),
+                          )
+                        }
+                      >
+                        No
+                      </AntButton>
+                    </Typography.Paragraph>
+                  )}
+                  <p>
+                    <Link
+                      to={`/tenders/${tenderId}/requirements/${current.requirement.id}/compare`}
+                    >
+                      Compare this requirement across vendors
+                    </Link>
+                  </p>
+                  {ev.first_submitted_at && (
+                    <div>
+                      <Button
+                        onClick={() =>
+                          void (async () => {
+                            try {
+                              const p = await unwrap(
+                                api.GET("/tender-vendors/{tenderVendorId}/evaluation/peers", {
+                                  params: {
+                                    path: { tenderVendorId: tenderVendorId! },
+                                    query: { requirement_id: current.requirement.id },
+                                  },
+                                }),
+                              );
+                              setPeers(p.items);
+                            } catch (e) {
+                              setError(e instanceof Error ? e : new Error("Not available"));
+                            }
+                          })()
+                        }
+                      >
+                        Show other members&rsquo; decisions
+                      </Button>
+                      {peers && (
+                        <ul aria-label="Other members' decisions">
+                          {peers.length === 0 && (
+                            <li>
+                              <Typography.Text type="secondary">
+                                No other member has submitted this vendor yet.
+                              </Typography.Text>
+                            </li>
+                          )}
+                          {peers.map((p) => (
+                            <li key={`${p.member.id}`}>
+                              {p.member.display_name}:{" "}
+                              {p.grade
+                                ? (gradeLabel[p.grade] ?? p.grade)
+                                : memberStateLabel[p.review_state]}
+                              {p.note ? ` (${p.note})` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                  {history.state.status === "ready" && history.state.data && (
+                    <details>
+                      <summary>Your history of this row</summary>
+                      {history.state.data.events.length === 0 ? (
+                        <Typography.Paragraph type="secondary">
+                          No decision yet.
+                        </Typography.Paragraph>
+                      ) : (
+                        <ul>
+                          {history.state.data.events.map((e) => (
+                            <li key={e.id}>
+                              {new Date(e.occurred_at).toLocaleString()}:{" "}
+                              {e.action.replace(/_/g, " ")}
+                              {e.note ? ` (${e.note})` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </details>
+                  )}
+                </Card>
+              </aside>
+            )}
+          </Col>
+        </Row>
       )}
 
       <ConfirmDialog
@@ -656,17 +747,13 @@ export function EvaluationSheet() {
       >
         <Field label="Your grade">
           {({ id }) => (
-            <select
+            <Select
               id={id}
               value={overrideGrade}
-              onChange={(e) => setOverrideGrade(e.target.value as Grade)}
-            >
-              {Object.entries(gradeLabel).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setOverrideGrade(v)}
+              style={{ width: "100%" }}
+              options={Object.entries(gradeLabel).map(([v, l]) => ({ value: v, label: l }))}
+            />
           )}
         </Field>
       </NoteDialog>

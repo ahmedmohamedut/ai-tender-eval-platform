@@ -9,8 +9,8 @@ import { loadConfig, type RuntimeConfig } from "./config";
 import { TokenBridge } from "./app/TokenBridge";
 import { getAccessToken } from "./lib/token";
 import { setApiBase } from "./lib/base";
-import "./styles/app.css";
 import "./styles/base.css";
+import "./styles/viewer.css";
 
 /** The API client reads the access token held in memory by the OIDC library. */
 function Root({ config }: { config: RuntimeConfig }) {

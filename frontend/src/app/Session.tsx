@@ -1,4 +1,4 @@
-import { Modal } from "antd";
+import { Button, Card, Modal, Typography } from "antd";
 import {
   createContext,
   useCallback,
@@ -97,13 +97,15 @@ export function SessionProvider({ api, children }: { api: ApiClient; children: R
 
   if (auth.error) {
     return (
-      <div role="alert" className="card" style={{ margin: 24 }}>
-        <h1>Sign-in failed</h1>
-        <p>The sign-in could not be completed. Try again.</p>
-        <button type="button" className="btn primary" onClick={() => void auth.signinRedirect()}>
+      <Card role="alert" style={{ margin: 24, maxWidth: 560 }}>
+        <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+          Sign-in failed
+        </Typography.Title>
+        <Typography.Paragraph>The sign-in could not be completed. Try again.</Typography.Paragraph>
+        <Button type="primary" onClick={() => void auth.signinRedirect()}>
           Sign in
-        </button>
-      </div>
+        </Button>
+      </Card>
     );
   }
   if (!auth.isAuthenticated) {
@@ -134,18 +136,18 @@ function Refusal({ error, onSignOut }: { error: ApiError; onSignOut: () => void 
         ? "This account is deactivated. Ask an administrator to reactivate it."
         : "The platform could not load your account. Try again, or contact an administrator.";
   return (
-    <div className="card" style={{ margin: 24, maxWidth: 560 }}>
-      <h1>You cannot use the platform with this account</h1>
-      <p role="alert">{text}</p>
+    <Card style={{ margin: 24, maxWidth: 560 }}>
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+        You cannot use the platform with this account
+      </Typography.Title>
+      <Typography.Paragraph role="alert">{text}</Typography.Paragraph>
       {error.problem.trace_id && (
-        <p className="help">
+        <Typography.Paragraph type="secondary">
           Reference <span className="mono">{error.problem.trace_id}</span>
-        </p>
+        </Typography.Paragraph>
       )}
-      <button type="button" className="btn" onClick={onSignOut}>
-        Sign out
-      </button>
-    </div>
+      <Button onClick={onSignOut}>Sign out</Button>
+    </Card>
   );
 }
 

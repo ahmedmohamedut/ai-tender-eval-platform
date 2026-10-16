@@ -1,6 +1,7 @@
+import { Button as AntButton, Card, Checkbox, Input, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
-import { Field } from "../components/ui";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Field, LinkButton } from "../components/ui";
+import { useParams, useSearchParams } from "react-router";
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import {
@@ -115,9 +116,7 @@ export function Viewer() {
 
   const backLink = (
     <p className="viewer-back">
-      <Link to={back} className="btn">
-        {backLabel}
-      </Link>
+      <LinkButton to={back}>{backLabel}</LinkButton>
     </p>
   );
   if (pages.state.status === "loading" || outline.state.status === "loading") {
@@ -212,11 +211,9 @@ export function Viewer() {
     <div className="viewer">
       <h1 className="visually-hidden">Document viewer</h1>
       <p className="viewer-back">
-        <Link to={back} className="btn">
-          {backLabel}
-        </Link>
+        <LinkButton to={back}>{backLabel}</LinkButton>
         {origin.state.status === "ready" && (
-          <span className="help"> {origin.state.data.title}</span>
+          <Typography.Text type="secondary"> {origin.state.data.title}</Typography.Text>
         )}
       </p>
       <aside aria-label="Document navigation" className="viewer-side">
@@ -227,8 +224,18 @@ export function Viewer() {
             void search();
           }}
         >
-          <label htmlFor="doc-search">Search this document</label>
-          <input id="doc-search" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <label
+            htmlFor="doc-search"
+            style={{ display: "block", fontWeight: 500, marginBottom: 4 }}
+          >
+            Search this document
+          </label>
+          <Input
+            id="doc-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{ marginBottom: 8 }}
+          />
           <Button type="submit" onClick={() => void search()}>
             Search
           </Button>
@@ -237,9 +244,9 @@ export function Viewer() {
           <ol aria-label="Search results" className="hits">
             {hits.map((h) => (
               <li key={h.passage_id}>
-                <button
-                  type="button"
-                  className="linklike"
+                <AntButton
+                  type="link"
+                  style={{ padding: 0, height: "auto", textAlign: "start" }}
                   onClick={() => {
                     setParams({ passage: h.passage_id });
                     setPage(h.page_no);
@@ -249,71 +256,83 @@ export function Viewer() {
                   {snippetParts(h.snippet).map((p, i) =>
                     p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>,
                   )}
-                </button>
+                </AntButton>
               </li>
             ))}
           </ol>
         )}
         {isMember && (
-          <section aria-label="Extract requirements" className="card">
-            <h2>Extract requirements</h2>
-            <p className="help">
-              Tick sections or give a page range. {picked.size} section(s)
-              {selectedPages ? `, ${selectedPages} pages` : ""} selected.
-            </p>
-            <Field label="From page">
-              {({ id }) => (
-                <input
-                  id={id}
-                  type="number"
-                  min={1}
-                  max={count}
-                  value={rangeFrom}
-                  onChange={(e) => setRangeFrom(e.target.value)}
-                />
-              )}
-            </Field>
-            <Field label="To page" error={rangeOk ? undefined : "Use pages inside the document"}>
-              {({ id, describedBy, invalid }) => (
-                <input
-                  id={id}
-                  aria-describedby={describedBy}
-                  aria-invalid={invalid}
-                  type="number"
-                  min={1}
-                  max={count}
-                  value={rangeTo}
-                  onChange={(e) => setRangeTo(e.target.value)}
-                />
-              )}
-            </Field>
-            <Button
-              variant="primary"
-              disabledReason={
-                !hasSelection
-                  ? "Choose sections or pages first"
-                  : !rangeOk
-                    ? "Fix the page range"
-                    : undefined
+          <section aria-label="Extract requirements">
+            <Card
+              size="small"
+              style={{ margin: "16px 0" }}
+              title={
+                <Typography.Title level={2} style={{ fontSize: 16, margin: 0 }}>
+                  Extract requirements
+                </Typography.Title>
               }
-              onClick={() => setConfirmExtract(true)}
             >
-              Start extraction
-            </Button>
-            <Button
-              onClick={() => {
-                setPicked(new Set());
-                setRangeFrom("");
-                setRangeTo("");
-              }}
-            >
-              Clear selection
-            </Button>
+              <Typography.Paragraph type="secondary">
+                Tick sections or give a page range. {picked.size} section(s)
+                {selectedPages ? `, ${selectedPages} pages` : ""} selected.
+              </Typography.Paragraph>
+              <Field label="From page">
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    type="number"
+                    min={1}
+                    max={count}
+                    value={rangeFrom}
+                    onChange={(e) => setRangeFrom(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="To page" error={rangeOk ? undefined : "Use pages inside the document"}>
+                {({ id, describedBy, invalid }) => (
+                  <Input
+                    id={id}
+                    aria-describedby={describedBy}
+                    aria-invalid={invalid}
+                    status={invalid ? "error" : undefined}
+                    type="number"
+                    min={1}
+                    max={count}
+                    value={rangeTo}
+                    onChange={(e) => setRangeTo(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Button
+                variant="primary"
+                disabledReason={
+                  !hasSelection
+                    ? "Choose sections or pages first"
+                    : !rangeOk
+                      ? "Fix the page range"
+                      : undefined
+                }
+                onClick={() => setConfirmExtract(true)}
+              >
+                Start extraction
+              </Button>
+              <Button
+                onClick={() => {
+                  setPicked(new Set());
+                  setRangeFrom("");
+                  setRangeTo("");
+                }}
+              >
+                Clear selection
+              </Button>
+            </Card>
           </section>
         )}
         <nav aria-label="Contents">
           {sections.length === 0 ? (
-            <p className="help">This document has no outline. Use the page controls.</p>
+            <Typography.Paragraph type="secondary">
+              This document has no outline. Use the page controls.
+            </Typography.Paragraph>
           ) : (
             <ul className="outline">
               {sections.map((s) => {
@@ -324,8 +343,7 @@ export function Viewer() {
                 return (
                   <li key={s.id} style={{ paddingLeft: (s.level - 1) * 12 }}>
                     {isMember && (
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label={`Extract from ${s.title}`}
                         checked={picked.has(s.id)}
                         onChange={(e) => {
@@ -336,9 +354,13 @@ export function Viewer() {
                         }}
                       />
                     )}{" "}
-                    <button type="button" className="linklike" onClick={() => go(s.start_page)}>
+                    <AntButton
+                      type="link"
+                      style={{ padding: 0, height: "auto", textAlign: "start" }}
+                      onClick={() => go(s.start_page)}
+                    >
                       {s.title}
-                    </button>
+                    </AntButton>
                     {cov && (
                       <>
                         {" "}

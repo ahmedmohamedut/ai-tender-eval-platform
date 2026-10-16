@@ -1,4 +1,17 @@
-import * as Dialog from "@radix-ui/react-dialog";
+import {
+  Alert,
+  Button as AntButton,
+  Card,
+  Checkbox,
+  Drawer,
+  Flex,
+  Input,
+  Radio,
+  Select,
+  Space,
+  Table,
+  Typography,
+} from "antd";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { ExportButton } from "../components/ExportButton";
@@ -9,7 +22,10 @@ import {
   ErrorNotice,
   Loading,
   NoteDialog,
+  Section,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { ApiError, unwrap, useApi } from "../lib/api";
@@ -37,7 +53,7 @@ const statusLabel: Record<string, string> = {
 };
 
 function Grade({ grade }: { grade: string | null | undefined }) {
-  if (!grade) return <span className="help">No final grade</span>;
+  if (!grade) return <Typography.Text type="secondary">No final grade</Typography.Text>;
   return (
     <StatusChip
       label={`${gradeIcon[grade] ?? ""} ${gradeLabel[grade] ?? grade}`.trim()}
@@ -161,7 +177,9 @@ export function Report() {
       return (
         <>
           <TenderHeader tender={tender.state.data} />
-          <h2>Report</h2>
+          <Typography.Title level={2} style={{ fontSize: 20 }}>
+            Report
+          </Typography.Title>
           <EmptyState title="The report is not available yet">
             It opens when the Chair finalizes it. Until then the committee works on the evaluations.
           </EmptyState>
@@ -245,8 +263,8 @@ export function Report() {
   return (
     <div className="report">
       <TenderHeader tender={tender.state.data} />
-      <section className="report-status" aria-label="Report status">
-        <h2>
+      <Card aria-label="Report status" style={{ marginBottom: 16 }}>
+        <Typography.Title level={2} style={{ fontSize: 20, marginTop: 0 }}>
           Report version {h.version_no}{" "}
           <StatusChip
             label={statusLabel[h.status] ?? h.status}
@@ -254,8 +272,8 @@ export function Report() {
               h.status === "finalized" ? "success" : h.status === "superseded" ? "neutral" : "info"
             }
           />
-        </h2>
-        <p>
+        </Typography.Title>
+        <Typography.Paragraph>
           Baseline version {h.baseline_version} · Weighted scoring (fully{" "}
           {h.scoring_model.points_fully}, partially {h.scoring_model.points_partially}, non{" "}
           {h.scoring_model.points_non}; a mandatory failure is flagged, not removed)
@@ -266,26 +284,31 @@ export function Report() {
               {h.finalized_by ? ` by ${h.finalized_by.display_name}` : ""}
             </>
           )}
-        </p>
+        </Typography.Paragraph>
         {h.ai_model_versions.length > 0 && (
-          <p className="help">AI model: {h.ai_model_versions.join(", ")}</p>
+          <Typography.Paragraph type="secondary">
+            AI model: {h.ai_model_versions.join(", ")}
+          </Typography.Paragraph>
         )}
-        <p className="help">Committee: {h.committee.map((c) => c.display_name).join(", ")}</p>
+        <Typography.Paragraph type="secondary">
+          Committee: {h.committee.map((c) => c.display_name).join(", ")}
+        </Typography.Paragraph>
         {(versions.state.status === "ready" ? versions.state.data : []).length > 1 && (
-          <p>
-            <label>
-              Version{" "}
-              <select value={h.version_no} onChange={(e) => setParams({ version: e.target.value })}>
-                {(versions.state.status === "ready" ? versions.state.data : []).map((v) => (
-                  <option key={v.version_no} value={v.version_no}>
-                    {v.version_no} · {statusLabel[v.status] ?? v.status}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </p>
+          <Flex gap={8} align="center" style={{ marginBottom: 16 }}>
+            <label htmlFor="report-version">Version</label>
+            <Select
+              id="report-version"
+              value={h.version_no}
+              onChange={(v) => setParams({ version: String(v) })}
+              style={{ minWidth: 200 }}
+              options={(versions.state.status === "ready" ? versions.state.data : []).map((v) => ({
+                value: v.version_no,
+                label: `${v.version_no} · ${statusLabel[v.status] ?? v.status}`,
+              }))}
+            />
+          </Flex>
         )}
-        <p className="report-actions">
+        <Space wrap className="report-actions">
           {finalize && (
             <>
               <Button
@@ -295,9 +318,9 @@ export function Report() {
                 onClick={() => setConfirmFinalize(true)}
               >
                 Finalize report
-              </Button>{" "}
+              </Button>
               {!finalize.allowed && finalize.reason && h.disagreement_count === 0 && (
-                <span className="help">{finalize.reason}</span>
+                <Typography.Text type="secondary">{finalize.reason}</Typography.Text>
               )}
             </>
           )}
@@ -305,242 +328,246 @@ export function Report() {
             <Button type="button" onClick={() => setReopening(true)}>
               Reopen report
             </Button>
-          )}{" "}
+          )}
           {h.actions?.export?.allowed && (
             <>
-              <ExportButton label="Export PDF" start={startExport("pdf")} />{" "}
+              <ExportButton label="Export PDF" start={startExport("pdf")} />
               <ExportButton label="Export Excel" start={startExport("xlsx")} />
             </>
-          )}{" "}
+          )}
           <Button type="button" onClick={() => window.print()}>
             Print
           </Button>
-        </p>
+        </Space>
         {h.status === "in_progress" && (
-          <p role="note">
+          <Typography.Paragraph role="note" style={{ marginTop: 16, marginBottom: 0 }}>
             {h.disagreement_count === 0
               ? "No disagreements are waiting for a final grade."
               : `${h.disagreement_count} disagreements still need a final grade.`}
-          </p>
+          </Typography.Paragraph>
         )}
         {missing.length > 0 && (
-          <div role="alert" className="notice">
-            <strong>The report is not ready to finalize</strong>
-            <ul>
-              {missing.map((f, i) => (
-                <li key={`${f.code}-${i}`}>{f.message}</li>
-              ))}
-            </ul>
-          </div>
+          <Alert
+            type="error"
+            showIcon
+            role="alert"
+            style={{ marginTop: 16 }}
+            title="The report is not ready to finalize"
+            description={
+              <ul>
+                {missing.map((f, i) => (
+                  <li key={`${f.code}-${i}`}>{f.message}</li>
+                ))}
+              </ul>
+            }
+          />
         )}
-      </section>
+      </Card>
 
       {(me.user.role === "admin" || isChair) && h.status === "in_progress" && (
         <ChairPanel tenderId={tenderId!} isChair={isChair} />
       )}
 
-      <section aria-labelledby="overview-h">
-        <h2 id="overview-h">Overview</h2>
+      <Section title="Overview">
         {ranking.length === 0 ? (
           <EmptyState title="No results yet">
             Results open for a vendor once every member has submitted it.
           </EmptyState>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <caption>Vendors ranked by final score</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Rank</th>
-                  <th scope="col">Vendor</th>
-                  <th scope="col">Final score</th>
-                  <th scope="col">Compliance</th>
-                  <th scope="col">Mandatory</th>
-                  <th scope="col">Grades (full / partial / non)</th>
-                  <th scope="col">Agreement</th>
-                  <th scope="col">AI overridden</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranking.map((v) =>
-                  v.outcome === "rejected_at_screening" ? (
-                    <tr key={v.tender_vendor_id}>
-                      <td>-</td>
-                      <th scope="row">{v.vendor_name}</th>
-                      <td colSpan={6}>Rejected at screening{v.reason ? `: ${v.reason}` : ""}</td>
-                    </tr>
-                  ) : !v.available ? (
-                    <tr key={v.tender_vendor_id}>
-                      <td>-</td>
-                      <th scope="row">{v.vendor_name}</th>
-                      <td colSpan={6}>
-                        Results open once all members submit.
-                        {v.awaiting && v.awaiting.length > 0
-                          ? ` Waiting for ${v.awaiting.map((a) => a.display_name).join(", ")}.`
-                          : ""}
-                      </td>
-                    </tr>
+          <Table<(typeof ranking)[number]>
+            rowKey="tender_vendor_id"
+            components={rowHeaderComponents}
+            dataSource={ranking}
+            pagination={false}
+            scroll={{ x: "max-content" }}
+            title={() => <Typography.Text strong>Vendors ranked by final score</Typography.Text>}
+            columns={[
+              {
+                title: "Rank",
+                render: (_, v) =>
+                  v.outcome === "rejected_at_screening" || !v.available ? "-" : (v.rank ?? "-"),
+              },
+              { title: "Vendor", onCell: rowHeader, render: (_, v) => v.vendor_name },
+              {
+                title: "Final score",
+                onCell: (v) => ({
+                  colSpan: v.outcome === "rejected_at_screening" || !v.available ? 6 : 1,
+                }),
+                render: (_, v) =>
+                  v.outcome === "rejected_at_screening"
+                    ? `Rejected at screening${v.reason ? `: ${v.reason}` : ""}`
+                    : !v.available
+                      ? `Results open once all members submit.${
+                          v.awaiting && v.awaiting.length > 0
+                            ? ` Waiting for ${v.awaiting.map((a) => a.display_name).join(", ")}.`
+                            : ""
+                        }`
+                      : `${v.final_score ?? "-"}%`,
+              },
+              {
+                title: "Compliance",
+                onCell: (v) => ({
+                  colSpan: v.outcome === "rejected_at_screening" || !v.available ? 0 : 1,
+                }),
+                render: (_, v) => `${v.compliance_percent ?? "-"}%`,
+              },
+              {
+                title: "Mandatory",
+                onCell: (v) => ({
+                  colSpan: v.outcome === "rejected_at_screening" || !v.available ? 0 : 1,
+                }),
+                render: (_, v) =>
+                  v.fails_mandatory ? (
+                    <StatusChip tone="error" label={`✕ ${v.mandatory_failures} failed (flag)`} />
                   ) : (
-                    <tr key={v.tender_vendor_id}>
-                      <td>{v.rank ?? "-"}</td>
-                      <th scope="row">{v.vendor_name}</th>
-                      <td>{v.final_score ?? "-"}%</td>
-                      <td>{v.compliance_percent ?? "-"}%</td>
-                      <td>
-                        {v.fails_mandatory ? (
-                          <StatusChip
-                            tone="error"
-                            label={`✕ ${v.mandatory_failures} failed (flag)`}
-                          />
-                        ) : (
-                          "None failed"
-                        )}
-                      </td>
-                      <td>
-                        {String(v.counts?.fully_compliant ?? 0)} /{" "}
-                        {String(v.counts?.partially_compliant ?? 0)} /{" "}
-                        {String(v.counts?.non_compliant ?? 0)}
-                      </td>
-                      <td>{v.agreement_level ?? "-"}%</td>
-                      <td>
-                        {overrideBy.has(v.tender_vendor_id)
-                          ? `${overrideBy.get(v.tender_vendor_id)}%`
-                          : "-"}
-                      </td>
-                    </tr>
+                    "None failed"
                   ),
-                )}
-              </tbody>
-            </table>
-          </div>
+              },
+              {
+                title: "Grades (full / partial / non)",
+                onCell: (v) => ({
+                  colSpan: v.outcome === "rejected_at_screening" || !v.available ? 0 : 1,
+                }),
+                render: (_, v) =>
+                  `${String(v.counts?.fully_compliant ?? 0)} / ${String(
+                    v.counts?.partially_compliant ?? 0,
+                  )} / ${String(v.counts?.non_compliant ?? 0)}`,
+              },
+              {
+                title: "Agreement",
+                onCell: (v) => ({
+                  colSpan: v.outcome === "rejected_at_screening" || !v.available ? 0 : 1,
+                }),
+                render: (_, v) => `${v.agreement_level ?? "-"}%`,
+              },
+              {
+                title: "AI overridden",
+                onCell: (v) => ({
+                  colSpan: v.outcome === "rejected_at_screening" || !v.available ? 0 : 1,
+                }),
+                render: (_, v) =>
+                  overrideBy.has(v.tender_vendor_id)
+                    ? `${overrideBy.get(v.tender_vendor_id)}%`
+                    : "-",
+              },
+            ]}
+          />
         )}
-      </section>
+      </Section>
 
-      <section aria-labelledby="matrix-h">
-        <h2 id="matrix-h">Matrix</h2>
-        <div className="filter-bar" role="search" aria-label="Matrix filters">
-          <label>
-            Vendor{" "}
-            <select
-              value={filters.tenderVendorId}
-              onChange={(e) => setFilters({ ...filters, tenderVendorId: e.target.value })}
-            >
-              <option value="">All vendors</option>
-              {vendorOptions.map((v) => (
-                <option key={v.tender_vendor_id} value={v.tender_vendor_id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
-          </label>{" "}
-          <label>
-            Importance{" "}
-            <select
-              value={filters.importance}
-              onChange={(e) => setFilters({ ...filters, importance: e.target.value })}
-            >
-              <option value="">Any</option>
-              {Object.entries(importanceLabel).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>{" "}
-          <label>
-            Grade{" "}
-            <select
-              value={filters.grade}
-              onChange={(e) => setFilters({ ...filters, grade: e.target.value })}
-            >
-              <option value="">Any</option>
-              {Object.entries(gradeLabel).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>{" "}
-          <label>
-            <input
-              type="checkbox"
-              checked={filters.disagreement}
-              onChange={(e) => setFilters({ ...filters, disagreement: e.target.checked })}
-            />{" "}
+      <Section title="Matrix">
+        <Flex
+          gap={16}
+          wrap
+          align="center"
+          role="search"
+          aria-label="Matrix filters"
+          style={{ marginBottom: 16 }}
+        >
+          <label htmlFor="matrix-vendor">Vendor</label>
+          <Select
+            id="matrix-vendor"
+            value={filters.tenderVendorId}
+            onChange={(v) => setFilters({ ...filters, tenderVendorId: v })}
+            style={{ minWidth: 180 }}
+            options={[
+              { value: "", label: "All vendors" },
+              ...vendorOptions.map((v) => ({ value: v.tender_vendor_id, label: v.name })),
+            ]}
+          />
+          <label htmlFor="matrix-importance">Importance</label>
+          <Select
+            id="matrix-importance"
+            value={filters.importance}
+            onChange={(v) => setFilters({ ...filters, importance: v })}
+            style={{ minWidth: 140 }}
+            options={[
+              { value: "", label: "Any" },
+              ...Object.entries(importanceLabel).map(([v, l]) => ({ value: v, label: l })),
+            ]}
+          />
+          <label htmlFor="matrix-grade">Grade</label>
+          <Select
+            id="matrix-grade"
+            value={filters.grade}
+            onChange={(v) => setFilters({ ...filters, grade: v })}
+            style={{ minWidth: 180 }}
+            options={[
+              { value: "", label: "Any" },
+              ...Object.entries(gradeLabel).map(([v, l]) => ({ value: v, label: l })),
+            ]}
+          />
+          <Checkbox
+            checked={filters.disagreement}
+            onChange={(e) => setFilters({ ...filters, disagreement: e.target.checked })}
+          >
             Disagreements only ({h.disagreement_count})
-          </label>
-        </div>
+          </Checkbox>
+        </Flex>
         {matrix.state.status === "loading" ? (
           <Loading label="Loading the matrix" />
         ) : !m || m.rows.length === 0 ? (
           <EmptyState title="No rows">Nothing matches these filters.</EmptyState>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <caption>Final grade of each requirement for each vendor</caption>
-              <thead>
-                <tr>
-                  <th scope="col">No</th>
-                  <th scope="col">Requirement</th>
-                  {m.vendors.map((v) => (
-                    <th scope="col" key={v.tender_vendor_id}>
-                      {v.name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {m.rows.map((r) => (
-                  <tr key={r.requirement.id}>
-                    <th scope="row">{r.requirement.display_no}</th>
-                    <td>
-                      {r.requirement.text}{" "}
-                      <span className="help">
-                        {importanceLabel[r.requirement.importance] ?? r.requirement.importance}
+          <Table<(typeof m.rows)[number]>
+            rowKey={(r) => r.requirement.id}
+            components={rowHeaderComponents}
+            dataSource={m.rows}
+            pagination={false}
+            scroll={{ x: "max-content" }}
+            title={() => (
+              <Typography.Text strong>
+                Final grade of each requirement for each vendor
+              </Typography.Text>
+            )}
+            columns={[
+              { title: "No", onCell: rowHeader, render: (_, r) => r.requirement.display_no },
+              {
+                title: "Requirement",
+                render: (_, r) => (
+                  <>
+                    {r.requirement.text}{" "}
+                    <Typography.Text type="secondary">
+                      {importanceLabel[r.requirement.importance] ?? r.requirement.importance}
+                    </Typography.Text>
+                  </>
+                ),
+              },
+              ...m.vendors.map((v) => ({
+                title: v.name,
+                key: v.tender_vendor_id,
+                render: (_: unknown, r: (typeof m.rows)[number]) => {
+                  const c = r.cells.find((x) => x.tender_vendor_id === v.tender_vendor_id);
+                  if (!c) return null;
+                  return !c.available ? (
+                    <Typography.Text type="secondary">Not available yet</Typography.Text>
+                  ) : (
+                    <AntButton
+                      type="link"
+                      style={{ padding: 0, height: "auto" }}
+                      onClick={() =>
+                        setCellOf({
+                          requirementId: r.requirement.id,
+                          tenderVendorId: c.tender_vendor_id,
+                        })
+                      }
+                    >
+                      <span className="visually-hidden">
+                        Open {r.requirement.display_no} for {v.name}:{" "}
                       </span>
-                    </td>
-                    {r.cells.map((c) => (
-                      <td key={c.tender_vendor_id}>
-                        {!c.available ? (
-                          <span className="help">Not available yet</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="link"
-                            onClick={() =>
-                              setCellOf({
-                                requirementId: r.requirement.id,
-                                tenderVendorId: c.tender_vendor_id,
-                              })
-                            }
-                          >
-                            <span className="visually-hidden">
-                              Open {r.requirement.display_no} for{" "}
-                              {
-                                m.vendors.find((v) => v.tender_vendor_id === c.tender_vendor_id)
-                                  ?.name
-                              }
-                              :{" "}
-                            </span>
-                            {c.has_disagreement && (
-                              <StatusChip tone="warning" label="Disagreement" />
-                            )}{" "}
-                            <Grade grade={c.final_grade} />
-                          </button>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      {c.has_disagreement && <StatusChip tone="warning" label="Disagreement" />}{" "}
+                      <Grade grade={c.final_grade} />
+                    </AntButton>
+                  );
+                },
+              })),
+            ]}
+          />
         )}
-      </section>
+      </Section>
 
       {outcomes.state.status === "ready" && outcomes.state.data.length > 0 && (
-        <section aria-labelledby="screen-h">
-          <h2 id="screen-h">Rejected at screening</h2>
+        <Section title="Rejected at screening">
           <ul>
             {outcomes.state.data.map((o) => (
               <li key={o.tender_vendor_id}>
@@ -549,7 +576,7 @@ export function Report() {
               </li>
             ))}
           </ul>
-        </section>
+        </Section>
       )}
 
       {cellOf && (
@@ -663,143 +690,139 @@ function CellDialog({
   }
 
   return (
-    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog wide">
-          <Dialog.Title asChild>
-            <h2>{d ? `${d.requirement.display_no}: ${d.requirement.text}` : "Requirement"}</h2>
-          </Dialog.Title>
-          <Dialog.Description>
-            Each member's grade and note, the AI's grade and the evidence behind it.
-          </Dialog.Description>
-          {detail.state.status === "loading" && <Loading label="Loading the cell" />}
-          {detail.state.status === "error" && (
-            <ErrorNotice error={detail.state.error} onRetry={detail.reload} />
+    <Drawer
+      open
+      size={640}
+      onClose={onClose}
+      title={d ? `${d.requirement.display_no}: ${d.requirement.text}` : "Requirement"}
+      extra={<Button onClick={onClose}>Close</Button>}
+    >
+      <Typography.Paragraph type="secondary">
+        Each member&apos;s grade and note, the AI&apos;s grade and the evidence behind it.
+      </Typography.Paragraph>
+      {detail.state.status === "loading" && <Loading label="Loading the cell" />}
+      {detail.state.status === "error" && (
+        <ErrorNotice error={detail.state.error} onRetry={detail.reload} />
+      )}
+      {d && (
+        <>
+          <Typography.Paragraph>
+            Final grade: <Grade grade={d.final_grade} />{" "}
+            {d.basis && (
+              <Typography.Text type="secondary">
+                ({d.basis === "all_agree" ? "all members agree" : "Chair's decision"})
+              </Typography.Text>
+            )}
+          </Typography.Paragraph>
+          {d.justification && (
+            <Typography.Paragraph>
+              <strong>Chair&apos;s justification:</strong> {d.justification}
+              {d.decided_by ? ` (${d.decided_by.display_name}` : ""}
+              {d.decided_by && d.decided_at
+                ? `, ${new Date(d.decided_at).toLocaleString()})`
+                : d.decided_by
+                  ? ")"
+                  : ""}
+            </Typography.Paragraph>
           )}
-          {d && (
-            <>
-              <p>
-                Final grade: <Grade grade={d.final_grade} />{" "}
-                {d.basis && (
-                  <span className="help">
-                    ({d.basis === "all_agree" ? "all members agree" : "Chair's decision"})
-                  </span>
-                )}
-              </p>
-              {d.justification && (
-                <p>
-                  <strong>Chair's justification:</strong> {d.justification}
-                  {d.decided_by ? ` (${d.decided_by.display_name}` : ""}
-                  {d.decided_by && d.decided_at
-                    ? `, ${new Date(d.decided_at).toLocaleString()})`
-                    : d.decided_by
-                      ? ")"
-                      : ""}
-                </p>
-              )}
-              {(d.history?.length ?? 0) > 0 && (
-                <section aria-label="Earlier decisions">
-                  <h3>Earlier decisions</h3>
-                  <ul>
-                    {d.history!.map((h, i) => (
-                      <li key={i}>
-                        <Grade grade={h.final_grade} /> {h.justification}{" "}
-                        <span className="help">
-                          {h.decided_by ? `${h.decided_by.display_name}, ` : ""}
-                          {h.decided_at
-                            ? `decided ${new Date(h.decided_at).toLocaleString()}, `
-                            : ""}
-                          replaced {new Date(h.superseded_at).toLocaleString()}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-              {d.ai && (
-                <section aria-label="AI grade">
-                  <h3>AI</h3>
-                  <p>
-                    <Grade grade={d.ai.grade} /> {d.ai.rationale_summary}
-                  </p>
-                  {d.ai.citations.length > 0 && (
-                    <ul>
-                      {d.ai.citations.map((c) => (
-                        <li key={c.citation_no}>
-                          <Link
-                            to={`/documents/${c.document_version_id}/view?passage=${c.passage_id}`}
-                          >
-                            Page {c.page_no}
-                          </Link>
-                          : {c.excerpt}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              )}
-              <h3>Members</h3>
+          {(d.history?.length ?? 0) > 0 && (
+            <section aria-label="Earlier decisions">
+              <Typography.Title level={3} style={{ fontSize: 16 }}>
+                Earlier decisions
+              </Typography.Title>
               <ul>
-                {d.member_grades.map((g) => (
-                  <li key={g.member.id}>
-                    <strong>{g.member.display_name}</strong>: <Grade grade={g.grade} />{" "}
-                    <span className="help">
-                      {reviewStateLabel[g.review_state ?? "not_reviewed"] ?? ""}
-                    </span>
-                    {g.note && <div>{g.note}</div>}
+                {d.history!.map((h, i) => (
+                  <li key={i}>
+                    <Grade grade={h.final_grade} /> {h.justification}{" "}
+                    <Typography.Text type="secondary">
+                      {h.decided_by ? `${h.decided_by.display_name}, ` : ""}
+                      {h.decided_at ? `decided ${new Date(h.decided_at).toLocaleString()}, ` : ""}
+                      replaced {new Date(h.superseded_at).toLocaleString()}
+                    </Typography.Text>
                   </li>
                 ))}
               </ul>
-              {canDecide && (differs || settled) && (
-                <section aria-label="Chair's final grade">
-                  <h3>Chair's final grade</h3>
-                  <fieldset>
-                    <legend>Final grade</legend>
-                    {Object.entries(gradeLabel).map(([v, l]) => (
-                      <label key={v}>
-                        <input
-                          type="radio"
-                          name="final-grade"
-                          value={v}
-                          checked={grade === v}
-                          onChange={() => setGrade(v)}
-                        />{" "}
-                        {l}
-                      </label>
-                    ))}
-                  </fieldset>
-                  <div className="field">
-                    <label htmlFor="why">Justification (required)</label>
-                    <textarea
-                      id="why"
-                      rows={3}
-                      value={why}
-                      onChange={(e) => setWhy(e.target.value)}
-                    />
-                    <span className="help">At least {min} characters, so the report says why.</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    disabled={busy || !grade || why.trim().length < min}
-                    onClick={() => void record()}
-                  >
-                    Record final grade
-                  </Button>
-                </section>
-              )}
-            </>
+            </section>
           )}
-          <div className="dialog-actions">
-            <Dialog.Close asChild>
-              <button type="button" className="btn">
-                Close
-              </button>
-            </Dialog.Close>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          {d.ai && (
+            <section aria-label="AI grade">
+              <Typography.Title level={3} style={{ fontSize: 16 }}>
+                AI
+              </Typography.Title>
+              <Typography.Paragraph>
+                <Grade grade={d.ai.grade} /> {d.ai.rationale_summary}
+              </Typography.Paragraph>
+              {d.ai.citations.length > 0 && (
+                <ul>
+                  {d.ai.citations.map((c) => (
+                    <li key={c.citation_no}>
+                      <Link to={`/documents/${c.document_version_id}/view?passage=${c.passage_id}`}>
+                        Page {c.page_no}
+                      </Link>
+                      : {c.excerpt}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+          <Typography.Title level={3} style={{ fontSize: 16 }}>
+            Members
+          </Typography.Title>
+          <ul>
+            {d.member_grades.map((g) => (
+              <li key={g.member.id}>
+                <strong>{g.member.display_name}</strong>: <Grade grade={g.grade} />{" "}
+                <Typography.Text type="secondary">
+                  {reviewStateLabel[g.review_state ?? "not_reviewed"] ?? ""}
+                </Typography.Text>
+                {g.note && <div>{g.note}</div>}
+              </li>
+            ))}
+          </ul>
+          {canDecide && (differs || settled) && (
+            <section aria-label="Chair's final grade">
+              <Typography.Title level={3} style={{ fontSize: 16 }}>
+                Chair&apos;s final grade
+              </Typography.Title>
+              <fieldset style={{ border: 0, padding: 0 }}>
+                <legend>Final grade</legend>
+                <Radio.Group
+                  value={grade || undefined}
+                  onChange={(e) => setGrade(e.target.value as string)}
+                  style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}
+                >
+                  {Object.entries(gradeLabel).map(([v, l]) => (
+                    <Radio key={v} value={v}>
+                      {l}
+                    </Radio>
+                  ))}
+                </Radio.Group>
+              </fieldset>
+              <label htmlFor="why" style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>
+                Justification (required)
+              </label>
+              <Input.TextArea
+                id="why"
+                rows={3}
+                value={why}
+                onChange={(e) => setWhy(e.target.value)}
+              />
+              <Typography.Paragraph type="secondary">
+                At least {min} characters, so the report says why.
+              </Typography.Paragraph>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={busy || !grade || why.trim().length < min}
+                onClick={() => void record()}
+              >
+                Record final grade
+              </Button>
+            </section>
+          )}
+        </>
+      )}
+    </Drawer>
   );
 }

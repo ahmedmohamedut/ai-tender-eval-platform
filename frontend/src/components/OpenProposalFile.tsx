@@ -1,4 +1,4 @@
-import * as Dialog from "@radix-ui/react-dialog";
+import { Button as AntButton, Input, Modal, Radio, Typography } from "antd";
 import { useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { useSession } from "../app/Session";
@@ -94,81 +94,57 @@ export function OpenProposalFile({
   const needsStatement = conflict === "yes" && statement.trim().length < 10;
   return (
     <>
-      <button
-        type="button"
-        className="btn"
-        onClick={() => void start()}
-        aria-label={`Open ${fileName}`}
-      >
+      <AntButton onClick={() => void start()} aria-label={`Open ${fileName}`}>
         Open
-      </button>
-      <Dialog.Root open={open} onOpenChange={setOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="dialog-overlay" />
-          <Dialog.Content className="dialog">
-            <Dialog.Title asChild>
-              <h2>Before you open {vendorName}</h2>
-            </Dialog.Title>
-            <Dialog.Description>
-              The proposal is confidential. Declare any conflict of interest first. You cannot
-              change this declaration afterwards.
-            </Dialog.Description>
-            <fieldset className="field">
-              <legend>Your declaration</legend>
-              <label>
-                <input
-                  type="radio"
-                  name="conflict"
-                  checked={conflict === "no"}
-                  onChange={() => setConflict("no")}
-                />{" "}
-                I have no conflict of interest with this vendor and will keep the proposal
-                confidential.
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="conflict"
-                  checked={conflict === "yes"}
-                  onChange={() => setConflict("yes")}
-                />{" "}
-                I have a conflict of interest with this vendor.
-              </label>
-            </fieldset>
-            {conflict === "yes" && (
-              <div className="field">
-                <label htmlFor={statementId}>Describe the conflict (required)</label>
-                <textarea
-                  id={statementId}
-                  value={statement}
-                  rows={3}
-                  onChange={(e) => setStatement(e.target.value)}
-                />
-                <p className="help">
-                  You will be excluded from evaluating this vendor. The administrator and the Chair
-                  are told.
-                </p>
-              </div>
-            )}
-            {error && <ErrorNotice error={error} />}
-            <div className="dialog-actions">
-              <Dialog.Close asChild>
-                <button type="button" className="btn">
-                  Cancel
-                </button>
-              </Dialog.Close>
-              <button
-                type="button"
-                className="btn primary"
-                onClick={() => void declare()}
-                disabled={busy || needsStatement}
-              >
-                Declare and continue
-              </button>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      </AntButton>
+      <Modal
+        open={open}
+        title={`Before you open ${vendorName}`}
+        mask={{ closable: false }}
+        destroyOnHidden
+        onCancel={() => setOpen(false)}
+        cancelText="Cancel"
+        okText="Declare and continue"
+        okButtonProps={{ disabled: busy || needsStatement }}
+        onOk={() => void declare()}
+      >
+        <Typography.Paragraph>
+          The proposal is confidential. Declare any conflict of interest first. You cannot change
+          this declaration afterwards.
+        </Typography.Paragraph>
+        <fieldset style={{ border: 0, padding: 0, margin: "0 0 16px" }}>
+          <legend style={{ fontWeight: 500 }}>Your declaration</legend>
+          <Radio.Group
+            value={conflict}
+            onChange={(e) => setConflict(e.target.value as "no" | "yes")}
+            style={{ display: "flex", flexDirection: "column", gap: 8 }}
+          >
+            <Radio value="no">
+              I have no conflict of interest with this vendor and will keep the proposal
+              confidential.
+            </Radio>
+            <Radio value="yes">I have a conflict of interest with this vendor.</Radio>
+          </Radio.Group>
+        </fieldset>
+        {conflict === "yes" && (
+          <div style={{ marginBottom: 16 }}>
+            <label htmlFor={statementId} style={{ display: "block", fontWeight: 500 }}>
+              Describe the conflict (required)
+            </label>
+            <Input.TextArea
+              id={statementId}
+              value={statement}
+              rows={3}
+              onChange={(e) => setStatement(e.target.value)}
+            />
+            <Typography.Paragraph type="secondary">
+              You will be excluded from evaluating this vendor. The administrator and the Chair are
+              told.
+            </Typography.Paragraph>
+          </div>
+        )}
+        {error && <ErrorNotice error={error} />}
+      </Modal>
     </>
   );
 }
