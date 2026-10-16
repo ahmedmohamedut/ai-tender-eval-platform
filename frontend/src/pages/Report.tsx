@@ -160,7 +160,7 @@ export function Report() {
     if (e instanceof ApiError && e.status === 404) {
       return (
         <>
-          <TenderHeader tender={tender.state.data} active="report" />
+          <TenderHeader tender={tender.state.data} />
           <h2>Report</h2>
           <EmptyState title="The report is not available yet">
             It opens when the Chair finalizes it. Until then the committee works on the evaluations.
@@ -244,7 +244,7 @@ export function Report() {
 
   return (
     <div className="report">
-      <TenderHeader tender={tender.state.data} active="report" />
+      <TenderHeader tender={tender.state.data} />
       <section className="report-status" aria-label="Report status">
         <h2>
           Report version {h.version_no}{" "}

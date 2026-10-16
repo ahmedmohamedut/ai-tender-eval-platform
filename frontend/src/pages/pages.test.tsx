@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
 import { Shell } from "../app/Shell";
-import { accessibilityViolations, fakeApi, makeMe, renderPage } from "../test/helpers";
+import { accessibilityViolations, choose, fakeApi, makeMe, renderPage } from "../test/helpers";
 import { TenderForm } from "./TenderForm";
 import { TenderHome } from "./TenderHome";
 import { TendersList } from "./TendersList";
@@ -242,7 +242,7 @@ describe("PG-09 Tender home", () => {
     expect(
       screen.getByText("Upload the RFP and open the tender to the committee"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Stage" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Stage" })).toBeInTheDocument();
     expect(screen.getByText("Morgan Member")).toBeInTheDocument();
     expect(await accessibilityViolations(container)).toEqual([]);
   });
@@ -303,7 +303,7 @@ describe("PG-07 Users", () => {
     renderPage(<Users />, { api });
     await userEvent.click(await screen.findByRole("button", { name: "Change role" }));
     const dialog = await screen.findByRole("dialog");
-    await userEvent.selectOptions(within(dialog).getByLabelText("Role"), "observer");
+    await choose("Role", "Observer", dialog);
     await userEvent.click(within(dialog).getByRole("button", { name: "Change role" }));
     await waitFor(() => expect(api.PATCH).toHaveBeenCalled());
     expect(api.PATCH).toHaveBeenCalledWith(

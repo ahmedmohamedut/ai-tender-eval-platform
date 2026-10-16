@@ -153,7 +153,7 @@ export function Requirements() {
 
   return (
     <>
-      <TenderHeader tender={tender.state.data} active="requirements" />
+      <TenderHeader tender={tender.state.data} />
       <h2>Requirements</h2>
       {locked && (
         <p className="banner" role="note">

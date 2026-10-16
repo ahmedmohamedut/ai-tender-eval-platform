@@ -347,7 +347,7 @@ describe("result messages", () => {
     });
     const status = view.getByRole("status");
     expect(status).toHaveTextContent("Tender saved.");
-    expect(status.className).toContain("toast");
+    expect(within(status).getByRole("button", { name: "Dismiss message" })).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(TOAST_MS + 50);
     });

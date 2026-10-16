@@ -22,9 +22,7 @@ export function EvaluationOverview() {
 
   return (
     <>
-      {tender.state.status === "ready" && (
-        <TenderHeader tender={tender.state.data} active="evaluation" />
-      )}
+      {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
       <h2>Your evaluations</h2>
       {progress.state.status === "loading" && <Loading label="Loading your evaluations" />}
       {progress.state.status === "error" && (

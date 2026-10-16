@@ -187,9 +187,7 @@ export function Screening() {
 
   return (
     <>
-      {tender.state.status === "ready" && (
-        <TenderHeader tender={tender.state.data} active="vendors" />
-      )}
+      {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
       <p>
         <Link to={`/tenders/${tenderId}/vendors`}>Back to vendors</Link>
       </p>

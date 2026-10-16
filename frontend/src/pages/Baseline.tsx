@@ -160,7 +160,7 @@ export function Baseline() {
 
   return (
     <>
-      <TenderHeader tender={tender.state.data} active="requirements" />
+      <TenderHeader tender={tender.state.data} />
       <p>
         <Link to={`/tenders/${tenderId}/requirements`}>Back to requirements</Link>
       </p>

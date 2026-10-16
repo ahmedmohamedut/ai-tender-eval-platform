@@ -1,3 +1,4 @@
+import { Checkbox, Progress, Table, Typography } from "antd";
 import { useState } from "react";
 import { Link } from "react-router";
 import {
@@ -6,6 +7,8 @@ import {
   ErrorNotice,
   Loading,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { unwrap, useApi } from "../lib/api";
@@ -40,71 +43,80 @@ export function Jobs() {
   const jobs = list.state.data.items;
   return (
     <>
-      <h1>Jobs</h1>
-      <label>
-        <input
-          type="checkbox"
-          checked={activeOnly}
-          onChange={(e) => setActiveOnly(e.target.checked)}
-        />{" "}
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+        Jobs
+      </Typography.Title>
+      <Checkbox checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)}>
         Only jobs that are waiting or running
-      </label>
+      </Checkbox>
       {jobs.length === 0 ? (
         <EmptyState title="No jobs">Work that runs in the background appears here.</EmptyState>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <caption>Background jobs</caption>
-            <thead>
-              <tr>
-                <th scope="col">Work</th>
-                <th scope="col">On</th>
-                <th scope="col">Status</th>
-                <th scope="col">Progress</th>
-                <th scope="col">Started by</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((j) => (
-                <tr key={j.id}>
-                  <th scope="row">{jobTypeLabel[j.job_type] ?? j.job_type}</th>
-                  <td>
-                    {j.target_label ?? "-"}{" "}
-                    <Link to={`/tenders/${j.tender_id}/documents`}>Tender</Link>
-                  </td>
-                  <td>
-                    <StatusChip
-                      label={jobStatusLabel[j.status] ?? j.status}
-                      tone={(jobStatusTone[j.status] ?? "neutral") as Tone}
+        <Table
+          style={{ marginTop: 16 }}
+          rowKey="id"
+          components={rowHeaderComponents}
+          dataSource={jobs}
+          pagination={false}
+          scroll={{ x: "max-content" }}
+          title={() => <Typography.Text strong>Background jobs</Typography.Text>}
+          columns={[
+            {
+              title: "Work",
+              onCell: rowHeader,
+              render: (_, j) => jobTypeLabel[j.job_type] ?? j.job_type,
+            },
+            {
+              title: "On",
+              render: (_, j) => (
+                <>
+                  {j.target_label ?? "-"}{" "}
+                  <Link to={`/tenders/${j.tender_id}/documents`}>Tender</Link>
+                </>
+              ),
+            },
+            {
+              title: "Status",
+              render: (_, j) => (
+                <>
+                  <StatusChip
+                    label={jobStatusLabel[j.status] ?? j.status}
+                    tone={(jobStatusTone[j.status] ?? "neutral") as Tone}
+                  />
+                  {j.failure && (
+                    <div>
+                      <Typography.Text type="secondary">
+                        {failureText[j.failure.code] ?? j.failure.message}
+                      </Typography.Text>
+                    </div>
+                  )}
+                </>
+              ),
+            },
+            {
+              title: "Progress",
+              render: (_, j) =>
+                j.status === "running" || j.status === "queued" ? (
+                  <>
+                    <Progress
+                      percent={j.progress_percent ?? 0}
+                      size="small"
+                      aria-label="Job progress"
                     />
-                    {j.failure && (
-                      <p className="help">{failureText[j.failure.code] ?? j.failure.message}</p>
-                    )}
-                  </td>
-                  <td>
-                    {j.status === "running" || j.status === "queued" ? (
-                      <>
-                        <progress
-                          max={100}
-                          value={j.progress_percent ?? 0}
-                          aria-label="Job progress"
-                        />{" "}
-                        {j.current_step ?? ""}
-                      </>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td>{j.started_by?.display_name ?? "-"}</td>
-                  <td>
-                    {j.can_cancel && <Button onClick={() => void cancel(j.id)}>Cancel</Button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    {j.current_step ?? ""}
+                  </>
+                ) : (
+                  "-"
+                ),
+            },
+            { title: "Started by", render: (_, j) => j.started_by?.display_name ?? "-" },
+            {
+              title: "Actions",
+              render: (_, j) =>
+                j.can_cancel && <Button onClick={() => void cancel(j.id)}>Cancel</Button>,
+            },
+          ]}
+        />
       )}
     </>
   );

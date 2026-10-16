@@ -1,4 +1,4 @@
-import * as Dialog from "@radix-ui/react-dialog";
+import { Modal } from "antd";
 import {
   createContext,
   useCallback,
@@ -199,27 +199,21 @@ function IdleGuard({
   };
 
   return (
-    <Dialog.Root open={state.phase === "warning"}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog" onEscapeKeyDown={(e) => e.preventDefault()}>
-          <Dialog.Title asChild>
-            <h2>Session ending</h2>
-          </Dialog.Title>
-          <Dialog.Description>
-            You will be signed out in{" "}
-            {Math.ceil(state.secondsLeft / 60) > 1
-              ? `${Math.ceil(state.secondsLeft / 60)} minutes`
-              : `${state.secondsLeft} seconds`}
-            .
-          </Dialog.Description>
-          <div className="dialog-actions">
-            <button type="button" className="btn primary" onClick={stay}>
-              Stay signed in
-            </button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Modal
+      open={state.phase === "warning"}
+      title="Session ending"
+      closable={false}
+      keyboard={false}
+      mask={{ closable: false }}
+      okText="Stay signed in"
+      cancelButtonProps={{ style: { display: "none" } }}
+      onOk={stay}
+    >
+      You will be signed out in{" "}
+      {Math.ceil(state.secondsLeft / 60) > 1
+        ? `${Math.ceil(state.secondsLeft / 60)} minutes`
+        : `${state.secondsLeft} seconds`}
+      .
+    </Modal>
   );
 }

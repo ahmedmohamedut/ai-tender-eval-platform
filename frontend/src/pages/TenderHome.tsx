@@ -1,4 +1,5 @@
-import { Link, NavLink, useParams } from "react-router";
+import { Alert, Card, Space, Steps, Typography } from "antd";
+import { useParams } from "react-router";
 import { EmptyState, ErrorNotice, LinkButton, Loading, StatusChip } from "../components/ui";
 import { ApiError, unwrap, useApi } from "../lib/api";
 import { TENDER_STAGES, tenderStatusLabel, tenderStatusTone } from "../lib/labels";
@@ -7,108 +8,26 @@ import { useAsync } from "../lib/useAsync";
 import { useSession } from "../app/Session";
 
 /** The tender header band shared by every screen inside a tender (UX-GEN-08). */
-export function TenderHeader({
-  tender,
-  active,
-}: {
-  tender: Tender;
-  active:
-    "overview" | "progress" | "documents" | "vendors" | "requirements" | "evaluation" | "report";
-}) {
-  const { me } = useSession();
-  const isAdmin = me.user.role === "admin";
+export function TenderHeader({ tender }: { tender: Tender }) {
   const stageIndex = TENDER_STAGES.indexOf(tender.status);
   const step = tender.next_step;
   return (
-    <header>
-      <p className="help">
-        <Link to={isAdmin ? "/tenders" : "/my-tenders"}>
-          {isAdmin ? "All tenders" : "My tenders"}
-        </Link>{" "}
-        / {tender.name}
-      </p>
-      <h1>
+    <header style={{ marginBottom: 16 }}>
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
         {tender.name}{" "}
         <StatusChip
           label={tenderStatusLabel[tender.status]}
           tone={tenderStatusTone[tender.status]}
         />
-      </h1>
-      <ol className="stepper" aria-label="Stage">
-        {TENDER_STAGES.map((s, i) => (
-          <li key={s} aria-current={i === stageIndex ? "step" : undefined}>
-            {tenderStatusLabel[s]}
-          </li>
-        ))}
-      </ol>
-      {step && (
-        <div className="next-step" role="note">
-          <span>{step.text}</span>
-        </div>
-      )}
-      <ul className="tabs" aria-label="Tender sections">
-        <li>
-          <NavLink
-            to={`/tenders/${tender.id}`}
-            end
-            aria-current={active === "overview" ? "page" : undefined}
-          >
-            Overview
-          </NavLink>
-        </li>
-        {isAdmin && (
-          <li>
-            <NavLink
-              to={`/tenders/${tender.id}/progress`}
-              aria-current={active === "progress" ? "page" : undefined}
-            >
-              Progress
-            </NavLink>
-          </li>
-        )}
-        <li>
-          <NavLink
-            to={`/tenders/${tender.id}/documents`}
-            aria-current={active === "documents" ? "page" : undefined}
-          >
-            Documents
-          </NavLink>
-        </li>
-        <li>
-          <NavLink
-            to={`/tenders/${tender.id}/requirements`}
-            aria-current={active === "requirements" ? "page" : undefined}
-          >
-            Requirements
-          </NavLink>
-        </li>
-        <li>
-          <NavLink
-            to={`/tenders/${tender.id}/vendors`}
-            aria-current={active === "vendors" ? "page" : undefined}
-          >
-            Vendors
-          </NavLink>
-        </li>
-        {!isAdmin && (
-          <li>
-            <NavLink
-              to={`/tenders/${tender.id}/evaluation`}
-              aria-current={active === "evaluation" ? "page" : undefined}
-            >
-              Evaluation
-            </NavLink>
-          </li>
-        )}
-        <li>
-          <NavLink
-            to={`/tenders/${tender.id}/report`}
-            aria-current={active === "report" ? "page" : undefined}
-          >
-            Report
-          </NavLink>
-        </li>
-      </ul>
+      </Typography.Title>
+      <div role="group" aria-label="Stage" style={{ margin: "16px 0" }}>
+        <Steps
+          size="small"
+          current={stageIndex}
+          items={TENDER_STAGES.map((s) => ({ title: tenderStatusLabel[s] }))}
+        />
+      </div>
+      {step && <Alert type="info" showIcon role="note" title={step.text} />}
     </header>
   );
 }
@@ -143,20 +62,20 @@ export function TenderHome() {
   const isAdmin = me.user.role === "admin";
   return (
     <>
-      <TenderHeader tender={t} active="overview" />
-      <section className="card" aria-labelledby="committee-h">
-        <h2 id="committee-h">Committee</h2>
-        <ul>
+      <TenderHeader tender={t} />
+      <Card title="Committee" style={{ marginBottom: 16 }}>
+        <Space direction="vertical" size={8} role="list">
           {(t.members ?? []).map((m) => (
-            <li key={m.user.id}>
-              {m.user.display_name}
-              {m.is_chair && <StatusChip label="Chair" tone="info" />}
-            </li>
+            <div key={m.user.id} role="listitem">
+              {m.user.display_name} {m.is_chair && <StatusChip label="Chair" tone="info" />}
+            </div>
           ))}
-        </ul>
-        {t.description && <p>{t.description}</p>}
-        {t.due_date && <p>Evaluation due {t.due_date}</p>}
-      </section>
+        </Space>
+        {t.description && (
+          <Typography.Paragraph style={{ marginTop: 16 }}>{t.description}</Typography.Paragraph>
+        )}
+        {t.due_date && <Typography.Paragraph>Evaluation due {t.due_date}</Typography.Paragraph>}
+      </Card>
       {isAdmin && (
         <p>
           <LinkButton to={`/tenders/${t.id}/edit`}>Edit tender</LinkButton>
@@ -169,9 +88,11 @@ export function TenderHome() {
 /** UX-ROL-04: names who to ask, never a blank page or an error code. */
 export function NoAccess({ contacts }: { contacts: { name: string; email?: string | null }[] }) {
   return (
-    <div className="card" style={{ maxWidth: 560 }}>
-      <h1>You do not have access to this tender</h1>
-      <p>Ask the administrator to add you.</p>
+    <Card style={{ maxWidth: 560 }}>
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+        You do not have access to this tender
+      </Typography.Title>
+      <Typography.Paragraph>Ask the administrator to add you.</Typography.Paragraph>
       {contacts.length > 0 && (
         <ul>
           {contacts.map((c) => (
@@ -182,6 +103,6 @@ export function NoAccess({ contacts }: { contacts: { name: string; email?: strin
           ))}
         </ul>
       )}
-    </div>
+    </Card>
   );
 }

@@ -1,0 +1,30 @@
+/* What antd does not cover: the skip link, a monospace helper and the hidden text class. */
+body {
+  margin: 0;
+  background: var(--ant-color-bg-layout, #f7f8fa);
+}
+.skip-link {
+  position: absolute;
+  inset-inline-start: 8px;
+  top: -48px;
+  z-index: 3000;
+  padding: 8px 12px;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-link);
+  border: 2px solid var(--ant-color-primary);
+  border-radius: 6px;
+}
+.skip-link:focus {
+  top: 8px;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}

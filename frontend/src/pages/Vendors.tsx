@@ -93,7 +93,7 @@ export function Vendors() {
 
   return (
     <>
-      <TenderHeader tender={tender.state.data} active="vendors" />
+      <TenderHeader tender={tender.state.data} />
       <h2>Vendors</h2>
       {isAdmin && (
         <section className="card" aria-labelledby="add-vendor-h">

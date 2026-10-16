@@ -21,9 +21,7 @@ export function CrossVendor() {
   );
   return (
     <>
-      {tender.state.status === "ready" && (
-        <TenderHeader tender={tender.state.data} active="evaluation" />
-      )}
+      {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
       <p>
         <Link to={`/tenders/${tenderId}/evaluation`}>Back to your evaluations</Link>
       </p>

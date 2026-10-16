@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { accessibilityViolations, fakeApi, makeMe, renderPage } from "../test/helpers";
+import { accessibilityViolations, choose, fakeApi, makeMe, renderPage } from "../test/helpers";
 import { Audit } from "./Audit";
 import { Notifications } from "./Notifications";
 import { ChairPanel } from "./ChairPanel";
@@ -485,7 +485,7 @@ describe("PG-20 Audit trail", () => {
     const { container } = renderPage(<Audit />, { api, me: makeMe("admin") });
     expect(await screen.findByText("Report finalized", { selector: "th" })).toBeInTheDocument();
     expect(await accessibilityViolations(container)).toEqual([]);
-    await userEvent.selectOptions(screen.getByLabelText("Tender"), T);
+    await choose("Tender", "Cloud platform");
     await userEvent.click(screen.getByRole("button", { name: "Search" }));
     await waitFor(() => expect(queries.some((q) => q.tender_id === T)).toBe(true));
     await userEvent.click(screen.getByRole("tab", { name: "Proposal access" }));

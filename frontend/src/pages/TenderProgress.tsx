@@ -1,5 +1,6 @@
+import { Card, Table, Typography } from "antd";
 import { useParams } from "react-router";
-import { EmptyState, ErrorNotice, Loading } from "../components/ui";
+import { EmptyState, ErrorNotice, Loading, rowHeader, rowHeaderComponents } from "../components/ui";
 import { unwrap, useApi } from "../lib/api";
 import { useAsync } from "../lib/useAsync";
 import { useSession } from "../app/Session";
@@ -30,45 +31,39 @@ export function TenderProgress() {
   const b = board.state.data;
   return (
     <>
-      <TenderHeader tender={tender.state.data} active="progress" />
-      <h2>Members</h2>
+      <TenderHeader tender={tender.state.data} />
+      <Typography.Title level={2} style={{ fontSize: 18 }}>
+        Members
+      </Typography.Title>
       {b.members.length === 0 ? (
         <EmptyState title="No activity yet">
           Progress appears here when the committee starts work.
         </EmptyState>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <caption>Committee progress</caption>
-            <thead>
-              <tr>
-                <th scope="col">Member</th>
-                <th scope="col">Requirements reviewed</th>
-                <th scope="col">Evaluations submitted</th>
-              </tr>
-            </thead>
-            <tbody>
-              {b.members.map((m) => (
-                <tr key={m.user.id}>
-                  <th scope="row">{m.user.display_name}</th>
-                  <td>
-                    {m.requirements_reviewed} of {m.requirements_total}
-                  </td>
-                  <td>
-                    {m.evaluations_submitted} of {m.evaluations_total}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          rowKey={(m) => m.user.id}
+          components={rowHeaderComponents}
+          dataSource={b.members}
+          pagination={false}
+          title={() => <Typography.Text strong>Committee progress</Typography.Text>}
+          columns={[
+            { title: "Member", onCell: rowHeader, render: (_, m) => m.user.display_name },
+            {
+              title: "Requirements reviewed",
+              render: (_, m) => `${m.requirements_reviewed} of ${m.requirements_total}`,
+            },
+            {
+              title: "Evaluations submitted",
+              render: (_, m) => `${m.evaluations_submitted} of ${m.evaluations_total}`,
+            },
+          ]}
+        />
       )}
-      <h2>Running jobs</h2>
-      <p>
+      <Card title="Running jobs" style={{ margin: "16px 0" }}>
         {b.running_jobs.length === 0
           ? "No jobs are running."
           : `${b.running_jobs.length} jobs running.`}
-      </p>
+      </Card>
       {(me.user.role === "admin" || tender.state.data.chair?.id === me.user.id) && (
         <ChairPanel tenderId={tenderId!} isChair={tender.state.data.chair?.id === me.user.id} />
       )}

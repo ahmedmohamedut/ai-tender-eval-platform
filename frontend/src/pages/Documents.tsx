@@ -152,7 +152,7 @@ export function Documents() {
 
   return (
     <>
-      <TenderHeader tender={tender.state.data} active="documents" />
+      <TenderHeader tender={tender.state.data} />
       <h2>Documents</h2>
       {isAdmin && (
         <section className="card" aria-labelledby="upload-h">

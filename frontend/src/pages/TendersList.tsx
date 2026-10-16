@@ -1,3 +1,4 @@
+import { Card, Flex, Input, Select, Table, Typography } from "antd";
 import { useState } from "react";
 import { Link } from "react-router";
 import { Button, EmptyState, ErrorNotice, LinkButton, Loading, StatusChip } from "../components/ui";
@@ -61,39 +62,45 @@ export function TendersList({ mine = false }: { mine?: boolean }) {
 
   return (
     <>
-      <h1>{title}</h1>
-      <div className="toolbar" role="search">
-        <div className="field grow" style={{ margin: 0 }}>
-          <label htmlFor="tender-search">Search tenders</label>
-          <input
-            id="tender-search"
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Name or reference"
-          />
-        </div>
-        <div className="field" style={{ margin: 0 }}>
-          <label htmlFor="tender-status">Status</label>
-          <select
-            id="tender-status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as TenderStatus | "")}
-          >
-            <option value="">All statuses</option>
-            {TENDER_STAGES.map((s) => (
-              <option key={s} value={s}>
-                {tenderStatusLabel[s]}
-              </option>
-            ))}
-          </select>
-        </div>
-        {isAdmin && (
-          <LinkButton to="/tenders/new" variant="primary">
-            Create tender
-          </LinkButton>
-        )}
-      </div>
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+        {title}
+      </Typography.Title>
+      <Card style={{ marginBottom: 16 }}>
+        <Flex gap={16} wrap align="flex-end" role="search">
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <label htmlFor="tender-search" style={{ display: "block", marginBottom: 4 }}>
+              Search tenders
+            </label>
+            <Input.Search
+              id="tender-search"
+              allowClear
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Name or reference"
+            />
+          </div>
+          <div>
+            <label htmlFor="tender-status" style={{ display: "block", marginBottom: 4 }}>
+              Status
+            </label>
+            <Select
+              id="tender-status"
+              value={status}
+              onChange={(v) => setStatus(v as TenderStatus | "")}
+              style={{ minWidth: 180 }}
+              options={[
+                { value: "", label: "All statuses" },
+                ...TENDER_STAGES.map((s) => ({ value: s, label: tenderStatusLabel[s] })),
+              ]}
+            />
+          </div>
+          {isAdmin && (
+            <LinkButton to="/tenders/new" variant="primary">
+              Create tender
+            </LinkButton>
+          )}
+        </Flex>
+      </Card>
 
       {state.status === "loading" && <Loading label="Loading tenders" />}
       {state.status === "error" && <ErrorNotice error={state.error} onRetry={reload} />}
@@ -159,47 +166,53 @@ function TenderTable({
   }
   return (
     <>
-      <div className="table-wrap">
-        <table>
-          <caption>
+      <Table<TenderSummary>
+        rowKey="id"
+        dataSource={items}
+        pagination={false}
+        scroll={{ x: "max-content" }}
+        title={() => (
+          <Typography.Text strong>
             {title}
             {total !== null ? ` (${total})` : ""}
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Status</th>
-              <th scope="col">Committee</th>
-              <th scope="col">Vendors</th>
-              <th scope="col">Chair</th>
-              <th scope="col">Due date</th>
-              <th scope="col">Last activity</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((t) => (
-              <tr key={t.id}>
-                <td>
-                  <Link to={`/tenders/${t.id}`}>{t.name}</Link>
-                  {t.reference_no && <div className="help mono">{t.reference_no}</div>}
-                </td>
-                <td>
-                  <StatusChip
-                    label={tenderStatusLabel[t.status]}
-                    tone={tenderStatusTone[t.status]}
-                  />
-                  {t.archived && <span className="help"> Archived</span>}
-                </td>
-                <td>{t.committee_size}</td>
-                <td>{t.vendor_count}</td>
-                <td>{t.chair?.display_name ?? "—"}</td>
-                <td>{t.due_date ?? "—"}</td>
-                <td>{t.last_activity_at ? new Date(t.last_activity_at).toLocaleString() : "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          </Typography.Text>
+        )}
+        columns={[
+          {
+            title: "Name",
+            render: (_, t) => (
+              <>
+                <Link to={`/tenders/${t.id}`}>{t.name}</Link>
+                {t.reference_no && (
+                  <div>
+                    <Typography.Text type="secondary" className="mono">
+                      {t.reference_no}
+                    </Typography.Text>
+                  </div>
+                )}
+              </>
+            ),
+          },
+          {
+            title: "Status",
+            render: (_, t) => (
+              <>
+                <StatusChip label={tenderStatusLabel[t.status]} tone={tenderStatusTone[t.status]} />
+                {t.archived && <Typography.Text type="secondary"> Archived</Typography.Text>}
+              </>
+            ),
+          },
+          { title: "Committee", dataIndex: "committee_size" },
+          { title: "Vendors", dataIndex: "vendor_count" },
+          { title: "Chair", render: (_, t) => t.chair?.display_name ?? "—" },
+          { title: "Due date", render: (_, t) => t.due_date ?? "—" },
+          {
+            title: "Last activity",
+            render: (_, t) =>
+              t.last_activity_at ? new Date(t.last_activity_at).toLocaleString() : "—",
+          },
+        ]}
+      />
       {hasMore && (
         <p>
           <Button onClick={onMore}>Show more tenders</Button>
