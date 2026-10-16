@@ -1,10 +1,12 @@
 import {
   Alert,
   Card,
+  Col,
   Descriptions,
   Flex,
   Form,
   Input,
+  Row,
   Select,
   Space,
   Table,
@@ -300,6 +302,7 @@ interface FormValues {
   phone?: string;
   address?: string;
   description?: string;
+  status?: "active" | "inactive";
 }
 
 /** Create or edit a vendor (UX-VND-01). After creating from a tender, the person goes back to it. */
@@ -429,61 +432,96 @@ export function VendorForm() {
                   phone: current.phone ?? undefined,
                   address: current.address ?? undefined,
                   description: current.description ?? undefined,
+                  status: current.status,
                 }
-              : {}
+              : { status: "active" }
           }
           onFinish={(v) => void submit(v, duplicates.length > 0)}
         >
-          <Form.Item
-            name="name"
-            label="Vendor name"
-            rules={[{ required: true, whitespace: true, message: "Enter the vendor name." }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item name="legal_name" label="Legal name">
-            <Input />
-          </Form.Item>
-          <Form.Item name="registration_no" label="Registration number">
-            <Input />
-          </Form.Item>
-          <Form.Item name="country" label="Country">
-            <Input />
-          </Form.Item>
-          <Form.Item name="industry" label="Industry">
-            <Select
-              allowClear
-              options={INDUSTRIES.map((i) => ({ value: i, label: i }))}
-              placeholder="Choose an industry"
-            />
-          </Form.Item>
-          <Form.Item
-            name="website"
-            label="Website"
-            rules={[{ type: "url", message: "Enter an address that starts with https://." }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item name="contact_person" label="Contact person">
-            <Input />
-          </Form.Item>
-          <Form.Item
-            name="email"
-            label="Email"
-            rules={[{ type: "email", message: "Enter a valid email address." }]}
-          >
-            <Input />
-          </Form.Item>
-          <Form.Item name="phone" label="Phone">
-            <Input />
-          </Form.Item>
-          <Form.Item name="address" label="Address">
-            <Input />
-          </Form.Item>
-          <Form.Item name="description" label="Notes">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-          <Space>
+          <Row gutter={16}>
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="name"
+                label="Vendor name"
+                rules={[{ required: true, whitespace: true, message: "Enter the vendor name." }]}
+              >
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="legal_name" label="Legal name">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="registration_no" label="Registration number">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="country" label="Country">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item name="industry" label="Industry">
+                <Select
+                  allowClear
+                  options={INDUSTRIES.map((i) => ({ value: i, label: i }))}
+                  placeholder="Choose an industry"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="website"
+                label="Website"
+                rules={[{ type: "url", message: "Enter an address that starts with https://." }]}
+              >
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="contact_person" label="Primary contact">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item
+                name="email"
+                label="Email"
+                rules={[{ type: "email", message: "Enter a valid email address." }]}
+              >
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="phone" label="Phone">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24}>
+              <Form.Item name="address" label="Address">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24}>
+              <Form.Item name="description" label="Notes">
+                <Input.TextArea rows={3} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="status" label="Status">
+                <Select
+                  options={[
+                    { value: "active", label: "Active" },
+                    { value: "inactive", label: "Inactive" },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Flex justify="end" gap={8}>
             <Button
               onClick={() =>
                 void navigate(returnTo ?? (current ? `/vendors/${current.id}` : "/vendors"))
@@ -494,7 +532,7 @@ export function VendorForm() {
             <Button variant="primary" type="submit" disabled={busy}>
               {current ? "Save changes" : "Create vendor"}
             </Button>
-          </Space>
+          </Flex>
         </Form>
       </Card>
     </>
