@@ -102,7 +102,7 @@ function Crumbs({ tenderName }: { tenderName?: string }) {
   };
   const items: { title: ReactNode }[] = [];
   if (parts[0] === "tenders") {
-    items.push({ title: <Link to="/tenders">Tenders</Link> });
+    items.push({ title: parts[1] ? <Link to="/tenders">Tenders</Link> : "Tenders" });
     if (parts[1] === "new") items.push({ title: "New tender" });
     else if (parts[1]) {
       items.push({
@@ -116,7 +116,7 @@ function Crumbs({ tenderName }: { tenderName?: string }) {
       if (parts[2]) items.push({ title: page?.label ?? parts[2] });
     }
   } else if (parts[0] === "vendors") {
-    items.push({ title: <Link to="/vendors">Vendors</Link> });
+    items.push({ title: parts[1] ? <Link to="/vendors">Vendors</Link> : "Vendors" });
     if (parts[1] === "new") items.push({ title: "New vendor" });
     else if (parts[1]) items.push({ title: parts[2] === "edit" ? "Edit vendor" : "Vendor" });
   } else if (parts[0]) {

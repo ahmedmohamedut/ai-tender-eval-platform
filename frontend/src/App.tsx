@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { AnnounceProvider } from "./components/ui";
 import { Shell } from "./app/Shell";
@@ -6,7 +7,6 @@ import { ApiProvider, type ApiClient } from "./lib/api";
 import { Baseline } from "./pages/Baseline";
 import { Documents } from "./pages/Documents";
 import { Jobs } from "./pages/Jobs";
-import { Report } from "./pages/Report";
 import { Audit } from "./pages/Audit";
 import { Notifications } from "./pages/Notifications";
 import { Requirements } from "./pages/Requirements";
@@ -22,8 +22,11 @@ import { Users } from "./pages/Users";
 import { Categories } from "./pages/Categories";
 import { Vendors } from "./pages/Vendors";
 import { VendorDetail, VendorForm, VendorsList } from "./pages/VendorRegistry";
-import { Viewer } from "./pages/Viewer";
-import { EmptyState } from "./components/ui";
+import { EmptyState, Loading } from "./components/ui";
+
+// pdf.js and the report carry most of the weight; they load when the route is opened.
+const Viewer = lazy(() => import("./pages/Viewer").then((m) => ({ default: m.Viewer })));
+const Report = lazy(() => import("./pages/Report").then((m) => ({ default: m.Report })));
 
 function Landing() {
   const { me } = useSession();
@@ -56,8 +59,22 @@ export function AppRoutes() {
           element={<CrossVendor />}
         />
         <Route path="tenders/:tenderId/baseline" element={<Baseline />} />
-        <Route path="documents/:versionId/view" element={<Viewer />} />
-        <Route path="tenders/:tenderId/report" element={<Report />} />
+        <Route
+          path="documents/:versionId/view"
+          element={
+            <Suspense fallback={<Loading label="Loading the document viewer" />}>
+              <Viewer />
+            </Suspense>
+          }
+        />
+        <Route
+          path="tenders/:tenderId/report"
+          element={
+            <Suspense fallback={<Loading label="Loading the report" />}>
+              <Report />
+            </Suspense>
+          }
+        />
         <Route path="vendors" element={<VendorsList />} />
         <Route path="vendors/new" element={<VendorForm />} />
         <Route path="vendors/:vendorId" element={<VendorDetail />} />

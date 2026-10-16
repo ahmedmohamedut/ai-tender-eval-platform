@@ -9,6 +9,7 @@ import {
   NEW_PASSWORD,
   signIn,
   sql,
+  chooseOption,
 } from "./support";
 
 /**
@@ -74,7 +75,7 @@ test("invite, sign in, assign, open to committee, and refuse an outsider", async
   await admin.page.getByLabel("Find committee members").fill("");
   await admin.page.getByLabel(inviteeName).check();
   await admin.page.getByLabel("Member 01").check();
-  await admin.page.getByLabel(/Chair \(required\)/).selectOption({ label: "Member 01" });
+  await chooseOption(admin.page, /Chair \(required\)/, "Member 01");
   await admin.page.getByRole("button", { name: "Create tender" }).click();
   await expect(admin.page.getByRole("heading", { name: "Edit tender" })).toBeVisible();
   await expect(admin.page.getByText("RFP uploaded")).toBeVisible();

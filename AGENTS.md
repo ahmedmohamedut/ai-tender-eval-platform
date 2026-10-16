@@ -104,7 +104,7 @@ Per component: `cd backend && ./gradlew test integrationTest spotlessApply`, `cd
 
 **Worker (Python 3.12).** One asyncio loop per process; CPU-bound parsing runs in a `spawn` process pool. pydantic for every message and for settings; fail at start on a missing required key. Dependencies pinned by hash. Follow the message loop in `docs/implementation-guide.md` section 7.2 in order.
 
-**Front end (React).** Use the generated typed client. Render controls from each resource's `actions` map. SSE through a fetch-based client with `Last-Event-ID`. WCAG 2.2 AA. Use the fixed vocabulary in `docs/design/02-ux-design.md` ("Content design").
+**Front end (React).** Components are Ant Design 6; colours and shape come only from `frontend/src/theme.ts` (light and dark, tested for contrast), never from ad hoc CSS. Use the generated typed client. Render controls from each resource's `actions` map. SSE through a fetch-based client with `Last-Event-ID`. WCAG 2.2 AA. Use the fixed vocabulary in `docs/design/02-ux-design.md` ("Content design").
 
 **Configuration.** Environment variables for configuration, OpenBao for secrets, the `settings` table for business settings an administrator may change. Every key is listed in `docs/design/04-platform-integration-design.md` section 7. Add a key there when you add one in code.
 

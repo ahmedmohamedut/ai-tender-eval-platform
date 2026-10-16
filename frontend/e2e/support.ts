@@ -134,15 +134,31 @@ export async function newContext(
 
 /** axe-core in the real browser, contrast included. Returns readable violations. */
 export async function axeViolations(page: Page): Promise<string[]> {
+  // antd fades dialogs and drawers in and out; contrast measured mid-fade is not the real contrast.
+  await page.waitForFunction(() => document.getAnimations().length === 0, undefined, {
+    timeout: 5_000,
+  });
   await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });
   const result = await page.evaluate(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const axe = (window as any).axe;
     const r = await axe.run(document, { rules: { region: { enabled: false } } });
     return r.violations.map(
-      (v: { id: string; help: string; nodes: unknown[] }) =>
-        `${v.id}: ${v.help} (${v.nodes.length})`,
+      (v: { id: string; help: string; nodes: { html: string; any: { data?: unknown }[] }[] }) =>
+        `${v.id}: ${v.help} (${v.nodes.length}) ` +
+        v.nodes
+          .slice(0, 4)
+          .map(
+            (n) => `${n.html.slice(0, 90)} ${JSON.stringify(n.any[0]?.data ?? "").slice(0, 160)}`,
+          )
+          .join(" | "),
     );
   });
   return result as string[];
+}
+
+/** Picks an option of an antd Select by its visible label (the control is a combobox). */
+export async function chooseOption(page: Page, label: string | RegExp, option: string) {
+  await page.getByRole("combobox", { name: label }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
 }

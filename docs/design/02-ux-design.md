@@ -183,9 +183,9 @@ Every screen sits in one shell and uses one of six page templates, so users lear
 | Area | Contents | Notes |
 | --- | --- | --- |
 | Top bar (56 px) | Product name, breadcrumb (All tenders / tender name), job center with running count, notification bell with unread count, user menu | Job center and notifications are reachable from every screen (UX-JOB-01, UX-NOT-02) |
-| Left navigation (240 px, 64 px collapsed) | Admin: Tenders, Vendors, Users, Audit trail. Member and Chair: My tenders, Jobs. Observer: Reports, Audit trail. | The Vendors item opens the vendor list inside PG-05 |
+| Left navigation (240 px, 64 px collapsed) | Admin: Tenders, Vendors, Jobs, Users, Categories, Audit trail. Member and Chair: My tenders, Jobs. Observer: Tenders, Audit trail. Inside a tender the navigation shows the tender name and status and that tender's sections. | The Vendors item opens the vendor registry (administrator). Adding a vendor to a tender can pick from it (PG-05). |
 | Tender header band (72 px) | Tender name, status chip, stage stepper (Draft, Requirements, Evaluation, Consolidation, Finalized), and the Next step prompt with its primary action | Shown on every screen inside a tender (UX-GEN-08) |
-| Tender tabs | Overview, Documents, Requirements, Vendors, Evaluation, Report | Tabs a role cannot use are hidden. Tabs that depend on stage are disabled with a reason, for example Report before finalization (UX-ROL-03). |
+| Tender sections (left navigation inside a tender) | Overview, Progress, Documents, Vendors and proposals, Requirements, Evaluation, Report | Sections a role cannot use are hidden. Tabs that depend on stage are disabled with a reason, for example Report before finalization (UX-ROL-03). |
 
 ### Page templates
 
@@ -466,7 +466,7 @@ Each screen follows one template and has its own set of states to design; this t
 | PG-02 All tenders | T1 | Table: name, status chip, committee size, vendor count, Chair, last activity. Search and status filter. | Create tender | No tenders yet |
 | PG-03 Create or edit tender | T2 | Form: name, description, committee picker, Chair, due date. Readiness checklist beside it. | Open to committee | Validation errors, removing a member with work in progress |
 | PG-04 Tender documents | T3 | Document list with type, version and status chip, a drag-and-drop zone, version history | Upload document | Uploading, processing, failed with reason, unsupported format, no selectable text |
-| PG-05 Vendors and proposals | T3 | Vendor list, vendor profile form, proposal files per vendor with version and status | Add vendor, Upload proposal | Duplicate vendor warning, financial-document notice, new-version impact |
+| PG-05 Vendors and proposals | T3 | Vendor registry (list, profile, create and edit; administrator), the tender's vendors with proposal files per vendor with version and status, and a picker from the registry | Add vendor, Upload proposal | Duplicate vendor warning, financial-document notice, new-version impact |
 | PG-06 Tender progress board | T3 | Stage stepper, vendor-by-member progress grid (status only), jobs, overdue items | Send reminder | No activity yet |
 | PG-07 User management | T1 | Users with role and status, invite panel | Invite user | Deactivating a user with work in progress |
 | PG-08 My tenders | T1 | Tenders with stage, the member's pending tasks and due date | Open tender | Not assigned to any tender |
@@ -558,7 +558,7 @@ When the baseline or a proposal changes, affected rows get an Outdated chip and 
 
 ## Visual foundations
 
-The palette is neutral and token-based. Every text and control colour below passes WCAG 2.2 AA, and no status relies on colour alone. Values are proposals to be replaced when a brand is supplied; the structure and the contrast targets stay.
+The palette is neutral and token-based, and the components are Ant Design 6 (decision D20). The tokens live in one file, `frontend/src/theme.ts`, as explicit hex values for a light and a dark mode; `frontend/src/theme.test.ts` recomputes every ratio below for both modes. Every text and control colour passes WCAG 2.2 AA, and no status relies on colour alone. Values are proposals to be replaced when a brand is supplied; the structure and the contrast targets stay. The table gives the light values; the dark values are in `theme.ts`.
 
 ### Colour tokens
 
@@ -621,7 +621,7 @@ The smallest text size is 12 px.
 
 - Focus is a 2 px ring in the action colour with a 2 px offset, always visible (5.99:1 on surface, 5.63:1 on page).
 - Transitions last at most 150 ms and are removed when the system asks for reduced motion. Nothing moves on its own.
-- A dark theme is not designed in this release.
+- A dark theme and a right-to-left layout are available from the account menu. The choice is kept in the browser only; it falls back to the system setting.
 
 ## Content design
 

@@ -3,7 +3,16 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
-import { axeViolations, E2E_ADMIN, ensureUser, env, newContext, signIn, sql } from "./support";
+import {
+  axeViolations,
+  chooseOption,
+  E2E_ADMIN,
+  ensureUser,
+  env,
+  newContext,
+  signIn,
+  sql,
+} from "./support";
 
 /**
  * The Phase 2 exit criterion (roadmap 3): a long PDF and a DOCX reach Ready with page, section and
@@ -76,7 +85,7 @@ test("upload an RFP and a proposal, read them, and open a passage highlighted", 
 
   // ---- a DOCX and a failing file --------------------------------------------------------------------
   await admin.page.goto(`/tenders/${tenderId}/documents`);
-  await admin.page.getByLabel("Type").selectOption("other");
+  await chooseOption(admin.page, "Type", "Other document");
   await admin.page.locator("#document-file").setInputFiles(join(dir, "sow.docx"));
   const docx = admin.page.getByRole("row", { name: /sow/i });
   await expect(docx.getByText("Ready")).toBeVisible({ timeout: 120_000 });

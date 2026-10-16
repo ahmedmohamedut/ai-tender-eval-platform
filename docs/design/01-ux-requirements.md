@@ -162,9 +162,9 @@ The administrator prepares everything the committee needs: a tender, its documen
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| UX-VND-01 | A vendor profile has name (required), website (URL format checked) and description. Optional: registration number and contact person. | M |
+| UX-VND-01 | A vendor profile has name (required), website (URL format checked) and description. Optional: registration number, contact person, legal name, country, industry, email, phone, address. A vendor is active or inactive; an inactive vendor cannot be added to a tender. | M |
 | UX-VND-02 | Creating a vendor whose name or website matches an existing one shows a warning with a link to the existing profile. | M |
-| UX-VND-03 | A tender picks its vendors from the vendor list or creates one inline. Vendor records are reusable across tenders. | S |
+| UX-VND-03 | A tender picks its vendors from the vendor registry (a searchable list of active vendors) or creates one inline. Vendor records are reusable across tenders. An administrator manages the registry on its own screens. | S |
 | UX-VND-04 | The admin uploads one or more files per vendor as its technical proposal (main document and annexes), each with the processing status from UX-DOC-03. A notice states that financial or commercial proposals must not be uploaded here. | M |
 | UX-VND-05 | Uploading a new proposal version keeps the old one. If AI evaluation has already run, the admin sees how many evaluations will be marked Outdated and must enter a reason. The Chair and members who have started are notified. | M |
 | UX-VND-06 | Inside a tender, the vendor list shows name, number of files, proposal version, status (see Lifecycle and statuses) and who screened it. | M |
