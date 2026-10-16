@@ -1,3 +1,4 @@
+import { Button as AntButton, Space, Table, Typography } from "antd";
 import { useState } from "react";
 import { ExportButton } from "../components/ExportButton";
 import {
@@ -5,7 +6,10 @@ import {
   ErrorNotice,
   Loading,
   NoteDialog,
+  Section,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { ApiError, unwrap, useApi } from "../lib/api";
@@ -93,97 +97,87 @@ export function ChairPanel({ tenderId, isChair }: { tenderId: string; isChair: b
   const cell = (tv: string, user: string) =>
     m.cells.find((c) => c.tender_vendor_id === tv && c.user_id === user);
 
+  type Member = (typeof m.members)[number];
   return (
-    <section aria-labelledby="chair-panel">
-      <h2 id="chair-panel">Evaluations by member</h2>
-      <div className="table-wrap">
-        <table>
-          <caption>Who has submitted which vendor</caption>
-          <thead>
-            <tr>
-              <th scope="col">Member</th>
-              {m.vendors.map((v) => (
-                <th scope="col" key={v.tender_vendor_id}>
-                  {v.name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {m.members.map((mem) => (
-              <tr key={mem.id}>
-                <th scope="row">{mem.display_name}</th>
-                {m.vendors.map((v) => {
-                  const c = cell(v.tender_vendor_id, mem.id);
-                  if (!c) return <td key={v.tender_vendor_id}>-</td>;
-                  const label = c.excluded
-                    ? "Excluded"
-                    : (evaluationStatusLabel[c.status] ?? c.status);
-                  const tone: Tone = c.excluded
-                    ? "neutral"
-                    : ((evaluationStatusTone[c.status] ?? "neutral") as Tone);
-                  return (
-                    <td key={v.tender_vendor_id}>
-                      <StatusChip label={label} tone={tone} />
-                      {isChair && c.member_evaluation_id && !c.excluded && (
-                        <>
-                          {c.status === "submitted" && (
-                            <>
-                              {" "}
-                              <button
-                                type="button"
-                                className="link"
-                                aria-label={`Reopen ${mem.display_name}'s evaluation of ${v.name}`}
-                                onClick={() =>
-                                  setAction({
-                                    kind: "reopen",
-                                    evaluationId: c.member_evaluation_id!,
-                                    who: mem.display_name,
-                                    vendor: v.name,
-                                  })
-                                }
-                              >
-                                Reopen
-                              </button>
-                            </>
-                          )}{" "}
-                          <button
-                            type="button"
-                            className="link"
-                            aria-label={`Exclude ${mem.display_name} from ${v.name}`}
-                            onClick={() =>
-                              setAction({
-                                kind: "exclude",
-                                evaluationId: c.member_evaluation_id!,
-                                who: mem.display_name,
-                                vendor: v.name,
-                              })
-                            }
-                          >
-                            Exclude
-                          </button>
-                        </>
+    <Section title="Evaluations by member">
+      <Table<Member>
+        rowKey="id"
+        components={rowHeaderComponents}
+        dataSource={m.members}
+        pagination={false}
+        scroll={{ x: "max-content" }}
+        title={() => <Typography.Text strong>Who has submitted which vendor</Typography.Text>}
+        columns={[
+          { title: "Member", onCell: rowHeader, render: (_, mem) => mem.display_name },
+          ...m.vendors.map((v) => ({
+            title: v.name,
+            key: v.tender_vendor_id,
+            render: (_: unknown, mem: Member) => {
+              const c = cell(v.tender_vendor_id, mem.id);
+              if (!c) return "-";
+              const label = c.excluded ? "Excluded" : (evaluationStatusLabel[c.status] ?? c.status);
+              const tone: Tone = c.excluded
+                ? "neutral"
+                : ((evaluationStatusTone[c.status] ?? "neutral") as Tone);
+              return (
+                <Space size={4} wrap>
+                  <StatusChip label={label} tone={tone} />
+                  {isChair && c.member_evaluation_id && !c.excluded && (
+                    <>
+                      {c.status === "submitted" && (
+                        <AntButton
+                          type="link"
+                          size="small"
+                          aria-label={`Reopen ${mem.display_name}'s evaluation of ${v.name}`}
+                          onClick={() =>
+                            setAction({
+                              kind: "reopen",
+                              evaluationId: c.member_evaluation_id!,
+                              who: mem.display_name,
+                              vendor: v.name,
+                            })
+                          }
+                        >
+                          Reopen
+                        </AntButton>
                       )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                      <AntButton
+                        type="link"
+                        size="small"
+                        aria-label={`Exclude ${mem.display_name} from ${v.name}`}
+                        onClick={() =>
+                          setAction({
+                            kind: "exclude",
+                            evaluationId: c.member_evaluation_id!,
+                            who: mem.display_name,
+                            vendor: v.name,
+                          })
+                        }
+                      >
+                        Exclude
+                      </AntButton>
+                    </>
+                  )}
+                </Space>
+              );
+            },
+          })),
+        ]}
+      />
       {(isChair || me.user.role === "admin") && (
-        <p>
+        <Typography.Paragraph style={{ marginTop: 16 }}>
           <Button type="button" onClick={() => void remind()}>
             Remind members who have not submitted
           </Button>
-        </p>
+        </Typography.Paragraph>
       )}
-      <h3>Clarification lists</h3>
-      <ul className="plain">
+      <Typography.Title level={3} style={{ fontSize: 16 }}>
+        Clarification lists
+      </Typography.Title>
+      <Space direction="vertical">
         {m.vendors.map((v) => (
-          <li key={v.tender_vendor_id}>
-            {v.name}{" "}
+          <Space key={v.tender_vendor_id} wrap>
+            {v.name}
             <ExportButton
               label="Export clarifications"
               start={() =>
@@ -197,9 +191,9 @@ export function ChairPanel({ tenderId, isChair }: { tenderId: string; isChair: b
                 )
               }
             />
-          </li>
+          </Space>
         ))}
-      </ul>
+      </Space>
       {action && (
         <NoteDialog
           open
@@ -219,6 +213,6 @@ export function ChairPanel({ tenderId, isChair }: { tenderId: string; isChair: b
           onConfirm={(note) => void confirm(note)}
         />
       )}
-    </section>
+    </Section>
   );
 }

@@ -1,5 +1,13 @@
+import { Table, Typography } from "antd";
 import { Link, useParams } from "react-router";
-import { EmptyState, ErrorNotice, Loading, StatusChip } from "../components/ui";
+import {
+  EmptyState,
+  ErrorNotice,
+  Loading,
+  StatusChip,
+  rowHeader,
+  rowHeaderComponents,
+} from "../components/ui";
 import { unwrap, useApi } from "../lib/api";
 import { evaluationStatusLabel, evaluationStatusTone, jobStatusLabel } from "../lib/labels";
 import { useAsync } from "../lib/useAsync";
@@ -23,7 +31,9 @@ export function EvaluationOverview() {
   return (
     <>
       {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
-      <h2>Your evaluations</h2>
+      <Typography.Title level={2} style={{ fontSize: 20 }}>
+        Your evaluations
+      </Typography.Title>
       {progress.state.status === "loading" && <Loading label="Loading your evaluations" />}
       {progress.state.status === "error" && (
         <ErrorNotice error={progress.state.error} onRetry={progress.reload} />
@@ -34,48 +44,44 @@ export function EvaluationOverview() {
             Vendors appear here once the Chair has accepted their proposal.
           </EmptyState>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Vendor</th>
-                <th scope="col">State</th>
-                <th scope="col">Reviewed</th>
-                <th scope="col">Outdated</th>
-                <th scope="col">Flagged</th>
-                <th scope="col">AI</th>
-                <th scope="col">
-                  <span className="visually-hidden">Open</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {progress.state.data.items.map((i) => (
-                <tr key={i.tender_vendor_id}>
-                  <th scope="row">{i.vendor_name}</th>
-                  <td>
+          <Table
+            rowKey="tender_vendor_id"
+            components={rowHeaderComponents}
+            dataSource={progress.state.data.items}
+            pagination={false}
+            scroll={{ x: "max-content" }}
+            columns={[
+              { title: "Vendor", onCell: rowHeader, render: (_, i) => i.vendor_name },
+              {
+                title: "State",
+                render: (_, i) => (
+                  <>
                     <StatusChip
                       label={evaluationStatusLabel[i.status] ?? i.status}
                       tone={evaluationStatusTone[i.status] ?? "neutral"}
                     />{" "}
                     {i.is_next && <StatusChip label="Next" tone="info" />}
-                  </td>
-                  <td>
-                    {i.reviewed} of {i.total}
-                  </td>
-                  <td>{i.outdated}</td>
-                  <td>{i.flagged}</td>
-                  <td>
-                    {i.job_status ? (jobStatusLabel[i.job_status] ?? i.job_status) : "Not started"}
-                  </td>
-                  <td>
-                    <Link to={`/tenders/${tenderId}/vendors/${i.tender_vendor_id}/evaluation`}>
-                      Open {i.vendor_name}
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </>
+                ),
+              },
+              { title: "Reviewed", render: (_, i) => `${i.reviewed} of ${i.total}` },
+              { title: "Outdated", dataIndex: "outdated" },
+              { title: "Flagged", dataIndex: "flagged" },
+              {
+                title: "AI",
+                render: (_, i) =>
+                  i.job_status ? (jobStatusLabel[i.job_status] ?? i.job_status) : "Not started",
+              },
+              {
+                title: <span className="visually-hidden">Open</span>,
+                render: (_, i) => (
+                  <Link to={`/tenders/${tenderId}/vendors/${i.tender_vendor_id}/evaluation`}>
+                    Open {i.vendor_name}
+                  </Link>
+                ),
+              },
+            ]}
+          />
         ))}
     </>
   );

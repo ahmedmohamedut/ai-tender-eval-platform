@@ -1,5 +1,13 @@
+import { Table, Typography } from "antd";
 import { Link, useParams } from "react-router";
-import { EmptyState, ErrorNotice, Loading, StatusChip } from "../components/ui";
+import {
+  EmptyState,
+  ErrorNotice,
+  Loading,
+  StatusChip,
+  rowHeader,
+  rowHeaderComponents,
+} from "../components/ui";
 import { unwrap, useApi } from "../lib/api";
 import { gradeIcon, gradeLabel, gradeTone, memberStateLabel } from "../lib/labels";
 import { useAsync } from "../lib/useAsync";
@@ -22,19 +30,19 @@ export function CrossVendor() {
   return (
     <>
       {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
-      <p>
+      <Typography.Paragraph>
         <Link to={`/tenders/${tenderId}/evaluation`}>Back to your evaluations</Link>
-      </p>
+      </Typography.Paragraph>
       {view.state.status === "loading" && <Loading label="Loading the comparison" />}
       {view.state.status === "error" && (
         <ErrorNotice error={view.state.error} onRetry={view.reload} />
       )}
       {view.state.status === "ready" && (
         <>
-          <h2>
+          <Typography.Title level={2} style={{ fontSize: 20 }}>
             {view.state.data.requirement.display_no}: {view.state.data.requirement.text}
-          </h2>
-          <nav aria-label="Requirements" className="actions">
+          </Typography.Title>
+          <nav aria-label="Requirements" style={{ marginBottom: 16, display: "flex", gap: 16 }}>
             {view.state.data.previous_requirement_id ? (
               <Link
                 to={`/tenders/${tenderId}/requirements/${view.state.data.previous_requirement_id}/compare`}
@@ -55,41 +63,38 @@ export function CrossVendor() {
               Vendors appear once their proposals are accepted.
             </EmptyState>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Vendor</th>
-                  <th scope="col">AI grade</th>
-                  <th scope="col">Why</th>
-                  <th scope="col">Your decision</th>
-                </tr>
-              </thead>
-              <tbody>
-                {view.state.data.vendors.map((v) => (
-                  <tr key={v.tender_vendor_id}>
-                    <th scope="row">{v.vendor_name}</th>
-                    <td>
-                      {v.ai?.grade ? (
-                        <StatusChip
-                          label={`${gradeIcon[v.ai.grade] ?? ""} ${gradeLabel[v.ai.grade] ?? v.ai.grade}`.trim()}
-                          tone={gradeTone[v.ai.grade] ?? "neutral"}
-                        />
-                      ) : (
-                        <span className="help">
-                          {v.ai?.outcome === "failed" ? "Not evaluated" : "Not graded yet"}
-                        </span>
-                      )}
-                    </td>
-                    <td>{v.ai?.rationale_summary ?? ""}</td>
-                    <td>
-                      {v.my_decision?.grade
-                        ? (gradeLabel[v.my_decision.grade] ?? v.my_decision.grade)
-                        : memberStateLabel[v.my_decision?.review_state ?? "not_reviewed"]}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table
+              rowKey="tender_vendor_id"
+              components={rowHeaderComponents}
+              dataSource={view.state.data.vendors}
+              pagination={false}
+              scroll={{ x: "max-content" }}
+              columns={[
+                { title: "Vendor", onCell: rowHeader, render: (_, v) => v.vendor_name },
+                {
+                  title: "AI grade",
+                  render: (_, v) =>
+                    v.ai?.grade ? (
+                      <StatusChip
+                        label={`${gradeIcon[v.ai.grade] ?? ""} ${gradeLabel[v.ai.grade] ?? v.ai.grade}`.trim()}
+                        tone={gradeTone[v.ai.grade] ?? "neutral"}
+                      />
+                    ) : (
+                      <Typography.Text type="secondary">
+                        {v.ai?.outcome === "failed" ? "Not evaluated" : "Not graded yet"}
+                      </Typography.Text>
+                    ),
+                },
+                { title: "Why", render: (_, v) => v.ai?.rationale_summary ?? "" },
+                {
+                  title: "Your decision",
+                  render: (_, v) =>
+                    v.my_decision?.grade
+                      ? (gradeLabel[v.my_decision.grade] ?? v.my_decision.grade)
+                      : memberStateLabel[v.my_decision?.review_state ?? "not_reviewed"],
+                },
+              ]}
+            />
           )}
         </>
       )}

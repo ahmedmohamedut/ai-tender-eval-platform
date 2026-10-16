@@ -1,3 +1,4 @@
+import { Alert, Card, Col, InputNumber, Row, Space, Typography } from "antd";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import {
@@ -161,98 +162,96 @@ export function Baseline() {
   return (
     <>
       <TenderHeader tender={tender.state.data} />
-      <p>
+      <Typography.Paragraph>
         <Link to={`/tenders/${tenderId}/requirements`}>Back to requirements</Link>
-      </p>
-      <h2>Baseline and scoring</h2>
+      </Typography.Paragraph>
+      <Typography.Title level={2} style={{ fontSize: 20 }}>
+        Baseline and scoring
+      </Typography.Title>
       {live && (
-        <p className="banner">
-          <span aria-hidden="true">🔒 </span>
-          Baseline v{live.version_no}{" "}
-          <StatusChip
-            label={baselineStatusLabel[live.status]}
-            tone={live.status === "confirmed" ? "success" : "warning"}
-          />{" "}
-          · confirmed {new Date(live.confirmed_at).toLocaleDateString()}
-          {live.confirmed_by ? ` by ${live.confirmed_by.display_name}` : ""} ·{" "}
-          {live.requirement_count} requirements
-        </p>
+        <Alert
+          type={live.status === "confirmed" ? "success" : "warning"}
+          style={{ marginBottom: 16 }}
+          title={
+            <>
+              <span aria-hidden="true">🔒 </span>
+              Baseline v{live.version_no}{" "}
+              <StatusChip
+                label={baselineStatusLabel[live.status]}
+                tone={live.status === "confirmed" ? "success" : "warning"}
+              />{" "}
+              · confirmed {new Date(live.confirmed_at).toLocaleDateString()}
+              {live.confirmed_by ? ` by ${live.confirmed_by.display_name}` : ""} ·{" "}
+              {live.requirement_count} requirements
+            </>
+          }
+        />
       )}
       {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
+        <Alert type="error" showIcon role="alert" title={error} style={{ marginBottom: 16 }} />
       )}
 
-      <section aria-labelledby="scoring-h" className="card">
-        <h3 id="scoring-h">Scoring model {locked ? "(locked with the baseline)" : ""}</h3>
-        <div className="filter-bar">
-          <Field label="Points for fully compliant">
-            {({ id }) => (
-              <input
-                id={id}
-                type="number"
-                min={0}
-                step="0.5"
-                disabled={locked || !isChair}
-                value={d.fully}
-                onChange={(e) => setDraft({ ...d, fully: e.target.value })}
-              />
-            )}
-          </Field>
-          <Field label="Points for partially compliant">
-            {({ id }) => (
-              <input
-                id={id}
-                type="number"
-                min={0}
-                step="0.5"
-                disabled={locked || !isChair}
-                value={d.partially}
-                onChange={(e) => setDraft({ ...d, partially: e.target.value })}
-              />
-            )}
-          </Field>
-          <Field label="Points for non compliant">
-            {({ id }) => (
-              <input
-                id={id}
-                type="number"
-                min={0}
-                step="0.5"
-                disabled={locked || !isChair}
-                value={d.non}
-                onChange={(e) => setDraft({ ...d, non: e.target.value })}
-              />
-            )}
-          </Field>
-        </div>
-        <h4>Category weights</h4>
-        <ul>
+      <Card
+        style={{ marginBottom: 16 }}
+        title={
+          <Typography.Title level={3} style={{ fontSize: 16, margin: 0 }}>
+            Scoring model {locked ? "(locked with the baseline)" : ""}
+          </Typography.Title>
+        }
+      >
+        <Row gutter={16}>
+          {(
+            [
+              ["Points for fully compliant", "fully"],
+              ["Points for partially compliant", "partially"],
+              ["Points for non compliant", "non"],
+            ] as const
+          ).map(([label, key]) => (
+            <Col key={key} xs={24} md={8}>
+              <Field label={label}>
+                {({ id }) => (
+                  <InputNumber
+                    id={id}
+                    min={0}
+                    step={0.5}
+                    style={{ width: "100%" }}
+                    disabled={locked || !isChair}
+                    value={Number(d[key])}
+                    onChange={(v) => setDraft({ ...d, [key]: String(v ?? 0) })}
+                  />
+                )}
+              </Field>
+            </Col>
+          ))}
+        </Row>
+        <Typography.Title level={4} style={{ fontSize: 14 }}>
+          Category weights
+        </Typography.Title>
+        <Row gutter={16}>
           {active.map((c) => (
-            <li key={c.id}>
+            <Col key={c.id} xs={24} md={8}>
               <Field label={`Weight of ${c.name}`}>
                 {({ id }) => (
-                  <input
+                  <InputNumber
                     id={id}
-                    type="number"
                     min={0.1}
-                    step="0.1"
+                    step={0.1}
+                    style={{ width: "100%" }}
                     disabled={locked || !isChair}
-                    value={d.weights[c.id] ?? "1"}
-                    onChange={(e) =>
-                      setDraft({ ...d, weights: { ...d.weights, [c.id]: e.target.value } })
+                    value={Number(d.weights[c.id] ?? "1")}
+                    onChange={(v) =>
+                      setDraft({ ...d, weights: { ...d.weights, [c.id]: String(v ?? 1) } })
                     }
                   />
                 )}
               </Field>
-            </li>
+            </Col>
           ))}
-        </ul>
-        <p className="help">
+        </Row>
+        <Typography.Paragraph type="secondary">
           A mandatory requirement that is not met flags the vendor; it never removes it from the
           evaluation.
-        </p>
+        </Typography.Paragraph>
         {isChair && !locked && (
           <Button
             variant="primary"
@@ -262,21 +261,27 @@ export function Baseline() {
             Save scoring model
           </Button>
         )}
-      </section>
+      </Card>
 
-      <section aria-labelledby="checks-h" className="card">
-        <h3 id="checks-h">Checks before confirming</h3>
-        <p>
+      <Card
+        style={{ marginBottom: 16 }}
+        title={
+          <Typography.Title level={3} style={{ fontSize: 16, margin: 0 }}>
+            Checks before confirming
+          </Typography.Title>
+        }
+      >
+        <Typography.Paragraph>
           {check.counts.total} requirements: {check.counts.mandatory} mandatory,{" "}
           {check.counts.optional} optional.
-        </p>
+        </Typography.Paragraph>
         {live && locked ? (
-          <p>The requirements are confirmed.</p>
+          <Typography.Paragraph>The requirements are confirmed.</Typography.Paragraph>
         ) : check.ready ? (
-          <p>
+          <Typography.Paragraph>
             <span aria-hidden="true">✓ </span>Every requirement is reviewed, has a category and no
             open flag.
-          </p>
+          </Typography.Paragraph>
         ) : (
           <ul>
             {check.failures.map((f) => (
@@ -293,24 +298,35 @@ export function Baseline() {
             ))}
           </ul>
         )}
-        {isChair && !locked && (
-          <Button
-            variant="primary"
-            disabledReason={check.ready ? undefined : "Resolve the checks above first"}
-            onClick={() => setConfirming(true)}
-          >
-            Confirm requirements
-          </Button>
+        <Space>
+          {isChair && !locked && (
+            <Button
+              variant="primary"
+              disabledReason={check.ready ? undefined : "Resolve the checks above first"}
+              onClick={() => setConfirming(true)}
+            >
+              Confirm requirements
+            </Button>
+          )}
+          {isChair && live?.status === "confirmed" && (
+            <Button onClick={() => setReopening(true)}>Reopen requirements</Button>
+          )}
+        </Space>
+        {!isChair && (
+          <Typography.Paragraph type="secondary">
+            Only the Chair confirms and reopens requirements.
+          </Typography.Paragraph>
         )}
-        {isChair && live?.status === "confirmed" && (
-          <Button onClick={() => setReopening(true)}>Reopen requirements</Button>
-        )}
-        {!isChair && <p className="help">Only the Chair confirms and reopens requirements.</p>}
-      </section>
+      </Card>
 
       {versions.state.data.length > 0 && (
-        <section aria-labelledby="versions-h">
-          <h3 id="versions-h">Versions</h3>
+        <Card
+          title={
+            <Typography.Title level={3} style={{ fontSize: 16, margin: 0 }}>
+              Versions
+            </Typography.Title>
+          }
+        >
           <ul>
             {versions.state.data.map((b) => (
               <li key={b.id}>
@@ -320,7 +336,7 @@ export function Baseline() {
               </li>
             ))}
           </ul>
-        </section>
+        </Card>
       )}
 
       <ConfirmDialog

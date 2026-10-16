@@ -143,6 +143,31 @@ export function StatusChip({ label, tone = "neutral" }: { label: string; tone?: 
   );
 }
 
+/** A titled card: the one container for the groups of a page (title is a level 3 heading). */
+export function Section({
+  title,
+  extra,
+  children,
+}: {
+  title: ReactNode;
+  extra?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card
+      style={{ marginBottom: 16 }}
+      extra={extra}
+      title={
+        <Typography.Title level={3} style={{ fontSize: 16, margin: 0 }}>
+          {title}
+        </Typography.Title>
+      }
+    >
+      {children}
+    </Card>
+  );
+}
+
 export function EmptyState({
   title,
   children,
