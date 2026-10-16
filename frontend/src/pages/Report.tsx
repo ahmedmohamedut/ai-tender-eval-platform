@@ -219,7 +219,20 @@ export function Report() {
     ),
   );
   const m = matrix.state.status === "ready" ? matrix.state.data : null;
-  const vendorOptions = m?.vendors ?? [];
+  // One column per vendor that has a cell in the matrix, even when the server's vendor list
+  // leaves it out (a proposal that is not yet marked evaluated); the name comes from the ranking.
+  const vendorOptions: { tender_vendor_id: string; name: string }[] = [...(m?.vendors ?? [])];
+  for (const row of m?.rows ?? []) {
+    for (const c of row.cells) {
+      if (!vendorOptions.some((v) => v.tender_vendor_id === c.tender_vendor_id)) {
+        const known = ranking.find((r) => r.tender_vendor_id === c.tender_vendor_id);
+        vendorOptions.push({
+          tender_vendor_id: c.tender_vendor_id,
+          name: known?.vendor_name ?? "Vendor",
+        });
+      }
+    }
+  }
 
   async function doFinalize() {
     setBusy(true);
@@ -682,7 +695,7 @@ export function Report() {
                     </>
                   ),
                 },
-                ...m.vendors.map((v) => ({
+                ...vendorOptions.map((v) => ({
                   title: v.name,
                   key: v.tender_vendor_id,
                   render: (_: unknown, r: (typeof m.rows)[number]) => {

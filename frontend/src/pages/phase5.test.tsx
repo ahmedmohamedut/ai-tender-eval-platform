@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { accessibilityViolations, choose, fakeApi, makeMe, renderPage } from "../test/helpers";
@@ -276,6 +276,71 @@ describe("PG-19 Consolidated report", () => {
       </Routes>
     );
   }
+
+  it("shows one grade column for every vendor that has a cell, even one the vendor list leaves out", async () => {
+    const TV2 = "99999999-9999-4999-8999-999999999999";
+    const api = handler((call) => {
+      if (call === "GET /tenders/{tenderId}/report/overview")
+        return {
+          data: {
+            vendors: [TV, TV2].map((id, i) => ({
+              tender_vendor_id: id,
+              vendor_name: i ? "Beta Systems" : "Acme Cloud",
+              available: true,
+              outcome: "evaluated",
+              rank: i + 1,
+              final_score: 50 - i * 10,
+              compliance_percent: 10,
+              mandatory_failures: 0,
+              fails_mandatory: false,
+              counts: {},
+              awaiting: [],
+            })),
+          },
+        };
+      if (call === "GET /tenders/{tenderId}/report/matrix")
+        return {
+          data: {
+            vendors: [{ tender_vendor_id: TV, name: "Acme Cloud" }],
+            rows: [
+              {
+                requirement: {
+                  id: R1,
+                  display_no: "REQ-001",
+                  text: "Encrypt data at rest",
+                  category: "",
+                  importance: "mandatory",
+                },
+                cells: [
+                  {
+                    tender_vendor_id: TV,
+                    available: true,
+                    has_disagreement: false,
+                    final_grade: "fully_compliant",
+                  },
+                  {
+                    tender_vendor_id: TV2,
+                    available: true,
+                    has_disagreement: false,
+                    final_grade: "non_compliant",
+                  },
+                ],
+              },
+            ],
+          },
+        };
+      return undefined;
+    });
+    renderPage(page(), { api, me: chair(), route: `/tenders/${T}/report` });
+    const table = (
+      await screen.findByText("Final grade of each requirement for each vendor")
+    ).closest(".ant-table-wrapper") as HTMLElement;
+    expect(within(table).getByRole("columnheader", { name: "Acme Cloud" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Beta Systems" })).toBeInTheDocument();
+    expect(
+      within(table).getByRole("button", { name: /Open REQ-001 for Beta Systems/ }),
+    ).toBeInTheDocument();
+  });
 
   it("shows the Chair the status, ranking and a disabled finalize with its reason", async () => {
     const api = handler(() => undefined);
