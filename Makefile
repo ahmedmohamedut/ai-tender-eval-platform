@@ -17,6 +17,7 @@ env: .env
 up: .env frontend/src/api/generated/schema.d.ts
 	@infra/scripts/preflight.sh
 	cd frontend && npm run --silent build
+	$(COMPOSE) build worker-ingest
 	$(COMPOSE) up -d --build
 	@infra/scripts/wait-healthy.sh
 	@infra/scripts/seed-dev-users.sh
