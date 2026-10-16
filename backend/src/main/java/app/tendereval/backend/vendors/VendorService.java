@@ -8,6 +8,7 @@ import app.tendereval.backend.api.model.TenderVendorPage;
 import app.tendereval.backend.api.model.Vendor;
 import app.tendereval.backend.api.model.VendorInput;
 import app.tendereval.backend.api.model.VendorPage;
+import app.tendereval.backend.api.model.VendorStatus;
 import app.tendereval.backend.api.model.VendorUpdate;
 import app.tendereval.backend.audit.AuditEntry;
 import app.tendereval.backend.audit.AuditService;
@@ -38,7 +39,8 @@ public class VendorService {
           "\\b(ltd|limited|llc|inc|incorporated|corp|corporation|gmbh|plc|sa|ag|bv|co|company)\\b");
   private static final String COLUMNS =
       "v.id, v.name, v.website, v.registration_no, v.contact_person, v.created_at, v.row_version,"
-          + " v.description";
+          + " v.description, v.legal_name, v.country, v.industry, v.email, v.phone, v.address,"
+          + " v.status";
 
   private final AuditService audit;
 
@@ -77,6 +79,14 @@ public class VendorService {
         .website(site == null ? null : URI.create(site))
         .registrationNo(r.get("registration_no", String.class))
         .contactPerson(r.get("contact_person", String.class))
+        .description(r.get("description", String.class))
+        .legalName(r.get("legal_name", String.class))
+        .country(r.get("country", String.class))
+        .industry(r.get("industry", String.class))
+        .email(r.get("email", String.class))
+        .phone(r.get("phone", String.class))
+        .address(r.get("address", String.class))
+        .status(VendorStatus.fromValue(r.get("status", String.class)))
         .createdAt(r.get("created_at", OffsetDateTime.class))
         .rowVersion(r.get("row_version", Integer.class));
   }
@@ -198,27 +208,85 @@ public class VendorService {
                                                   return one;
                                                 })
                                             .toList())));
-    return guard.then(insert(db, actor, name, site, in.getRegistrationNo(), in.getContactPerson()));
+    return guard.then(insert(db, actor, name, site, in));
+  }
+
+  /** The optional profile columns, in the order they are bound. */
+  private static final List<String> PROFILE =
+      List.of(
+          "registration_no",
+          "contact_person",
+          "description",
+          "legal_name",
+          "country",
+          "industry",
+          "email",
+          "phone",
+          "address");
+
+  private static Map<String, String> profile(VendorInput in) {
+    Map<String, String> m = new LinkedHashMap<>();
+    m.put("registration_no", in.getRegistrationNo());
+    m.put("contact_person", in.getContactPerson());
+    m.put("description", in.getDescription());
+    m.put("legal_name", in.getLegalName());
+    m.put("country", in.getCountry());
+    m.put("industry", in.getIndustry());
+    m.put("email", in.getEmail());
+    m.put("phone", in.getPhone());
+    m.put("address", in.getAddress());
+    return m;
+  }
+
+  private static Map<String, String> profile(VendorUpdate in) {
+    Map<String, String> m = new LinkedHashMap<>();
+    m.put("registration_no", in.getRegistrationNo());
+    m.put("contact_person", in.getContactPerson());
+    m.put("description", in.getDescription());
+    m.put("legal_name", in.getLegalName());
+    m.put("country", in.getCountry());
+    m.put("industry", in.getIndustry());
+    m.put("email", in.getEmail());
+    m.put("phone", in.getPhone());
+    m.put("address", in.getAddress());
+    return m;
+  }
+
+  private static Map<String, String> profile(Vendor v) {
+    Map<String, String> m = new LinkedHashMap<>();
+    m.put("registration_no", v.getRegistrationNo());
+    m.put("contact_person", v.getContactPerson());
+    m.put("description", v.getDescription());
+    m.put("legal_name", v.getLegalName());
+    m.put("country", v.getCountry());
+    m.put("industry", v.getIndustry());
+    m.put("email", v.getEmail());
+    m.put("phone", v.getPhone());
+    m.put("address", v.getAddress());
+    return m;
   }
 
   private Mono<Vendor> insert(
-      DatabaseClient db,
-      CurrentUser actor,
-      String name,
-      String site,
-      String registration,
-      String contact) {
+      DatabaseClient db, CurrentUser actor, String name, String site, VendorInput in) {
+    Map<String, String> p = profile(in);
+    String status = in.getStatus() == null ? "active" : in.getStatus().getValue();
     DatabaseClient.GenericExecuteSpec spec =
         db.sql(
-                "INSERT INTO vendors (name, normalized_name, website, normalized_domain,"
-                    + " registration_no, contact_person) VALUES (:n, :nn, :w, :d, :r, :c)"
-                    + " RETURNING id")
+                "INSERT INTO vendors (name, normalized_name, website, normalized_domain, status, "
+                    + String.join(", ", PROFILE)
+                    + ") VALUES (:n, :nn, :w, :d, :status, "
+                    + PROFILE.stream()
+                        .map(c -> ":" + c)
+                        .collect(java.util.stream.Collectors.joining(", "))
+                    + ") RETURNING id")
             .bind("n", name)
-            .bind("nn", normalizeName(name));
+            .bind("nn", normalizeName(name))
+            .bind("status", status);
     spec = nullable(spec, "w", site);
     spec = nullable(spec, "d", normalizeDomain(site));
-    spec = nullable(spec, "r", blankToNull(registration));
-    spec = nullable(spec, "c", blankToNull(contact));
+    for (String c : PROFILE) {
+      spec = nullable(spec, c, blankToNull(p.get(c)));
+    }
     return spec.map((r, m) -> r.get("id", UUID.class))
         .one()
         .flatMap(
@@ -257,47 +325,59 @@ public class VendorService {
                   in.getWebsite() == null
                       ? (current.getWebsite() == null ? null : current.getWebsite().toString())
                       : in.getWebsite().toString();
-              String reg =
-                  in.getRegistrationNo() != null
-                      ? in.getRegistrationNo()
-                      : current.getRegistrationNo();
-              String contact =
-                  in.getContactPerson() != null
-                      ? in.getContactPerson()
-                      : current.getContactPerson();
-              Map<String, Object> from = new LinkedHashMap<>();
-              from.put("name", current.getName());
-              from.put(
+              Map<String, String> from = profile(current);
+              Map<String, String> to = new LinkedHashMap<>(from);
+              Map<String, String> sent = profile(in);
+              sent.forEach(
+                  (k, v) -> {
+                    if (v != null) {
+                      to.put(k, blankToNull(v));
+                    }
+                  });
+              String status =
+                  in.getStatus() == null
+                      ? current.getStatus().getValue()
+                      : in.getStatus().getValue();
+              Map<String, Object> fromAll = new LinkedHashMap<>();
+              fromAll.put("name", current.getName());
+              fromAll.put(
                   "website", current.getWebsite() == null ? null : current.getWebsite().toString());
-              from.put("registration_no", current.getRegistrationNo());
-              from.put("contact_person", current.getContactPerson());
-              Map<String, Object> to = new LinkedHashMap<>();
-              to.put("name", name);
-              to.put("website", site);
-              to.put("registration_no", reg);
-              to.put("contact_person", contact);
-              if (from.equals(to)) {
+              fromAll.put("status", current.getStatus().getValue());
+              fromAll.putAll(from);
+              Map<String, Object> toAll = new LinkedHashMap<>();
+              toAll.put("name", name);
+              toAll.put("website", site);
+              toAll.put("status", status);
+              toAll.putAll(to);
+              if (fromAll.equals(toAll)) {
                 return Mono.just(current);
               }
               DatabaseClient.GenericExecuteSpec spec =
                   db.sql(
                           "UPDATE vendors SET name = :n, normalized_name = :nn, website = :w,"
-                              + " normalized_domain = :d, registration_no = :r, contact_person = :c"
+                              + " normalized_domain = :d, status = :status,"
+                              + PROFILE.stream()
+                                  .map(c -> " " + c + " = :" + c)
+                                  .collect(java.util.stream.Collectors.joining(","))
                               + " WHERE id = :id")
                       .bind("n", name)
                       .bind("nn", normalizeName(name))
+                      .bind("status", status)
                       .bind("id", id);
               spec = nullable(spec, "w", site);
               spec = nullable(spec, "d", normalizeDomain(site));
-              spec = nullable(spec, "r", blankToNull(reg));
-              spec = nullable(spec, "c", blankToNull(contact));
+              for (String c : PROFILE) {
+                spec = nullable(spec, c, to.get(c));
+              }
               return spec.fetch()
                   .rowsUpdated()
                   .then(
                       audit.record(
                           db,
                           actor,
-                          AuditEntry.of("vendor_updated", "vendor", id).changed(from, to).build()))
+                          AuditEntry.of("vendor_updated", "vendor", id)
+                              .changed(fromAll, toAll)
+                              .build()))
                   .then(get(db, id));
             });
   }
@@ -372,7 +452,17 @@ public class VendorService {
                         : Mono.<Void>empty());
     Mono<UUID> vendorId;
     if (in.getVendorId() != null) {
-      vendorId = get(db, in.getVendorId()).map(Vendor::getId);
+      vendorId =
+          get(db, in.getVendorId())
+              .flatMap(
+                  v ->
+                      v.getStatus() == VendorStatus.INACTIVE
+                          ? Mono.error(
+                              ApiException.invalid(
+                                  "vendor_id",
+                                  "vendor_inactive",
+                                  "This vendor is inactive. Reactivate it first"))
+                          : Mono.just(v.getId()));
     } else if (in.getNewVendor() != null) {
       vendorId = create(db, actor, in.getNewVendor()).map(Vendor::getId);
     } else {
