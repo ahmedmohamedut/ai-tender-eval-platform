@@ -36,7 +36,13 @@ import { unwrap, useApi } from "../lib/api";
 import { tenderStatusLabel, tenderStatusTone } from "../lib/labels";
 import type { Tender } from "../lib/types";
 import { useAsync } from "../lib/useAsync";
-import { JobsPopover, NotificationsPopover, SearchBox, UserMenu } from "./HeaderControls";
+import {
+  JobsPopover,
+  NotificationsPopover,
+  SearchBox,
+  ThemeToggle,
+  UserMenu,
+} from "./HeaderControls";
 import { useSession } from "./Session";
 
 const { Header, Sider, Footer } = Layout;
@@ -446,6 +452,7 @@ export function Shell() {
           <Space size={4}>
             <SearchBox />
             <JobsPopover />
+            <ThemeToggle />
             <NotificationsPopover />
             <UserMenu />
           </Space>

@@ -367,6 +367,18 @@ describe("App shell", () => {
     expect(within(drawer).getByText("Administrator")).toBeInTheDocument();
   });
 
+  it("switches the theme from an icon beside jobs, not from the account menu", async () => {
+    renderPage(tree, { api: fakeApi(() => undefined) });
+    await userEvent.click(screen.getByRole("button", { name: "Switch to dark mode" }));
+    expect(screen.getByRole("button", { name: "Switch to light mode" })).toBeInTheDocument();
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    await userEvent.click(screen.getByRole("button", { name: "Account menu for Alex Admin" }));
+    await screen.findByText("User profile");
+    expect(screen.queryByText("Dark mode")).not.toBeInTheDocument();
+    expect(screen.queryByText("Right-to-left")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Switch to light mode" }));
+  });
+
   it("opens notifications and jobs as popovers with a way to the full page", async () => {
     const api = fakeApi((call) => {
       if (call === "GET /notifications/unread-count") return { count: 2 };

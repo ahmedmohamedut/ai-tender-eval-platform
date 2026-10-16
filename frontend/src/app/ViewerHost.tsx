@@ -40,8 +40,8 @@ export function ViewerProvider({ children }: { children: ReactNode }) {
       {children}
       <Modal
         open={target !== null}
-        centered
-        width={1120}
+        width="min(1680px, 96vw)"
+        style={{ top: 16 }}
         title="Document viewer"
         footer={null}
         destroyOnHidden

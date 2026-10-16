@@ -3,6 +3,7 @@ import {
   ClockCircleOutlined,
   LogoutOutlined,
   MoonOutlined,
+  SunOutlined,
   SearchOutlined,
   UserOutlined,
 } from "@ant-design/icons";
@@ -19,7 +20,7 @@ import {
   Modal,
   Popover,
   Progress,
-  Switch,
+  Tooltip,
   Tag,
   Typography,
   theme,
@@ -195,7 +196,6 @@ export function NotificationsPopover() {
 /** The round avatar, the account menu and the User profile drawer. */
 export function UserMenu() {
   const { me, signOut } = useSession();
-  const { mode, direction, setMode, setDirection } = useAppearance();
   const [profile, setProfile] = useState(false);
   const u = me.user;
   const initial = (u.display_name || u.email).trim().charAt(0).toUpperCase();
@@ -221,32 +221,11 @@ export function UserMenu() {
             },
             { type: "divider" },
             { key: "profile", icon: <UserOutlined />, label: "User profile" },
-            {
-              key: "dark",
-              icon: <MoonOutlined />,
-              label: (
-                <Flex justify="space-between" gap={16}>
-                  Dark mode
-                  <Switch size="small" checked={mode === "dark"} aria-label="Dark mode" />
-                </Flex>
-              ),
-            },
-            {
-              key: "rtl",
-              label: (
-                <Flex justify="space-between" gap={16}>
-                  Right-to-left
-                  <Switch size="small" checked={direction === "rtl"} aria-label="Right-to-left" />
-                </Flex>
-              ),
-            },
             { type: "divider" },
             { key: "out", icon: <LogoutOutlined />, danger: true, label: "Sign out" },
           ],
           onClick: ({ key }) => {
             if (key === "profile") setProfile(true);
-            if (key === "dark") setMode(mode === "dark" ? "light" : "dark");
-            if (key === "rtl") setDirection(direction === "rtl" ? "ltr" : "rtl");
             if (key === "out") signOut();
           },
         }}
@@ -427,5 +406,22 @@ export function SearchBox() {
         </Typography.Text>
       </Modal>
     </>
+  );
+}
+
+/** Light or dark: a moon while the theme is dark, a sun while it is light. */
+export function ThemeToggle() {
+  const { mode, setMode } = useAppearance();
+  const dark = mode === "dark";
+  const label = dark ? "Switch to light mode" : "Switch to dark mode";
+  return (
+    <Tooltip title={label}>
+      <Button
+        type="text"
+        icon={dark ? <MoonOutlined /> : <SunOutlined />}
+        aria-label={label}
+        onClick={() => setMode(dark ? "light" : "dark")}
+      />
+    </Tooltip>
   );
 }

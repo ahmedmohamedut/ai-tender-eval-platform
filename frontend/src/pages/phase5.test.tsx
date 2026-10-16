@@ -285,8 +285,12 @@ describe("PG-19 Consolidated report", () => {
       route: `/tenders/${T}/report`,
     });
     expect(await screen.findByText("Report version 1")).toBeInTheDocument();
-    expect(screen.getAllByText("Acme Cloud", { selector: "th" }).length).toBeGreaterThan(0);
-    expect(screen.getByText(/1 failed \(flag\)/)).toBeInTheDocument();
+    expect(screen.getByText("Vendor comparison")).toBeInTheDocument();
+    expect(screen.getByText("Requirements compliance · head to head")).toBeInTheDocument();
+    expect(screen.getAllByText("Acme Cloud").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Rank 1 · 1 mandatory failure/)).toBeInTheDocument();
+    expect(screen.getByText(/Mandatory requirement failures/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Details of Acme Cloud" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Finalize report" })).toBeDisabled();
     expect(screen.getByText(/1 disagreements still need a final grade/)).toBeInTheDocument();
     expect(await accessibilityViolations(container)).toEqual([]);
