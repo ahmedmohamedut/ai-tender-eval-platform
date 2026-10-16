@@ -21,6 +21,7 @@ import { TendersList } from "./pages/TendersList";
 import { Users } from "./pages/Users";
 import { Categories } from "./pages/Categories";
 import { Vendors } from "./pages/Vendors";
+import { VendorDetail, VendorForm, VendorsList } from "./pages/VendorRegistry";
 import { Viewer } from "./pages/Viewer";
 import { EmptyState } from "./components/ui";
 
@@ -57,6 +58,10 @@ export function AppRoutes() {
         <Route path="tenders/:tenderId/baseline" element={<Baseline />} />
         <Route path="documents/:versionId/view" element={<Viewer />} />
         <Route path="tenders/:tenderId/report" element={<Report />} />
+        <Route path="vendors" element={<VendorsList />} />
+        <Route path="vendors/new" element={<VendorForm />} />
+        <Route path="vendors/:vendorId" element={<VendorDetail />} />
+        <Route path="vendors/:vendorId/edit" element={<VendorForm />} />
         <Route path="jobs" element={<Jobs />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="audit" element={<Audit />} />

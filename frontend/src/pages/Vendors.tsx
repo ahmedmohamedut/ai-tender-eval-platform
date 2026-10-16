@@ -1,5 +1,17 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
+import {
+  Alert,
+  Card,
+  Divider,
+  Input,
+  List,
+  Progress,
+  Radio,
+  Select,
+  Space,
+  Typography,
+} from "antd";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useParams } from "react-router";
 import {
   Button,
   EmptyState,
@@ -42,6 +54,33 @@ export function Vendors() {
   const [duplicates, setDuplicates] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  const location = useLocation();
+  const [registryId, setRegistryId] = useState<string>(
+    (location.state as { pickVendor?: string } | null)?.pickVendor ?? "",
+  );
+  const [registryQ, setRegistryQ] = useState("");
+  const [registry, setRegistry] = useState<{ id: string; name: string; inactive: boolean }[]>([]);
+  useEffect(() => {
+    if (!isAdmin) return;
+    let live = true;
+    unwrap(
+      api.GET("/vendors", { params: { query: { q: registryQ || undefined, limit: 50 } } }),
+    ).then(
+      (r) =>
+        live &&
+        setRegistry(
+          (r?.items ?? []).map((v) => ({
+            id: v.id,
+            name: v.name,
+            inactive: v.status === "inactive",
+          })),
+        ),
+      () => live && setRegistry([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [api, isAdmin, registryQ]);
 
   if (tender.state.status === "loading" || list.state.status === "loading") {
     return <Loading label="Loading vendors" />;
@@ -73,6 +112,7 @@ export function Vendors() {
       );
       setName("");
       setWebsite("");
+      setRegistryId("");
       setDuplicates([]);
       announce("The vendor was added to the tender");
       list.reload();
@@ -94,16 +134,54 @@ export function Vendors() {
   return (
     <>
       <TenderHeader tender={tender.state.data} />
-      <h2>Vendors</h2>
+      <Typography.Title level={2} style={{ fontSize: 20 }}>
+        Vendors
+      </Typography.Title>
       {isAdmin && (
-        <section className="card" aria-labelledby="add-vendor-h">
-          <h3 id="add-vendor-h">Add a vendor</h3>
+        <Card title="Add a vendor" style={{ marginBottom: 16 }}>
+          <Field label="Choose from the vendor registry">
+            {({ id }) => (
+              <Space.Compact style={{ width: "100%" }}>
+                <Select
+                  id={id}
+                  showSearch={{ filterOption: false, onSearch: setRegistryQ }}
+                  value={registryId || undefined}
+                  placeholder="Search the registry"
+                  onChange={(v) => setRegistryId(v)}
+                  style={{ flex: 1 }}
+                  options={registry
+                    .filter((v) => !items.some((tv) => tv.vendor.id === v.id))
+                    .map((v) => ({
+                      value: v.id,
+                      disabled: v.inactive,
+                      label: v.inactive ? `${v.name} (inactive)` : v.name,
+                    }))}
+                />
+                <Button
+                  variant="primary"
+                  disabled={busy || !registryId}
+                  onClick={() => void add(false, registryId)}
+                >
+                  Add from registry
+                </Button>
+              </Space.Compact>
+            )}
+          </Field>
+          <Typography.Paragraph type="secondary">
+            Not in the registry yet?{" "}
+            <Link to="/vendors/new" state={{ returnTo: `/tenders/${tenderId}/vendors` }}>
+              Create the vendor in the registry
+            </Link>
+            , or add it here by name.
+          </Typography.Paragraph>
+          <Divider />
           <Field label="Vendor name" error={error}>
             {({ id, describedBy, invalid }) => (
-              <input
+              <Input
                 id={id}
                 aria-describedby={describedBy}
                 aria-invalid={invalid}
+                status={invalid ? "error" : undefined}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -111,7 +189,7 @@ export function Vendors() {
           </Field>
           <Field label="Website" help="Optional. Helps to spot a vendor that already exists.">
             {({ id, describedBy }) => (
-              <input
+              <Input
                 id={id}
                 type="url"
                 aria-describedby={describedBy}
@@ -121,22 +199,35 @@ export function Vendors() {
             )}
           </Field>
           {duplicates.length > 0 && (
-            <div role="alert" className="next-step">
-              <p>A similar vendor already exists:</p>
-              <ul>
-                {duplicates.map((d) => (
-                  <li key={d.id}>
-                    {d.name}{" "}
-                    <Button disabled={busy} onClick={() => void add(false, d.id)}>
-                      Use this vendor
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-              <Button disabled={busy} onClick={() => void add(true)}>
-                Add as a new vendor anyway
-              </Button>
-            </div>
+            <Alert
+              type="warning"
+              showIcon
+              role="alert"
+              style={{ marginBottom: 16 }}
+              title="A similar vendor already exists:"
+              description={
+                <>
+                  <List
+                    size="small"
+                    dataSource={duplicates}
+                    renderItem={(d) => (
+                      <List.Item
+                        actions={[
+                          <Button key="use" disabled={busy} onClick={() => void add(false, d.id)}>
+                            Use this vendor
+                          </Button>,
+                        ]}
+                      >
+                        {d.name}
+                      </List.Item>
+                    )}
+                  />
+                  <Button disabled={busy} onClick={() => void add(true)}>
+                    Add as a new vendor anyway
+                  </Button>
+                </>
+              }
+            />
           )}
           <Button
             variant="primary"
@@ -145,7 +236,7 @@ export function Vendors() {
           >
             Add vendor
           </Button>
-        </section>
+        </Card>
       )}
       {items.length === 0 ? (
         <EmptyState title="No vendors yet">
@@ -238,11 +329,15 @@ function VendorCard({
     versions.state.status === "ready" ? versions.state.data[0] : undefined;
 
   return (
-    <section className="card" aria-labelledby={`v-${tv.id}`}>
-      <h3 id={`v-${tv.id}`}>
-        {tv.vendor.name}{" "}
-        {current && <StatusChip label={`Version ${current.version_no}`} tone="info" />}
-      </h3>
+    <Card
+      style={{ marginBottom: 16 }}
+      title={
+        <Typography.Title level={3} style={{ fontSize: 16, margin: 0 }} id={`v-${tv.id}`}>
+          {tv.vendor.name}{" "}
+          {current && <StatusChip label={`Version ${current.version_no}`} tone="info" />}
+        </Typography.Title>
+      }
+    >
       {versions.state.status === "loading" && <Loading label="Loading proposal versions" />}
       {current ? (
         <>
@@ -254,46 +349,53 @@ function VendorCard({
               · <Link to={`/tenders/${tenderId}/vendors/${tv.id}/evaluation`}>Evaluate</Link>
             </p>
           )}
-          <p className="help">
+          <Typography.Paragraph type="secondary">
             {current.files.length} file{current.files.length === 1 ? "" : "s"} in version{" "}
             {current.version_no}.
-          </p>
-          <ul>
-            {current.files.map((f) => (
-              <li key={f.document_version_id}>
-                {f.file_name} ({f.role === "main" ? "main file" : "annex"}){" "}
-                {(f.status === "ready" || f.status === null) && (
-                  <OpenProposalFile
-                    tenderVendorId={tv.id}
-                    vendorName={tv.vendor.name}
-                    documentVersionId={f.document_version_id}
-                    fileName={f.file_name}
-                    onDeclared={onChanged}
-                  />
-                )}{" "}
-                {f.status !== null && (
-                  <StatusChip
-                    label={documentStatusLabel[f.status] ?? f.status}
-                    tone={(documentStatusTone[f.status] ?? "neutral") as Tone}
-                  />
-                )}
-                {f.status === "failed" && f.failure_reason && (
-                  <span className="help">
-                    {" "}
-                    {failureText[f.failure_reason] ?? failureText.other}
+          </Typography.Paragraph>
+          <List
+            size="small"
+            dataSource={current.files}
+            renderItem={(f) => (
+              <List.Item key={f.document_version_id}>
+                <Space wrap>
+                  <span>
+                    {f.file_name} ({f.role === "main" ? "main file" : "annex"})
                   </span>
-                )}
-              </li>
-            ))}
-          </ul>
+                  {(f.status === "ready" || f.status === null) && (
+                    <OpenProposalFile
+                      tenderVendorId={tv.id}
+                      vendorName={tv.vendor.name}
+                      documentVersionId={f.document_version_id}
+                      fileName={f.file_name}
+                      onDeclared={onChanged}
+                    />
+                  )}
+                  {f.status !== null && (
+                    <StatusChip
+                      label={documentStatusLabel[f.status] ?? f.status}
+                      tone={(documentStatusTone[f.status] ?? "neutral") as Tone}
+                    />
+                  )}
+                  {f.status === "failed" && f.failure_reason && (
+                    <Typography.Text type="secondary">
+                      {failureText[f.failure_reason] ?? failureText.other}
+                    </Typography.Text>
+                  )}
+                </Space>
+              </List.Item>
+            )}
+          />
         </>
       ) : (
-        versions.state.status === "ready" && <p className="help">No proposal uploaded yet.</p>
+        versions.state.status === "ready" && (
+          <Typography.Paragraph type="secondary">No proposal uploaded yet.</Typography.Paragraph>
+        )
       )}
-      <p className="help" role="note">
+      <Typography.Paragraph type="secondary" role="note">
         Pricing and other financial documents are processed like any file. Mark them as annexes so
         that the main file stays the proposal itself.
-      </p>
+      </Typography.Paragraph>
       {canUpload && (
         <div>
           <Field
@@ -315,25 +417,25 @@ function VendorCard({
             )}
           </Field>
           {files.length > 1 && (
-            <fieldset>
+            <fieldset style={{ border: 0, padding: 0 }}>
               <legend>Main file</legend>
-              {files.map((f, i) => (
-                <label key={f.name + i} style={{ display: "block" }}>
-                  <input
-                    type="radio"
-                    name={`main-${tv.id}`}
-                    checked={mainIndex === i}
-                    onChange={() => setMainIndex(i)}
-                  />{" "}
-                  {f.name}
-                </label>
-              ))}
+              <Radio.Group
+                value={mainIndex}
+                onChange={(e) => setMainIndex(e.target.value as number)}
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                {files.map((f, i) => (
+                  <Radio key={f.name + i} value={i}>
+                    {f.name}
+                  </Radio>
+                ))}
+              </Radio.Group>
             </fieldset>
           )}
           {current && (
             <Field label="Why a new version?" help="Shown in the history of this vendor.">
               {({ id, describedBy }) => (
-                <input
+                <Input
                   id={id}
                   aria-describedby={describedBy}
                   value={reason}
@@ -342,13 +444,12 @@ function VendorCard({
               )}
             </Field>
           )}
-          {error && (
-            <p role="alert" className="error">
-              {error}
-            </p>
-          )}
+          {error && <Alert type="error" showIcon role="alert" title={error} />}
           {progress !== null && (
-            <progress max={1} value={progress} aria-label={`Uploading for ${tv.vendor.name}`} />
+            <Progress
+              percent={Math.round(progress * 100)}
+              aria-label={`Uploading for ${tv.vendor.name}`}
+            />
           )}
           <Button
             variant="primary"
@@ -360,7 +461,7 @@ function VendorCard({
         </div>
       )}
       {versions.state.status === "ready" && versions.state.data.length > 1 && (
-        <details>
+        <details style={{ marginTop: 16 }}>
           <summary>Earlier versions</summary>
           <ul>
             {versions.state.data.slice(1).map((v) => (
@@ -372,6 +473,6 @@ function VendorCard({
           </ul>
         </details>
       )}
-    </section>
+    </Card>
   );
 }

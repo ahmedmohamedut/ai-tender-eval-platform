@@ -1,3 +1,16 @@
+import {
+  Card,
+  Checkbox,
+  Col,
+  DatePicker,
+  Input,
+  Row,
+  Select,
+  Space,
+  Table,
+  Typography,
+} from "antd";
+import dayjs from "dayjs";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import {
@@ -7,6 +20,8 @@ import {
   Field,
   Loading,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { ApiError, toApiError, unwrap, useApi } from "../lib/api";
@@ -166,103 +181,103 @@ function TenderFormBody({
           <Link to={`/tenders/${tender.id}`}>Back to tender overview</Link>
         </p>
       )}
-      <h1>{tender ? "Edit tender" : "Create tender"}</h1>
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+        {tender ? "Edit tender" : "Create tender"}
+      </Typography.Title>
       {failure && <ErrorNotice error={failure} onRetry={reload} />}
-      <div
-        style={{
-          display: "grid",
-          gap: 24,
-          gridTemplateColumns: "minmax(0, 640px) minmax(240px, 1fr)",
-        }}
-      >
-        <form onSubmit={save} noValidate aria-describedby="form-help">
-          <p id="form-help" className="help">
-            Fields marked required must be filled. Saving keeps the tender as a draft.
-          </p>
-          <Field label="Name (required)" error={errors.name}>
-            {({ id, describedBy, invalid }) => (
-              <input
-                id={id}
-                type="text"
-                value={name}
-                required
-                aria-required="true"
-                aria-invalid={invalid}
-                aria-describedby={describedBy}
-                disabled={archived}
-                onChange={(e) => setName(e.target.value)}
-              />
-            )}
-          </Field>
-          <Field label="Reference number" error={errors.reference_no}>
-            {({ id, describedBy }) => (
-              <input
-                id={id}
-                type="text"
-                value={reference}
-                aria-describedby={describedBy}
-                disabled={archived}
-                onChange={(e) => setReference(e.target.value)}
-              />
-            )}
-          </Field>
-          <Field label="Description">
-            {({ id, describedBy }) => (
-              <textarea
-                id={id}
-                value={description}
-                aria-describedby={describedBy}
-                disabled={archived}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            )}
-          </Field>
-          <Field label="Evaluation due date" help="Optional. Reminders use it.">
-            {({ id, describedBy }) => (
-              <input
-                id={id}
-                type="date"
-                value={due}
-                aria-describedby={describedBy}
-                disabled={archived}
-                onChange={(e) => setDue(e.target.value)}
-              />
-            )}
-          </Field>
+      <Row gutter={24}>
+        <Col xs={24} lg={14}>
+          <Card>
+            <form onSubmit={save} noValidate aria-describedby="form-help">
+              <Typography.Paragraph id="form-help" type="secondary">
+                Fields marked required must be filled. Saving keeps the tender as a draft.
+              </Typography.Paragraph>
+              <Field label="Name (required)" error={errors.name}>
+                {({ id, describedBy, invalid }) => (
+                  <Input
+                    id={id}
+                    value={name}
+                    required
+                    aria-required="true"
+                    aria-invalid={invalid}
+                    status={invalid ? "error" : undefined}
+                    aria-describedby={describedBy}
+                    disabled={archived}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Reference number" error={errors.reference_no}>
+                {({ id, describedBy }) => (
+                  <Input
+                    id={id}
+                    value={reference}
+                    aria-describedby={describedBy}
+                    disabled={archived}
+                    onChange={(e) => setReference(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Description">
+                {({ id, describedBy }) => (
+                  <Input.TextArea
+                    id={id}
+                    rows={3}
+                    value={description}
+                    aria-describedby={describedBy}
+                    disabled={archived}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Evaluation due date" help="Optional. Reminders use it.">
+                {({ id, describedBy }) => (
+                  <DatePicker
+                    id={id}
+                    value={due ? dayjs(due) : null}
+                    aria-describedby={describedBy}
+                    disabled={archived}
+                    onChange={(d) => setDue(d ? d.format("YYYY-MM-DD") : "")}
+                  />
+                )}
+              </Field>
 
-          {!tender && (
-            <CommitteePicker
-              api={api}
-              picked={picked}
-              onPick={setPicked}
-              chairId={chairId}
-              onChair={setChairId}
-              memberError={errors.member_ids}
-              chairError={errors.chair_id}
-            />
-          )}
-          <Button variant="primary" type="submit" disabled={busy || archived}>
-            {tender ? "Save changes" : "Create tender"}
-          </Button>
-        </form>
-
-        <aside aria-label="Readiness">
-          <Readiness tender={tender} api={api} />
-          {tender && (
-            <p>
-              <Button
-                variant="primary"
-                disabledReason={
-                  openAction?.allowed === false ? (openAction.reason ?? undefined) : undefined
-                }
-                onClick={() => setConfirmOpen(true)}
-              >
-                Open to committee
+              {!tender && (
+                <CommitteePicker
+                  api={api}
+                  picked={picked}
+                  onPick={setPicked}
+                  chairId={chairId}
+                  onChair={setChairId}
+                  memberError={errors.member_ids}
+                  chairError={errors.chair_id}
+                />
+              )}
+              <Button variant="primary" type="submit" disabled={busy || archived}>
+                {tender ? "Save changes" : "Create tender"}
               </Button>
-            </p>
-          )}
-        </aside>
-      </div>
+            </form>
+          </Card>
+        </Col>
+        <Col xs={24} lg={10}>
+          <aside aria-label="Readiness">
+            <Readiness tender={tender} api={api} />
+            {tender && (
+              <p>
+                <Button
+                  variant="primary"
+                  disabledReason={
+                    openAction?.allowed === false ? (openAction.reason ?? undefined) : undefined
+                  }
+                  onClick={() => setConfirmOpen(true)}
+                >
+                  Open to committee
+                </Button>
+              </p>
+            )}
+          </aside>
+        </Col>
+      </Row>
 
       {tender && (
         <CommitteeEditor
@@ -298,14 +313,18 @@ function Readiness({ tender, api }: { tender: Tender | null; api: ReturnType<typ
         : null,
     [api, tender?.id, tender?.row_version],
   );
+  const items = state.state.status === "ready" && state.state.data ? state.state.data.items : [];
   return (
-    <section className="card">
-      <h2>Ready to open</h2>
-      {!tender && <p className="help">Create the tender to see what is still missing.</p>}
-      {state.state.status === "ready" && state.state.data && (
-        <ul className="checklist">
-          {state.state.data.items.map((i) => (
-            <li key={i.key}>
+    <Card title="Ready to open" style={{ marginBottom: 16 }}>
+      {!tender && (
+        <Typography.Text type="secondary">
+          Create the tender to see what is still missing.
+        </Typography.Text>
+      )}
+      {items.length > 0 && (
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {items.map((i) => (
+            <li key={i.key} style={{ display: "flex", gap: 8, padding: "4px 0" }}>
               <span aria-hidden="true">{i.done ? "✓" : "○"}</span>
               <span>
                 {i.label}
@@ -315,7 +334,7 @@ function Readiness({ tender, api }: { tender: Tender | null; api: ReturnType<typ
           ))}
         </ul>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -358,9 +377,9 @@ function CommitteePicker({
     <>
       <Field label="Find committee members" help="Active users with the committee member role.">
         {({ id, describedBy }) => (
-          <input
+          <Input.Search
             id={id}
-            type="search"
+            allowClear
             value={q}
             aria-describedby={describedBy}
             onChange={(e) => setQ(e.target.value)}
@@ -368,39 +387,40 @@ function CommitteePicker({
         )}
       </Field>
       <fieldset style={{ border: 0, padding: 0, margin: "0 0 16px" }}>
-        <legend className="label">Committee members (required)</legend>
-        <div className="picker" role="group" aria-label="Users">
-          {found.length === 0 && <p style={{ padding: 12 }}>No matching users.</p>}
+        <legend style={{ fontWeight: 500, marginBottom: 4 }}>Committee members (required)</legend>
+        <Space direction="vertical" role="group" aria-label="Users" style={{ width: "100%" }}>
+          {found.length === 0 && <Typography.Text>No matching users.</Typography.Text>}
           {found.map((u) => (
-            <label key={u.id}>
-              <input type="checkbox" checked={pickedIds.has(u.id)} onChange={() => toggle(u)} />
+            <Checkbox key={u.id} checked={pickedIds.has(u.id)} onChange={() => toggle(u)}>
               {u.display_name}
-            </label>
+            </Checkbox>
           ))}
-        </div>
-        {memberError && <span className="error">{memberError}</span>}
+        </Space>
+        {memberError && (
+          <Typography.Text type="danger" style={{ display: "block" }}>
+            {memberError}
+          </Typography.Text>
+        )}
       </fieldset>
-      <p aria-live="polite">
+      <p aria-live="polite" style={{ margin: "0 0 16px" }}>
         {picked.length === 0
           ? "No members chosen yet."
           : `${picked.length} member${picked.length === 1 ? "" : "s"} chosen.`}
       </p>
       <Field label="Chair (required)" error={chairError} help="One of the chosen members.">
         {({ id, describedBy, invalid }) => (
-          <select
+          <Select
             id={id}
             value={chairId}
-            aria-invalid={invalid}
+            status={invalid ? "error" : undefined}
             aria-describedby={describedBy}
-            onChange={(e) => onChair(e.target.value)}
-          >
-            <option value="">Choose the Chair</option>
-            {picked.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.display_name}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => onChair(v)}
+            style={{ width: "100%" }}
+            options={[
+              { value: "", label: "Choose the Chair" },
+              ...picked.map((p) => ({ value: p.id, label: p.display_name })),
+            ]}
+          />
         )}
       </Field>
     </>
@@ -450,61 +470,60 @@ function CommitteeEditor({
   };
 
   return (
-    <section className="card" aria-labelledby="committee-edit-h">
-      <h2 id="committee-edit-h">Committee</h2>
+    <Card title="Committee" style={{ marginTop: 24 }}>
       {error && <ErrorNotice error={error instanceof ApiError ? error : toApiError(0, null)} />}
-      <div className="table-wrap">
-        <table>
-          <caption>Committee members</caption>
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Role in this tender</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(tender.members ?? []).map((m) => (
-              <tr key={m.user.id}>
-                <th scope="row">{m.user.display_name}</th>
-                <td>{m.is_chair ? <StatusChip label="Chair" tone="info" /> : "Member"}</td>
-                <td>
-                  {!m.is_chair && (
-                    <>
-                      <Button
-                        onClick={() =>
-                          run(() =>
-                            unwrap(
-                              api.PUT("/tenders/{tenderId}/chair", {
-                                params: { path: { tenderId: tender.id } },
-                                body: { user_id: m.user.id },
-                              }),
-                            ),
-                          )
-                        }
-                      >
-                        Make Chair
-                      </Button>{" "}
-                      <Button onClick={() => setRemoving(m.user)}>Remove</Button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="toolbar" style={{ marginTop: 16 }}>
-        <div className="field" style={{ margin: 0 }}>
-          <label htmlFor="add-member">Add a member</label>
-          <select id="add-member" value={adding} onChange={(e) => setAdding(e.target.value)}>
-            <option value="">Choose a person</option>
-            {candidates.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.display_name}
-              </option>
-            ))}
-          </select>
+      <Table<NonNullable<Tender["members"]>[number]>
+        rowKey={(m) => m.user.id}
+        components={rowHeaderComponents}
+        dataSource={tender.members ?? []}
+        pagination={false}
+        title={() => <Typography.Text strong>Committee members</Typography.Text>}
+        columns={[
+          { title: "Name", onCell: rowHeader, render: (_, m) => m.user.display_name },
+          {
+            title: "Role in this tender",
+            render: (_, m) => (m.is_chair ? <StatusChip label="Chair" tone="info" /> : "Member"),
+          },
+          {
+            title: "Actions",
+            render: (_, m) =>
+              !m.is_chair && (
+                <Space>
+                  <Button
+                    onClick={() =>
+                      run(() =>
+                        unwrap(
+                          api.PUT("/tenders/{tenderId}/chair", {
+                            params: { path: { tenderId: tender.id } },
+                            body: { user_id: m.user.id },
+                          }),
+                        ),
+                      )
+                    }
+                  >
+                    Make Chair
+                  </Button>
+                  <Button onClick={() => setRemoving(m.user)}>Remove</Button>
+                </Space>
+              ),
+          },
+        ]}
+      />
+      <Space align="end" style={{ marginTop: 16 }}>
+        <div>
+          <label htmlFor="add-member" style={{ display: "block", marginBottom: 4 }}>
+            Add a member
+          </label>
+          <Select
+            id="add-member"
+            value={adding}
+            onChange={(v) => setAdding(v)}
+            style={{ minWidth: 240 }}
+            options={[
+              { value: "", label: "Choose a person" },
+              ...candidates.map((c) => ({ value: c.id, label: c.display_name })),
+            ]}
+          />
         </div>
         <Button
           disabled={!adding}
@@ -522,7 +541,7 @@ function CommitteeEditor({
         >
           Add member
         </Button>
-      </div>
+      </Space>
 
       <ConfirmDialog
         open={removing !== null}
@@ -550,36 +569,42 @@ function CommitteeEditor({
       >
         <Field label="What happens to their work">
           {({ id }) => (
-            <select
+            <Select
               id={id}
               value={handling}
-              onChange={(e) => setHandling(e.target.value as typeof handling)}
-            >
-              <option value="kept_as_history">Keep as read-only history</option>
-              <option value="reassigned">Reassign to another member</option>
-            </select>
+              onChange={(v) => setHandling(v)}
+              style={{ width: "100%" }}
+              options={[
+                { value: "kept_as_history", label: "Keep as read-only history" },
+                { value: "reassigned", label: "Reassign to another member" },
+              ]}
+            />
           )}
         </Field>
         {handling === "reassigned" && (
           <Field label="Reassign to">
             {({ id }) => (
-              <select id={id} value={target} onChange={(e) => setTarget(e.target.value)}>
-                <option value="">Choose a member</option>
-                {(tender.members ?? [])
-                  .filter((m) => m.user.id !== removing?.id)
-                  .map((m) => (
-                    <option key={m.user.id} value={m.user.id}>
-                      {m.user.display_name}
-                    </option>
-                  ))}
-              </select>
+              <Select
+                id={id}
+                value={target}
+                onChange={(v) => setTarget(v)}
+                style={{ width: "100%" }}
+                options={[
+                  { value: "", label: "Choose a member" },
+                  ...(tender.members ?? [])
+                    .filter((m) => m.user.id !== removing?.id)
+                    .map((m) => ({ value: m.user.id, label: m.user.display_name })),
+                ]}
+              />
             )}
           </Field>
         )}
         <Field label="Note">
-          {({ id }) => <textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} />}
+          {({ id }) => (
+            <Input.TextArea id={id} value={note} onChange={(e) => setNote(e.target.value)} />
+          )}
         </Field>
       </ConfirmDialog>
-    </section>
+    </Card>
   );
 }

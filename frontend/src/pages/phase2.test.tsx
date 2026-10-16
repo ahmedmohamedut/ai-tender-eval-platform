@@ -2,7 +2,14 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
-import { accessibilityViolations, fakeApi, makeMe, renderPage } from "../test/helpers";
+import {
+  accessibilityViolations,
+  choose,
+  fakeApi,
+  makeMe,
+  optionsOf,
+  renderPage,
+} from "../test/helpers";
 import { parseFrames } from "../lib/events";
 import { highlightBoxes, snippetParts, startPage } from "../lib/viewer";
 import { Documents } from "./Documents";
@@ -98,8 +105,13 @@ describe("PG-04 Documents", () => {
       route: `/tenders/${TENDER_ID}/documents`,
     });
     expect(await screen.findByText("Add a document")).toBeInTheDocument();
-    const rfp = screen.getByRole("option", { name: /RFP \(already uploaded\)/ });
-    expect(rfp).toBeDisabled();
+    await userEvent.click(screen.getByRole("combobox", { name: "Type" }));
+    const rfp = (
+      await screen.findByText(/RFP \(already uploaded\)/, {
+        selector: ".ant-select-item-option-content",
+      })
+    ).closest(".ant-select-item-option");
+    expect(rfp).toHaveClass("ant-select-item-option-disabled");
     expect(screen.getByText("Choose a file")).toBeInTheDocument();
   });
 
@@ -278,6 +290,42 @@ describe("PG-05 Vendors", () => {
     expect(await screen.findByText("A similar vendor already exists:")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this vendor" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add as a new vendor anyway" })).toBeInTheDocument();
+  });
+});
+
+describe("PG-05 adding a vendor from the registry", () => {
+  it("offers active registry vendors and adds the chosen one by id", async () => {
+    const api = fakeApi((call) => {
+      if (call === "GET /vendors")
+        return {
+          items: [
+            { id: "v1", name: "Lumen Systems", status: "active", row_version: 1 },
+            { id: "v2", name: "Dormant Co", status: "inactive", row_version: 1 },
+          ],
+          total: 2,
+        };
+      if (call === "POST /tenders/{tenderId}/vendors") return { id: "tv1" };
+      if (call === "GET /tenders/{tenderId}") return TENDER;
+      if (call === "GET /tenders/{tenderId}/vendors") return { items: [], total: 0 };
+      return undefined;
+    });
+    renderPage(at(<Vendors />, "/tenders/:tenderId/vendors"), {
+      api,
+      route: `/tenders/${TENDER_ID}/vendors`,
+    });
+    await screen.findByLabelText("Choose from the vendor registry");
+    expect(await optionsOf("Choose from the vendor registry")).toEqual([
+      "Lumen Systems",
+      "Dormant Co (inactive)",
+    ]);
+    await choose("Choose from the vendor registry", "Lumen Systems");
+    await userEvent.click(screen.getByRole("button", { name: "Add from registry" }));
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/tenders/{tenderId}/vendors",
+        expect.objectContaining({ body: { vendor_id: "v1" } }),
+      ),
+    );
   });
 });
 

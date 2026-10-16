@@ -3,7 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
 import { Shell } from "../app/Shell";
-import { accessibilityViolations, choose, fakeApi, makeMe, renderPage } from "../test/helpers";
+import {
+  accessibilityViolations,
+  choose,
+  fakeApi,
+  makeMe,
+  optionsOf,
+  renderPage,
+} from "../test/helpers";
 import { TenderForm } from "./TenderForm";
 import { TenderHome } from "./TenderHome";
 import { TendersList } from "./TendersList";
@@ -116,7 +123,7 @@ describe("PG-03 Create tender", () => {
     await screen.findByLabelText("Casey Chair");
     await userEvent.type(screen.getByLabelText(/Name \(required\)/), "Cloud platform");
     await userEvent.click(screen.getByLabelText("Casey Chair"));
-    await userEvent.selectOptions(screen.getByLabelText(/Chair \(required\)/), "c1");
+    await choose(/Chair \(required\)/, "Casey Chair");
     await userEvent.click(screen.getByRole("button", { name: "Create tender" }));
     const nameField = screen.getByLabelText(/Name \(required\)/);
     await waitFor(() => expect(nameField).toHaveAttribute("aria-invalid", "true"));
@@ -139,10 +146,9 @@ describe("PG-03 Create tender", () => {
     const api = fakeApi((call) => (call === "GET /users/lookup" ? lookup : undefined));
     renderPage(<TenderForm />, { api, route: "/tenders/new" });
     await screen.findByLabelText("Morgan Member");
-    const chair = screen.getByLabelText(/Chair \(required\)/);
-    expect(within(chair).queryByRole("option", { name: "Morgan Member" })).not.toBeInTheDocument();
+    expect(await optionsOf(/Chair \(required\)/)).not.toContain("Morgan Member");
     await userEvent.click(screen.getByLabelText("Morgan Member"));
-    expect(within(chair).getByRole("option", { name: "Morgan Member" })).toBeInTheDocument();
+    expect(await optionsOf(/Chair \(required\)/)).toContain("Morgan Member");
   });
 });
 

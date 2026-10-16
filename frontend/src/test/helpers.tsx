@@ -96,3 +96,15 @@ export async function choose(
   const hits = await screen.findAllByText(option, { selector: ".ant-select-item-option-content" });
   await userEvent.click(hits[hits.length - 1]!);
 }
+
+/** The labels an antd Select offers, read by opening it (and closing it again). */
+export async function optionsOf(label: string | RegExp): Promise<string[]> {
+  const box = screen.getByRole("combobox", { name: label });
+  await userEvent.click(box);
+  const items = Array.from(
+    document.querySelectorAll(".ant-select-item-option-content"),
+    (n) => n.textContent ?? "",
+  );
+  await userEvent.keyboard("{Escape}");
+  return items;
+}
