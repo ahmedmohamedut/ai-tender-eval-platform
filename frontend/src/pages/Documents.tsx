@@ -26,6 +26,7 @@ import {
 import { uploadForm, type UploadHandle } from "../lib/upload";
 import { usePush } from "../lib/usePush";
 import { useAsync } from "../lib/useAsync";
+import { SetupSwitch } from "../components/SetupSwitch";
 import { TenderHeader, useTender } from "./TenderHome";
 import type { components } from "../api/generated/schema";
 
@@ -156,6 +157,7 @@ export function Documents() {
   return (
     <>
       <TenderHeader tender={tender.state.data} />
+      <SetupSwitch tenderId={tenderId!} active="documents" />
       <Typography.Title level={2} style={{ fontSize: 20 }}>
         Documents
       </Typography.Title>

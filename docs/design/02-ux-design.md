@@ -182,10 +182,10 @@ Every screen sits in one shell and uses one of six page templates, so users lear
 
 | Area | Contents | Notes |
 | --- | --- | --- |
-| Top bar (56 px) | Product name, breadcrumb (All tenders / tender name), job center with running count, notification bell with unread count, user menu | Job center and notifications are reachable from every screen (UX-JOB-01, UX-NOT-02) |
+| Top bar (56 px) | Navigation toggle, breadcrumb (All tenders / tender name), search (Ctrl or ⌘ K), jobs popover with running count, notifications popover with unread count, round avatar menu (User profile drawer, dark mode, right-to-left, sign out) | Job center and notifications are reachable from every screen (UX-JOB-01, UX-NOT-02) |
 | Left navigation (240 px, 64 px collapsed) | Admin: Tenders, Vendors, Jobs, Users, Categories, Audit trail. Member and Chair: My tenders, Jobs. Observer: Tenders, Audit trail. Inside a tender the navigation shows the tender name and status and that tender's sections. | The Vendors item opens the vendor registry (administrator). Adding a vendor to a tender can pick from it (PG-05). |
 | Tender header band (72 px) | Tender name, status chip, stage stepper (Draft, Requirements, Evaluation, Consolidation, Finalized), and the Next step prompt with its primary action | Shown on every screen inside a tender (UX-GEN-08) |
-| Tender sections (left navigation inside a tender) | Overview, Progress, Documents, Vendors and proposals, Requirements, Evaluation, Report | Sections a role cannot use are hidden. Tabs that depend on stage are disabled with a reason, for example Report before finalization (UX-ROL-03). |
+| Tender sections (left navigation inside a tender, in groups) | Overview; Setup: Documents & vendors, Requirements; Evaluate: Screening, Evaluation; Decide: Final report (locked until consolidation) | Sections a role cannot use are hidden. Tabs that depend on stage are disabled with a reason, for example Report before finalization (UX-ROL-03). |
 
 ### Page templates
 

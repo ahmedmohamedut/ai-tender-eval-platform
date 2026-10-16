@@ -96,7 +96,8 @@ test("upload an RFP and a proposal, read them, and open a passage highlighted", 
   await expect(prot.getByText(/password protected/i)).toBeVisible();
 
   // ---- the job center shows what ran -----------------------------------------------------------------
-  await admin.page.getByRole("link", { name: "Jobs" }).click();
+  await admin.page.getByRole("button", { name: /^Jobs/ }).click();
+  await admin.page.getByRole("button", { name: "View all jobs" }).click();
   await expect(admin.page.getByRole("heading", { name: "Jobs" })).toBeVisible();
   await expect(admin.page.getByText("Reading a document").first()).toBeVisible();
   expect(await axeViolations(admin.page), "Jobs").toEqual([]);

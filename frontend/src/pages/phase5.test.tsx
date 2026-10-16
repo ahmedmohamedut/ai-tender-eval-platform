@@ -129,7 +129,7 @@ describe("Chair panel", () => {
       expect(screen.queryByText("Loading the committee's progress")).not.toBeInTheDocument(),
     );
     expect(
-      screen.queryByRole("heading", { name: "Evaluations by member" }),
+      screen.queryByRole("heading", { name: /Progress · vendor × member/ }),
     ).not.toBeInTheDocument();
   });
 });

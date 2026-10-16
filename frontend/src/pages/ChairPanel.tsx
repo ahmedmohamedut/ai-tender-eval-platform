@@ -51,7 +51,7 @@ export function ChairPanel({ tenderId, isChair }: { tenderId: string; isChair: b
     return <ErrorNotice error={e} onRetry={matrix.reload} />;
   }
   const m = matrix.state.data;
-  if (m.vendors.length === 0) return null;
+  if (!m || m.vendors.length === 0) return null;
 
   async function confirm(note: string) {
     if (!action) return;
@@ -97,22 +97,36 @@ export function ChairPanel({ tenderId, isChair }: { tenderId: string; isChair: b
   const cell = (tv: string, user: string) =>
     m.cells.find((c) => c.tender_vendor_id === tv && c.user_id === user);
 
-  type Member = (typeof m.members)[number];
+  type Vendor = (typeof m.vendors)[number];
+  const submitted = (v: Vendor) =>
+    m.members.filter((mem) => {
+      const c = cell(v.tender_vendor_id, mem.id);
+      return c?.excluded || c?.status === "submitted";
+    }).length;
   return (
-    <Section title="Evaluations by member">
-      <Table<Member>
-        rowKey="id"
+    <Section
+      title="Progress · vendor × member"
+      extra={
+        (isChair || me.user.role === "admin") && (
+          <Button type="button" onClick={() => void remind()}>
+            Send reminder
+          </Button>
+        )
+      }
+    >
+      <Table<Vendor>
+        rowKey="tender_vendor_id"
         components={rowHeaderComponents}
-        dataSource={m.members}
+        dataSource={m.vendors}
         pagination={false}
         scroll={{ x: "max-content" }}
         title={() => <Typography.Text strong>Who has submitted which vendor</Typography.Text>}
         columns={[
-          { title: "Member", onCell: rowHeader, render: (_, mem) => mem.display_name },
-          ...m.vendors.map((v) => ({
-            title: v.name,
-            key: v.tender_vendor_id,
-            render: (_: unknown, mem: Member) => {
+          { title: "Vendor", onCell: rowHeader, render: (_, v) => v.name },
+          ...m.members.map((mem) => ({
+            title: mem.display_name,
+            key: mem.id,
+            render: (_: unknown, v: Vendor) => {
               const c = cell(v.tender_vendor_id, mem.id);
               if (!c) return "-";
               const label = c.excluded ? "Excluded" : (evaluationStatusLabel[c.status] ?? c.status);
@@ -162,16 +176,24 @@ export function ChairPanel({ tenderId, isChair }: { tenderId: string; isChair: b
               );
             },
           })),
+          {
+            title: "Outstanding",
+            render: (_: unknown, v: Vendor) => {
+              const n = m.members.length - submitted(v);
+              return n > 0 ? (
+                <StatusChip tone="warning" label={`${n} member${n > 1 ? "s" : ""}`} />
+              ) : (
+                "—"
+              );
+            },
+          },
         ]}
       />
-      {(isChair || me.user.role === "admin") && (
-        <Typography.Paragraph style={{ marginTop: 16 }}>
-          <Button type="button" onClick={() => void remind()}>
-            Remind members who have not submitted
-          </Button>
-        </Typography.Paragraph>
-      )}
-      <Typography.Title level={3} style={{ fontSize: 16 }}>
+      <Typography.Paragraph type="secondary" style={{ margin: "12px 0 0", fontSize: 12 }}>
+        Status only — independent grades stay hidden until each vendor&apos;s submissions are
+        complete.
+      </Typography.Paragraph>
+      <Typography.Title level={3} style={{ fontSize: 16, marginTop: 16 }}>
         Clarification lists
       </Typography.Title>
       <Space direction="vertical">

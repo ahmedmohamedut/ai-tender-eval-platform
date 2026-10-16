@@ -137,7 +137,15 @@ const TONES: Record<Tone, { color: string; icon: ReactNode }> = {
 export function StatusChip({ label, tone = "neutral" }: { label: string; tone?: Tone }) {
   const t = TONES[tone];
   return (
-    <Tag color={t.color} icon={<span aria-hidden="true">{t.icon}</span>} style={{ margin: 0 }}>
+    <Tag
+      color={t.color}
+      icon={
+        <span aria-hidden="true" style={{ marginInlineEnd: 2 }}>
+          {t.icon}
+        </span>
+      }
+      style={{ margin: 0 }}
+    >
       {label}
     </Tag>
   );

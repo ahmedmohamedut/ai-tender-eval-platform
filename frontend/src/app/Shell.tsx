@@ -1,77 +1,238 @@
 import {
   ApartmentOutlined,
+  ArrowLeftOutlined,
   AuditOutlined,
   BankOutlined,
   BarChartOutlined,
-  ClockCircleOutlined,
-  FileProtectOutlined,
   FileSearchOutlined,
   FolderOpenOutlined,
   HomeOutlined,
-  LogoutOutlined,
+  LockOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ProfileOutlined,
+  SafetyCertificateOutlined,
   TagsOutlined,
   TeamOutlined,
-  UserOutlined,
-  DashboardOutlined,
+  CheckCircleFilled,
 } from "@ant-design/icons";
-import { Avatar, Breadcrumb, Button, Dropdown, Flex, Layout, Menu, Switch, Typography } from "antd";
+import {
+  Avatar,
+  Breadcrumb,
+  Button,
+  Flex,
+  Layout,
+  Menu,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+  theme,
+} from "antd";
 import { useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useMatch } from "react-router";
-import { NotificationBell } from "../components/NotificationBell";
 import { StatusChip } from "../components/ui";
 import { unwrap, useApi } from "../lib/api";
-import { roleLabel, tenderStatusLabel, tenderStatusTone } from "../lib/labels";
+import { tenderStatusLabel, tenderStatusTone } from "../lib/labels";
+import type { Tender } from "../lib/types";
 import { useAsync } from "../lib/useAsync";
-import { useAppearance } from "./Appearance";
+import { JobsPopover, NotificationsPopover, SearchBox, UserMenu } from "./HeaderControls";
 import { useSession } from "./Session";
 
-const { Header, Sider } = Layout;
+const { Header, Sider, Footer } = Layout;
 
-interface Item {
+type Role = "admin" | "member" | "observer";
+type MenuItems = NonNullable<Parameters<typeof Menu>[0]["items"]>;
+
+/** One navigation entry: where it goes and which paths it stands for. */
+interface Entry {
   key: string;
+  to: string;
   icon: ReactNode;
-  label: string;
+  label: ReactNode;
+  matches: (path: string) => boolean;
+  disabled?: boolean;
 }
 
-/** The left navigation of one role (docs/design/02-ux-design.md, App shell). */
-function globalItems(role: "admin" | "member" | "observer"): Item[] {
+const starts = (prefix: string) => (p: string) => p === prefix || p.startsWith(`${prefix}/`);
+
+function link(e: Entry) {
+  return e.disabled ? e.label : <Link to={e.to}>{e.label}</Link>;
+}
+
+function globalMenu(role: Role): { groups: { title: string; entries: Entry[] }[] } {
+  const workspace: Entry[] =
+    role === "member"
+      ? [
+          {
+            key: "my",
+            to: "/my-tenders",
+            icon: <ApartmentOutlined />,
+            label: "My tenders",
+            matches: (p) => starts("/my-tenders")(p) || starts("/tenders")(p),
+          },
+        ]
+      : [
+          {
+            key: "all",
+            to: "/tenders",
+            icon: <ApartmentOutlined />,
+            label: "All tenders",
+            matches: starts("/tenders"),
+          },
+        ];
   if (role === "admin") {
-    return [
-      { key: "/tenders", icon: <ApartmentOutlined />, label: "Tenders" },
-      { key: "/vendors", icon: <BankOutlined />, label: "Vendors" },
-      { key: "/jobs", icon: <ClockCircleOutlined />, label: "Jobs" },
-      { key: "/users", icon: <TeamOutlined />, label: "Users" },
-      { key: "/categories", icon: <TagsOutlined />, label: "Categories" },
-      { key: "/audit", icon: <AuditOutlined />, label: "Audit trail" },
-    ];
+    workspace.push({
+      key: "vendors",
+      to: "/vendors",
+      icon: <BankOutlined />,
+      label: "All vendors",
+      matches: starts("/vendors"),
+    });
   }
-  if (role === "member") {
-    return [
-      { key: "/my-tenders", icon: <ApartmentOutlined />, label: "My tenders" },
-      { key: "/jobs", icon: <ClockCircleOutlined />, label: "Jobs" },
-    ];
-  }
-  return [
-    { key: "/tenders", icon: <ApartmentOutlined />, label: "Tenders" },
-    { key: "/audit", icon: <AuditOutlined />, label: "Audit trail" },
-  ];
+  const admin: Entry[] =
+    role === "admin"
+      ? [
+          {
+            key: "users",
+            to: "/users",
+            icon: <TeamOutlined />,
+            label: "Users",
+            matches: starts("/users"),
+          },
+          {
+            key: "categories",
+            to: "/categories",
+            icon: <TagsOutlined />,
+            label: "Categories",
+            matches: starts("/categories"),
+          },
+          {
+            key: "audit",
+            to: "/audit",
+            icon: <AuditOutlined />,
+            label: "Audit trail",
+            matches: starts("/audit"),
+          },
+        ]
+      : role === "observer"
+        ? [
+            {
+              key: "audit",
+              to: "/audit",
+              icon: <AuditOutlined />,
+              label: "Audit trail",
+              matches: starts("/audit"),
+            },
+          ]
+        : [];
+  return {
+    groups: [
+      { title: "Workspace", entries: workspace },
+      ...(admin.length ? [{ title: "Administration", entries: admin }] : []),
+    ],
+  };
 }
 
-const TENDER_PAGES: { slug: string; icon: ReactNode; label: string }[] = [
-  { slug: "", icon: <HomeOutlined />, label: "Overview" },
-  { slug: "progress", icon: <DashboardOutlined />, label: "Progress" },
-  { slug: "documents", icon: <FolderOpenOutlined />, label: "Documents" },
-  { slug: "vendors", icon: <BankOutlined />, label: "Vendors and proposals" },
-  { slug: "requirements", icon: <FileSearchOutlined />, label: "Requirements" },
-  { slug: "baseline", icon: <FileProtectOutlined />, label: "Baseline" },
-  { slug: "evaluation", icon: <ProfileOutlined />, label: "Evaluation" },
-  { slug: "report", icon: <BarChartOutlined />, label: "Report" },
-];
+function tenderMenu(id: string, role: Role, tender: Tender | null) {
+  const base = `/tenders/${id}`;
+  const done = <CheckCircleFilled style={{ color: "var(--ant-color-success)" }} />;
+  const row = (text: string, node?: ReactNode) => (
+    <Flex justify="space-between" align="center" gap={8}>
+      <span>{text}</span>
+      {node}
+    </Flex>
+  );
+  const reportOpen = tender?.status === "consolidation" || tender?.status === "finalized";
+  const final = tender?.status === "finalized";
+  const entries: { title?: string; entries: Entry[] }[] = [
+    {
+      entries: [
+        {
+          key: "overview",
+          to: base,
+          icon: <HomeOutlined />,
+          label: "Overview",
+          matches: (p) => p === base || starts(`${base}/progress`)(p),
+        },
+      ],
+    },
+    {
+      title: "Setup",
+      entries: [
+        {
+          key: "documents",
+          to: `${base}/documents`,
+          icon: <FolderOpenOutlined />,
+          label: "Documents & vendors",
+          matches: starts(`${base}/documents`),
+        },
+        {
+          key: "requirements",
+          to: `${base}/requirements`,
+          icon: <FileSearchOutlined />,
+          label: row(
+            "Requirements",
+            tender?.baseline_version ? (
+              <Tag style={{ margin: 0 }}>v{tender.baseline_version}</Tag>
+            ) : undefined,
+          ),
+          matches: (p) =>
+            (starts(`${base}/requirements`)(p) && !p.endsWith("/compare")) ||
+            starts(`${base}/baseline`)(p),
+        },
+      ],
+    },
+    {
+      title: "Evaluate",
+      entries: [
+        {
+          key: "screening",
+          to: `${base}/vendors`,
+          icon: <SafetyCertificateOutlined />,
+          label: "Screening",
+          matches: (p) => starts(`${base}/vendors`)(p),
+        },
+        ...(role === "admin"
+          ? []
+          : [
+              {
+                key: "evaluation",
+                to: `${base}/evaluation`,
+                icon: <ProfileOutlined />,
+                label: "Evaluation",
+                matches: (p: string) => starts(`${base}/evaluation`)(p) || p.endsWith("/compare"),
+              },
+            ]),
+      ],
+    },
+    {
+      title: "Decide",
+      entries: [
+        {
+          key: "report",
+          to: `${base}/report`,
+          icon: <BarChartOutlined />,
+          disabled: !reportOpen,
+          label: reportOpen ? (
+            row("Final report", final ? done : undefined)
+          ) : (
+            <Tooltip
+              title="Unlocks when the committee has submitted every evaluation"
+              placement="right"
+            >
+              {row("Final report", <LockOutlined />)}
+            </Tooltip>
+          ),
+          matches: starts(`${base}/report`),
+        },
+      ],
+    },
+  ];
+  return { groups: entries };
+}
 
-/** The tender the person is inside, taken from the address; the name comes from the API. */
+/** The tender the person is inside, taken from the address; its name and stage come from the API. */
 function useTenderScope() {
   const api = useApi();
   const match = useMatch("/tenders/:tenderId/*");
@@ -87,22 +248,38 @@ function useTenderScope() {
   return { id: scoped, tender: state.status === "ready" ? state.data : null };
 }
 
-function Crumbs({ tenderName }: { tenderName?: string }) {
+const PAGE_NAMES: Record<string, string> = {
+  progress: "Overview",
+  documents: "Documents & vendors",
+  requirements: "Requirements",
+  baseline: "Baseline and scoring",
+  vendors: "Screening",
+  evaluation: "Evaluation",
+  report: "Final report",
+  edit: "Edit tender",
+};
+
+function Crumbs({ tenderName, mine }: { tenderName?: string; mine: boolean }) {
   const { pathname } = useLocation();
   const parts = pathname.split("/").filter(Boolean);
-  const names: Record<string, string> = {
-    tenders: "Tenders",
-    "my-tenders": "My tenders",
-    vendors: "Vendors",
+  const top: Record<string, string> = {
     jobs: "Jobs",
     users: "Users",
     categories: "Categories",
     audit: "Audit trail",
     notifications: "Notifications",
+    "my-tenders": "My tenders",
   };
   const items: { title: ReactNode }[] = [];
+  const tendersLabel = mine ? "My tenders" : "All tenders";
   if (parts[0] === "tenders") {
-    items.push({ title: parts[1] ? <Link to="/tenders">Tenders</Link> : "Tenders" });
+    items.push({
+      title: parts[1] ? (
+        <Link to={mine ? "/my-tenders" : "/tenders"}>{tendersLabel}</Link>
+      ) : (
+        tendersLabel
+      ),
+    });
     if (parts[1] === "new") items.push({ title: "New tender" });
     else if (parts[1]) {
       items.push({
@@ -112,45 +289,44 @@ function Crumbs({ tenderName }: { tenderName?: string }) {
           (tenderName ?? "Tender")
         ),
       });
-      const page = TENDER_PAGES.find((p) => p.slug === parts[2]);
-      if (parts[2]) items.push({ title: page?.label ?? parts[2] });
+      if (parts[2]) items.push({ title: PAGE_NAMES[parts[2]] ?? parts[2] });
     }
   } else if (parts[0] === "vendors") {
-    items.push({ title: parts[1] ? <Link to="/vendors">Vendors</Link> : "Vendors" });
+    items.push({ title: parts[1] ? <Link to="/vendors">All vendors</Link> : "All vendors" });
     if (parts[1] === "new") items.push({ title: "New vendor" });
     else if (parts[1]) items.push({ title: parts[2] === "edit" ? "Edit vendor" : "Vendor" });
   } else if (parts[0]) {
-    items.push({ title: names[parts[0]] ?? parts[0] });
+    items.push({ title: "TenderFlow" }, { title: top[parts[0]] ?? parts[0] });
   }
   return items.length ? <Breadcrumb items={items} /> : null;
 }
 
 /** Top bar, left navigation and the main landmark (docs/design/02-ux-design.md, App shell). */
 export function Shell() {
-  const { me, signOut } = useSession();
-  const { mode, direction, setMode, setDirection } = useAppearance();
+  const { me } = useSession();
+  const { token } = theme.useToken();
   const { pathname } = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const scope = useTenderScope();
   const role = me.user.role;
-
   const inTender = Boolean(scope.id);
-  const items: Item[] = inTender
-    ? TENDER_PAGES.filter(
-        (p) =>
-          (p.slug !== "progress" || role === "admin") &&
-          (p.slug !== "evaluation" || role !== "admin") &&
-          p.slug !== "baseline",
-      ).map((p) => ({
-        key: `/tenders/${scope.id}${p.slug ? `/${p.slug}` : ""}`,
-        icon: p.icon,
-        label: p.label,
-      }))
-    : globalItems(role);
-  const selected =
-    items
-      .filter((i) => pathname === i.key || pathname.startsWith(`${i.key}/`))
-      .sort((a, b) => b.key.length - a.key.length)[0]?.key ?? "";
+
+  const groups = inTender
+    ? tenderMenu(scope.id!, role, scope.tender).groups
+    : globalMenu(role).groups;
+  const all = groups.flatMap((g) => g.entries);
+  const selected = all.find((e) => e.matches(pathname))?.key;
+  const menuItems = groups.map((g, i): MenuItems[number] => {
+    const children = g.entries.map((e) => ({
+      key: e.key,
+      icon: e.icon,
+      disabled: e.disabled,
+      label: link(e),
+    }));
+    return "title" in g && g.title
+      ? { type: "group", key: `g${i}`, label: g.title, children }
+      : { type: "group", key: `g${i}`, children };
+  });
 
   return (
     <Layout hasSider style={{ minHeight: "100vh" }}>
@@ -158,14 +334,19 @@ export function Shell() {
         Skip to content
       </a>
       <Sider
-        width={240}
+        width={248}
         collapsedWidth={64}
-        collapsible
-        trigger={null}
         collapsed={collapsed}
+        trigger={null}
         breakpoint="lg"
         onBreakpoint={setCollapsed}
-        style={{ borderInlineEnd: "1px solid var(--ant-color-split)" }}
+        style={{
+          borderInlineEnd: `1px solid ${token.colorSplit}`,
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          overflow: "auto",
+        }}
       >
         <Flex
           align="center"
@@ -174,111 +355,115 @@ export function Shell() {
             height: 56,
             padding: collapsed ? 0 : "0 20px",
             justifyContent: collapsed ? "center" : "flex-start",
+            borderBottom: `1px solid ${token.colorSplit}`,
           }}
         >
-          <Avatar shape="square" style={{ fontWeight: 700 }}>
+          <Avatar
+            shape="square"
+            style={{ background: token.colorPrimaryBg, color: token.colorPrimary, fontWeight: 800 }}
+          >
             T
           </Avatar>
-          {!collapsed && <Typography.Text strong>AI Tender Evaluation</Typography.Text>}
+          {!collapsed && (
+            <div style={{ lineHeight: 1.2 }}>
+              <Typography.Text strong>TenderFlow</Typography.Text>
+              <br />
+              <Typography.Text
+                type="secondary"
+                style={{ fontSize: 11, letterSpacing: 0.7, textTransform: "uppercase" }}
+              >
+                AI evaluation platform
+              </Typography.Text>
+            </div>
+          )}
         </Flex>
-        {inTender && !collapsed && (
-          <div style={{ padding: "8px 16px 12px" }}>
-            <Link to="/tenders">All tenders</Link>
-            <Typography.Title level={5} style={{ margin: "8px 0 6px" }}>
-              {scope.tender?.name ?? "Tender"}
-            </Typography.Title>
-            {scope.tender && (
-              <StatusChip
-                label={tenderStatusLabel[scope.tender.status]}
-                tone={tenderStatusTone[scope.tender.status]}
-              />
+        {inTender && (
+          <div
+            style={{
+              padding: collapsed ? "12px 0" : "12px 16px 8px",
+              textAlign: collapsed ? "center" : "start",
+            }}
+          >
+            {collapsed ? (
+              <Tooltip title="All tenders" placement="right">
+                <Link to={role === "member" ? "/my-tenders" : "/tenders"} aria-label="All tenders">
+                  <ArrowLeftOutlined />
+                </Link>
+              </Tooltip>
+            ) : (
+              <>
+                <Link to={role === "member" ? "/my-tenders" : "/tenders"}>
+                  <ArrowLeftOutlined /> {role === "member" ? "My tenders" : "All tenders"}
+                </Link>
+                <Typography.Title level={5} style={{ margin: "8px 0 6px" }}>
+                  {scope.tender?.name ?? "Tender"}
+                </Typography.Title>
+                {scope.tender && (
+                  <StatusChip
+                    label={tenderStatusLabel[scope.tender.status]}
+                    tone={tenderStatusTone[scope.tender.status]}
+                  />
+                )}
+              </>
             )}
           </div>
         )}
         <nav aria-label="Main">
           <Menu
             mode="inline"
-            selectedKeys={[selected]}
+            inlineCollapsed={collapsed}
+            selectedKeys={selected ? [selected] : []}
             style={{ borderInlineEnd: 0 }}
-            items={items.map((i) => ({
-              key: i.key,
-              icon: i.icon,
-              label: <Link to={i.key}>{i.label}</Link>,
-            }))}
+            items={menuItems}
           />
         </nav>
       </Sider>
       <Layout>
         <Header
           style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 10,
+            borderBottom: `1px solid ${token.colorSplit}`,
             display: "flex",
             alignItems: "center",
+            justifyContent: "space-between",
             gap: 12,
-            borderBottom: "1px solid var(--ant-color-split)",
           }}
         >
-          <Button
-            type="text"
-            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed(!collapsed)}
-          />
-          <Crumbs tenderName={scope.tender?.name} />
-          <span style={{ flex: 1 }} />
-          <NotificationBell />
-          <Dropdown
-            trigger={["click"]}
-            placement="bottomRight"
-            menu={{
-              items: [
-                {
-                  key: "who",
-                  disabled: true,
-                  label: `${me.user.email} · ${roleLabel[role]}`,
-                },
-                { type: "divider" },
-                {
-                  key: "dark",
-                  label: (
-                    <Flex justify="space-between" gap={16}>
-                      Dark mode
-                      <Switch size="small" checked={mode === "dark"} aria-label="Dark mode" />
-                    </Flex>
-                  ),
-                },
-                {
-                  key: "rtl",
-                  label: (
-                    <Flex justify="space-between" gap={16}>
-                      Right-to-left
-                      <Switch
-                        size="small"
-                        checked={direction === "rtl"}
-                        aria-label="Right-to-left"
-                      />
-                    </Flex>
-                  ),
-                },
-                { type: "divider" },
-                { key: "out", icon: <LogoutOutlined />, danger: true, label: "Sign out" },
-              ],
-              onClick: ({ key }) => {
-                if (key === "dark") setMode(mode === "dark" ? "light" : "dark");
-                if (key === "rtl") setDirection(direction === "rtl" ? "ltr" : "rtl");
-                if (key === "out") signOut();
-              },
-            }}
-          >
-            <Button type="text" aria-label={`Account menu for ${me.user.display_name}`}>
-              <UserOutlined /> {me.user.display_name}
-            </Button>
-          </Dropdown>
+          <Flex align="center" gap={8} style={{ minWidth: 0 }}>
+            <Button
+              type="text"
+              aria-label="Toggle navigation"
+              aria-expanded={!collapsed}
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setCollapsed(!collapsed)}
+            />
+            <Crumbs tenderName={scope.tender?.name} mine={role === "member"} />
+          </Flex>
+          <Space size={4}>
+            <SearchBox />
+            <JobsPopover />
+            <NotificationsPopover />
+            <UserMenu />
+          </Space>
         </Header>
-        <div style={{ flex: 1 }}>
-          <main id="main" tabIndex={-1} style={{ padding: 24, outline: "none" }}>
+        <div style={{ flex: 1, padding: 24, maxWidth: 1540, width: "100%", marginInline: "auto" }}>
+          <main id="main" tabIndex={-1} style={{ outline: "none" }}>
             <Outlet />
           </main>
         </div>
+        <Footer
+          style={{
+            borderTop: `1px solid ${token.colorSplit}`,
+            background: token.colorBgContainer,
+            padding: "14px 24px",
+          }}
+        >
+          <Typography.Text type="secondary">
+            © 2026 TenderFlow · AI evaluation platform
+          </Typography.Text>
+        </Footer>
       </Layout>
     </Layout>
   );

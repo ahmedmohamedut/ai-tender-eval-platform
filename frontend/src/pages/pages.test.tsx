@@ -350,11 +350,87 @@ describe("App shell", () => {
   it("offers an administrator tenders and users, with a skip link and one main landmark", async () => {
     const { container } = renderPage(tree, { api: fakeApi(() => undefined) });
     expect(screen.getByRole("link", { name: "Skip to content" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Tenders" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "All tenders" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "All vendors" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Users" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Categories" })).toBeInTheDocument();
     expect(screen.getAllByRole("main")).toHaveLength(1);
     expect(await accessibilityViolations(container)).toEqual([]);
+  });
+
+  it("shows the round account avatar with a User profile drawer, as the design does", async () => {
+    renderPage(tree, { api: fakeApi(() => undefined) });
+    await userEvent.click(screen.getByRole("button", { name: "Account menu for Alex Admin" }));
+    await userEvent.click(await screen.findByText("User profile"));
+    const drawer = await screen.findByRole("dialog", { name: "User profile" });
+    expect(within(drawer).getByText("alex@example.test")).toBeInTheDocument();
+    expect(within(drawer).getByText("Administrator")).toBeInTheDocument();
+  });
+
+  it("opens notifications and jobs as popovers with a way to the full page", async () => {
+    const api = fakeApi((call) => {
+      if (call === "GET /notifications/unread-count") return { count: 2 };
+      if (call === "GET /notifications")
+        return {
+          items: [
+            {
+              id: "n1",
+              title: "The report was finalized",
+              created_at: "2026-10-15T10:00:00Z",
+              read_at: null,
+              link: "/tenders/t/report",
+            },
+          ],
+        };
+      if (call === "GET /jobs")
+        return {
+          items: [
+            {
+              id: "j1",
+              tender_id: "t",
+              job_type: "document_processing",
+              status: "running",
+              target_label: "rfp.pdf",
+              progress_percent: 40,
+            },
+          ],
+        };
+      return undefined;
+    });
+    renderPage(tree, { api });
+    await userEvent.click(await screen.findByRole("button", { name: "Notifications, 2 unread" }));
+    expect(await screen.findByText("The report was finalized")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View all notifications" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(await screen.findByRole("button", { name: "Jobs, 1 running" }));
+    expect(await screen.findByText("rfp.pdf")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View all jobs" })).toBeInTheDocument();
+  });
+
+  it("groups the tender navigation as the design does and locks the report early", async () => {
+    const api = fakeApi((call) =>
+      call === "GET /tenders/{tenderId}" ? { ...TENDER, status: "evaluation" } : undefined,
+    );
+    renderPage(
+      <Routes>
+        <Route element={<Shell />}>
+          <Route path="/tenders/:tenderId" element={<p>Home</p>} />
+        </Route>
+      </Routes>,
+      { api, route: `/tenders/${TENDER.id}`, me: makeMe("member", "Morgan Member") },
+    );
+    for (const name of [
+      "Overview",
+      "Documents & vendors",
+      "Requirements",
+      "Screening",
+      "Evaluation",
+    ]) {
+      expect(await screen.findByRole("link", { name })).toBeInTheDocument();
+    }
+    expect(screen.getByText("Setup")).toBeInTheDocument();
+    expect(screen.getByText("Decide")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Final report" })).not.toBeInTheDocument();
   });
 
   it("hides what a committee member can never use (UX-ROL-03)", () => {

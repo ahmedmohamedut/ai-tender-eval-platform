@@ -28,6 +28,7 @@ import { documentStatusLabel, documentStatusTone, failureText, type Tone } from 
 import { uploadForm } from "../lib/upload";
 import { usePush } from "../lib/usePush";
 import { useAsync } from "../lib/useAsync";
+import { SetupSwitch } from "../components/SetupSwitch";
 import { TenderHeader, useTender } from "./TenderHome";
 import type { components } from "../api/generated/schema";
 
@@ -134,6 +135,7 @@ export function Vendors() {
   return (
     <>
       <TenderHeader tender={tender.state.data} />
+      <SetupSwitch tenderId={tenderId!} active="vendors" />
       <Typography.Title level={2} style={{ fontSize: 20 }}>
         Vendors
       </Typography.Title>

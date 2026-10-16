@@ -69,7 +69,7 @@ test("invite, sign in, assign, open to committee, and refuse an outsider", async
   ]);
 
   // ---- the administrator creates a tender with a committee and a Chair -----------------------------
-  await admin.page.getByRole("link", { name: "Tenders" }).click();
+  await admin.page.getByRole("link", { name: "All tenders", exact: true }).click();
   await admin.page.getByRole("link", { name: "Create tender" }).first().click();
   await admin.page.getByLabel(/Name \(required\)/).fill(tenderName);
   await admin.page.getByLabel("Find committee members").fill("");
