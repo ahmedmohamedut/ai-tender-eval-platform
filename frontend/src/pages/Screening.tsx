@@ -1,3 +1,4 @@
+import { Checkbox, Radio, Space, Table, Typography, Input } from "antd";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import {
@@ -8,7 +9,11 @@ import {
   Field,
   Loading,
   NoteDialog,
+  LinkButton,
+  Section,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { OpenProposalFile } from "../components/OpenProposalFile";
@@ -187,25 +192,22 @@ export function Screening() {
 
   return (
     <>
-      {tender.state.status === "ready" && (
-        <TenderHeader tender={tender.state.data} active="vendors" />
-      )}
-      <p>
-        <Link to={`/tenders/${tenderId}/vendors`}>Back to vendors</Link>
-      </p>
-      <h2>
+      {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
+      <Typography.Paragraph>
+        <Link to={`/tenders/${tenderId}/screening`}>Back to screening</Link>
+      </Typography.Paragraph>
+      <Typography.Title level={2} style={{ fontSize: 20 }}>
         Screening: {vendorName}{" "}
         <StatusChip label={proposalStatusLabel[version.status] ?? version.status} tone={tone} />
-      </h2>
-      <p className="help">
+      </Typography.Title>
+      <Typography.Paragraph type="secondary">
         Version {version.version_no}. Members tick the checklist and recommend; the Chair decides.
-      </p>
+      </Typography.Paragraph>
       {error && <ErrorNotice error={error} />}
 
       {s.decision && (
-        <section className="card" aria-labelledby="decision-h">
-          <h3 id="decision-h">Decision</h3>
-          <p>
+        <Section title="Decision">
+          <Typography.Paragraph>
             <StatusChip
               label={
                 s.decision.is_reinstatement
@@ -216,35 +218,36 @@ export function Screening() {
             />{" "}
             by {s.decision.decided_by.display_name} on{" "}
             {new Date(s.decision.decided_at).toLocaleDateString()}.
-          </p>
-          {s.decision.reason && <p>{s.decision.reason}</p>}
+          </Typography.Paragraph>
+          {s.decision.reason && <Typography.Paragraph>{s.decision.reason}</Typography.Paragraph>}
           {version.status === "accepted" && (
-            <p className="help">
+            <Typography.Paragraph type="secondary">
               Accepted. The evaluation starts once the requirements baseline is confirmed.
-            </p>
+            </Typography.Paragraph>
           )}
           {version.status === "rejected" && (
-            <p className="help">
+            <Typography.Paragraph type="secondary">
               This vendor stays in the report as &ldquo;Not evaluated: rejected at screening&rdquo;.
-            </p>
+            </Typography.Paragraph>
           )}
           {version.status === "resubmission_requested" && (
-            <p className="help">
+            <Typography.Paragraph type="secondary">
               A new proposal version is screened again when the administrator uploads it.
-            </p>
+            </Typography.Paragraph>
           )}
           {can("reinstate") && (
             <Button onClick={() => setReinstating(true)}>Reinstate this vendor</Button>
           )}
-        </section>
+        </Section>
       )}
 
-      <section className="card" aria-labelledby="files-h">
-        <h3 id="files-h">Proposal files</h3>
-        <ul>
+      <Section title="Proposal files">
+        <Space direction="vertical">
           {version.files.map((f) => (
-            <li key={f.document_version_id}>
-              {f.file_name} ({f.role === "main" ? "main file" : "annex"}){" "}
+            <Space key={f.document_version_id} wrap>
+              <span>
+                {f.file_name} ({f.role === "main" ? "main file" : "annex"})
+              </span>
               <OpenProposalFile
                 tenderVendorId={tenderVendorId!}
                 vendorName={vendorName}
@@ -252,33 +255,29 @@ export function Screening() {
                 fileName={f.file_name}
                 onDeclared={screening.reload}
               />
-            </li>
+            </Space>
           ))}
-        </ul>
-      </section>
+        </Space>
+      </Section>
 
-      <section className="card" aria-labelledby="check-h">
-        <h3 id="check-h">Checklist</h3>
-        <ul className="plain">
+      <Section title="Checklist">
+        <Space direction="vertical" style={{ marginBottom: 16 }}>
           {s.checklist.map((c) => {
             const v = checks[c.item.id] ?? { checked: false, note: "" };
             return (
-              <li key={c.item.id}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={v.checked}
-                    disabled={!can("save_checks")}
-                    onChange={(e) =>
-                      setChecks({ ...checks, [c.item.id]: { ...v, checked: e.target.checked } })
-                    }
-                  />{" "}
-                  {c.item.label}
-                </label>
-              </li>
+              <Checkbox
+                key={c.item.id}
+                checked={v.checked}
+                disabled={!can("save_checks")}
+                onChange={(e) =>
+                  setChecks({ ...checks, [c.item.id]: { ...v, checked: e.target.checked } })
+                }
+              >
+                {c.item.label}
+              </Checkbox>
             );
           })}
-        </ul>
+        </Space>
         <Button
           onClick={saveChecks}
           disabled={busy || !can("save_checks")}
@@ -286,40 +285,42 @@ export function Screening() {
         >
           Save checklist
         </Button>
-      </section>
+      </Section>
 
-      <section className="card" aria-labelledby="ai-h">
-        <h3 id="ai-h">AI structure check</h3>
-        <p className="help">
+      <Section title="AI structure check">
+        <Typography.Paragraph type="secondary">
           Compares the proposal with the sections the request for proposal asks for. It only
           suggests; nobody decides from it.
-        </p>
+        </Typography.Paragraph>
         {s.prechecks.length === 0 ? (
-          <p className="help">No AI check has run for this version.</p>
+          <Typography.Paragraph type="secondary">
+            No AI check has run for this version.
+          </Typography.Paragraph>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Expected section</th>
-                <th scope="col">Result</th>
-                <th scope="col">Where</th>
-              </tr>
-            </thead>
-            <tbody>
-              {s.prechecks.map((f) => (
-                <tr key={f.expected_section}>
-                  <th scope="row">{f.expected_section}</th>
-                  <td>
-                    <StatusChip
-                      label={f.found ? "Found" : "Not found"}
-                      tone={f.found ? "success" : "warning"}
-                    />
-                  </td>
-                  <td>{f.note}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table<State["prechecks"][number]>
+            rowKey="expected_section"
+            components={rowHeaderComponents}
+            dataSource={s.prechecks}
+            pagination={false}
+            style={{ marginBottom: 16 }}
+            columns={[
+              {
+                title: "Expected section",
+                onCell: rowHeader,
+                render: (_, f) => f.expected_section,
+              },
+              {
+                title: "Result",
+                render: (_, f) => (
+                  <StatusChip
+                    label={f.found ? "Found" : "Not found"}
+                    tone={f.found ? "success" : "warning"}
+                  />
+                ),
+              },
+              { title: "Where", render: (_, f) => f.note },
+            ]}
+          />
         )}
         <Button
           onClick={startPrecheck}
@@ -328,28 +329,28 @@ export function Screening() {
         >
           {s.prechecks.length === 0 ? "Run the AI check" : "Run the AI check again"}
         </Button>
-      </section>
+      </Section>
 
-      <section className="card" aria-labelledby="rec-h">
-        <h3 id="rec-h">Your recommendation</h3>
-        <fieldset disabled={!can("save_recommendation")}>
+      <Section title="Your recommendation">
+        <fieldset disabled={!can("save_recommendation")} style={{ border: 0, padding: 0 }}>
           <legend className="visually-hidden">Recommendation</legend>
-          {(["accept", "reject", "request_resubmission"] as Recommendation[]).map((r) => (
-            <label key={r}>
-              <input
-                type="radio"
-                name="recommendation"
-                checked={rec === r}
-                onChange={() => setRec(r)}
-              />{" "}
-              {recommendationLabel[r]}
-            </label>
-          ))}
+          <Radio.Group
+            value={rec || undefined}
+            onChange={(e) => setRec(e.target.value as Recommendation)}
+            disabled={!can("save_recommendation")}
+            style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}
+          >
+            {(["accept", "reject", "request_resubmission"] as Recommendation[]).map((r) => (
+              <Radio key={r} value={r}>
+                {recommendationLabel[r]}
+              </Radio>
+            ))}
+          </Radio.Group>
         </fieldset>
         {rec !== "" && rec !== "accept" && (
           <Field label="Reason (required)">
             {({ id, describedBy, invalid }) => (
-              <textarea
+              <Input.TextArea
                 id={id}
                 aria-describedby={describedBy}
                 aria-invalid={invalid}
@@ -367,35 +368,33 @@ export function Screening() {
         >
           Save recommendation
         </Button>
-      </section>
+      </Section>
 
-      <section className="card" aria-labelledby="all-h">
-        <h3 id="all-h">The committee&rsquo;s recommendations</h3>
+      <Section title={<>The committee&rsquo;s recommendations</>}>
         {s.recommendations.length === 0 ? (
-          <p className="help">Nobody has recommended yet.</p>
+          <Typography.Paragraph type="secondary">Nobody has recommended yet.</Typography.Paragraph>
         ) : (
-          <ul className="plain">
+          <Space direction="vertical">
             {s.recommendations.map((r) => (
-              <li key={r.user.id}>
+              <div key={r.user.id}>
                 {r.user.display_name}:{" "}
                 <StatusChip
                   label={recommendationLabel[r.recommendation] ?? r.recommendation}
                   tone={recommendationTone[r.recommendation] ?? "neutral"}
                 />
                 {r.reason ? <> {r.reason}</> : null}
-              </li>
+              </div>
             ))}
-          </ul>
+          </Space>
         )}
-      </section>
+      </Section>
 
       {can("confirm_decision") && (
-        <section className="card" aria-labelledby="chair-h">
-          <h3 id="chair-h">Confirm the decision</h3>
-          <p className="help">
+        <Section title="Confirm the decision">
+          <Typography.Paragraph type="secondary">
             Accepting queues the evaluation. Rejecting and requesting a resubmission need a reason.
-          </p>
-          <div className="actions">
+          </Typography.Paragraph>
+          <Space wrap>
             <Button onClick={() => setDeciding("accept")} disabled={busy}>
               Accept
             </Button>
@@ -405,8 +404,8 @@ export function Screening() {
             <Button variant="danger" onClick={() => setDeciding("reject")} disabled={busy}>
               Reject
             </Button>
-          </div>
-        </section>
+          </Space>
+        </Section>
       )}
 
       <ConfirmDialog
@@ -438,6 +437,80 @@ export function Screening() {
         busy={busy}
         onConfirm={reinstate}
       />
+    </>
+  );
+}
+
+/** The tender's proposals and where each stands in screening; each opens its own screening. */
+export function ScreeningList() {
+  const { tenderId } = useParams();
+  const api = useApi();
+  const tender = useTender(tenderId);
+  const list = useAsync(
+    () =>
+      unwrap(api.GET("/tenders/{tenderId}/vendors", { params: { path: { tenderId: tenderId! } } })),
+    [api, tenderId],
+  );
+  usePush(tenderId, list.reload, ["tender.changed", "job.updated"]);
+  if (tender.state.status === "loading" || list.state.status === "loading") {
+    return <Loading label="Loading screening" />;
+  }
+  if (tender.state.status === "error")
+    return <ErrorNotice error={tender.state.error} onRetry={tender.reload} />;
+  if (list.state.status === "error")
+    return <ErrorNotice error={list.state.error} onRetry={list.reload} />;
+  const items = list.state.data.items;
+  return (
+    <>
+      <TenderHeader tender={tender.state.data} />
+      <Typography.Title level={2} style={{ fontSize: 20, marginBottom: 4 }}>
+        Screening
+      </Typography.Title>
+      <Typography.Paragraph type="secondary">
+        Members tick the checklist and recommend; the Chair decides.
+      </Typography.Paragraph>
+      {items.length === 0 ? (
+        <EmptyState title="No proposals to screen">
+          Add vendors and upload their proposals on the Documents &amp; vendors page.
+        </EmptyState>
+      ) : (
+        <Table<(typeof items)[number]>
+          rowKey="id"
+          components={rowHeaderComponents}
+          dataSource={items}
+          pagination={false}
+          scroll={{ x: "max-content" }}
+          columns={[
+            { title: "Vendor", onCell: rowHeader, render: (_, v) => v.vendor.name },
+            {
+              title: "Proposal",
+              render: (_, v) =>
+                v.proposal_version_no ? `Version ${v.proposal_version_no}` : "No proposal yet",
+            },
+            {
+              title: "Screening",
+              render: (_, v) =>
+                v.status ? (
+                  <StatusChip
+                    label={proposalStatusLabel[v.status] ?? v.status}
+                    tone={proposalStatusTone[v.status] ?? "neutral"}
+                  />
+                ) : (
+                  "-"
+                ),
+            },
+            {
+              title: "Action",
+              render: (_, v) =>
+                v.proposal_version_no ? (
+                  <LinkButton to={`/tenders/${tenderId}/vendors/${v.id}/screening`}>
+                    Open screening
+                  </LinkButton>
+                ) : null,
+            },
+          ]}
+        />
+      )}
     </>
   );
 }

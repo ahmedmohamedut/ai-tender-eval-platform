@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { axeViolations, ensureUser, env, newContext, signIn, sql } from "./support";
+import { axeViolations, chooseOption, ensureUser, env, newContext, signIn, sql } from "./support";
 
 /**
  * The Phase 5 journey against the real stack: two members have submitted an evaluated proposal
@@ -155,7 +155,11 @@ test("the Chair settles a disagreement, finalizes, and reopening creates version
   const admin = await newContext(browser);
   await signIn(admin.page, "e2e-admin@example.test", [seed]);
   await admin.page.goto("/audit");
-  await admin.page.getByLabel("Tender").selectOption(tender);
+  await chooseOption(
+    admin.page,
+    "Tender",
+    sql(`select name from tenders where id = '${tender}'`)[0]!,
+  );
   await admin.page.getByRole("button", { name: "Search" }).click();
   await expect(
     admin.page

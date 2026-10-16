@@ -1,8 +1,13 @@
-import { render } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent, { PointerEventsCheckLevel } from "@testing-library/user-event";
+
+// antd animates its dialogs; during the fade the element reports pointer-events: none.
+const user = () => userEvent.setup({ pointerEventsCheck: PointerEventsCheckLevel.Never });
 import axe from "axe-core";
 import { MemoryRouter } from "react-router";
 import type { ReactElement } from "react";
 import { vi } from "vitest";
+import { AppearanceProvider } from "../app/Appearance";
 import { SessionTestProvider } from "../app/Session";
 import { AnnounceProvider } from "../components/ui";
 import { ApiProvider, type ApiClient } from "../lib/api";
@@ -64,13 +69,15 @@ export function renderPage(
 ) {
   const me = opts.me ?? makeMe();
   return render(
-    <ApiProvider client={opts.api as unknown as ApiClient}>
-      <AnnounceProvider>
-        <SessionTestProvider me={me}>
-          <MemoryRouter initialEntries={[opts.route ?? "/"]}>{ui}</MemoryRouter>
-        </SessionTestProvider>
-      </AnnounceProvider>
-    </ApiProvider>,
+    <AppearanceProvider initialMode="light">
+      <ApiProvider client={opts.api as unknown as ApiClient}>
+        <AnnounceProvider>
+          <SessionTestProvider me={me}>
+            <MemoryRouter initialEntries={[opts.route ?? "/"]}>{ui}</MemoryRouter>
+          </SessionTestProvider>
+        </AnnounceProvider>
+      </ApiProvider>
+    </AppearanceProvider>,
   );
 }
 
@@ -80,4 +87,38 @@ export async function accessibilityViolations(container: HTMLElement) {
     rules: { "color-contrast": { enabled: false }, region: { enabled: false } },
   });
   return result.violations.map((v) => `${v.id}: ${v.help} (${v.nodes.length})`);
+}
+
+/** Picks an option of an antd Select by its label (the control is a combobox, not a <select>). */
+export async function choose(
+  label: string | RegExp,
+  option: string,
+  scope: HTMLElement = document.body,
+) {
+  const u = user();
+  await u.click(within(scope).getByRole("combobox", { name: label }));
+  const hits = await screen.findAllByText(option, { selector: ".ant-select-item-option-content" });
+  await u.click(hits[hits.length - 1]!);
+}
+
+/** The labels an antd Select offers, read by opening it (and closing it again). */
+export async function optionsOf(label: string | RegExp): Promise<string[]> {
+  const box = screen.getByRole("combobox", { name: label });
+  const u = user();
+  await u.click(box);
+  const items = Array.from(
+    document.querySelectorAll(".ant-select-item-option-content"),
+    (n) => n.textContent ?? "",
+  );
+  await u.click(box); // closes the list again, without closing a dialog around it
+  return items;
+}
+
+/**
+ * The open dialog with this title. In the test build antd gives every modal the same
+ * `aria-labelledby`, so a dialog cannot be found by its accessible name there.
+ */
+export async function dialogTitled(title: string): Promise<HTMLElement> {
+  const heading = await screen.findByText(title, { selector: ".ant-modal-title" });
+  return heading.closest('[role="dialog"]') as HTMLElement;
 }

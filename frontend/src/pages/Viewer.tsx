@@ -1,6 +1,6 @@
+import { Button as AntButton, Card, Checkbox, Input, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { Field } from "../components/ui";
-import { Link, useParams, useSearchParams } from "react-router";
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import {
@@ -23,17 +23,21 @@ import { highlightBoxes, snippetParts, startPage } from "../lib/viewer";
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 /** PG-10 (document part): outline, pages, search, zoom, text selection, passage highlight. */
-export function Viewer() {
-  const { versionId } = useParams();
-  const [params, setParams] = useSearchParams();
+export function Viewer({
+  versionId,
+  passage: firstPassage,
+}: {
+  versionId: string;
+  passage: string | null;
+}) {
   const api = useApi();
-  const passageId = params.get("passage");
+  const [passageId, setPassageId] = useState<string | null>(firstPassage);
 
   const outline = useAsync(
     () =>
       unwrap(
         api.GET("/document-versions/{documentVersionId}/outline", {
-          params: { path: { documentVersionId: versionId! } },
+          params: { path: { documentVersionId: versionId } },
         }),
       ),
     [api, versionId],
@@ -42,7 +46,7 @@ export function Viewer() {
     () =>
       unwrap(
         api.GET("/document-versions/{documentVersionId}/pages", {
-          params: { path: { documentVersionId: versionId! } },
+          params: { path: { documentVersionId: versionId } },
         }),
       ),
     [api, versionId],
@@ -51,7 +55,7 @@ export function Viewer() {
   const origin = useAsync(async () => {
     const v = await unwrap(
       api.GET("/document-versions/{documentVersionId}", {
-        params: { path: { documentVersionId: versionId! } },
+        params: { path: { documentVersionId: versionId } },
       }),
     );
     const d = await unwrap(
@@ -59,13 +63,6 @@ export function Viewer() {
     );
     return { tenderId: d.tender_id, title: d.title };
   }, [api, versionId]);
-  const back =
-    origin.state.status === "ready"
-      ? `/tenders/${origin.state.data.tenderId}/documents`
-      : "/tenders";
-  const backLabel =
-    origin.state.status === "ready" ? "Back to tender documents" : "Back to tenders";
-
   const { me } = useSession();
   const announce = useAnnounce();
   const isMember = me.user.role === "member";
@@ -108,22 +105,14 @@ export function Viewer() {
     (pages.state.status === "ready" && passageReady
       ? startPage(
           passageState.status === "ready" ? passageState.data?.page_no : undefined,
-          params.get("page"),
+          null,
           count,
         )
       : null);
 
-  const backLink = (
-    <p className="viewer-back">
-      <Link to={back} className="btn">
-        {backLabel}
-      </Link>
-    </p>
-  );
   if (pages.state.status === "loading" || outline.state.status === "loading") {
     return (
       <>
-        {backLink}
         <Loading label="Opening the document" />
       </>
     );
@@ -131,14 +120,12 @@ export function Viewer() {
   if (pages.state.status === "error")
     return (
       <>
-        {backLink}
         <ErrorNotice error={pages.state.error} onRetry={pages.reload} />
       </>
     );
   if (outline.state.status === "error")
     return (
       <>
-        {backLink}
         <ErrorNotice error={outline.state.error} onRetry={outline.reload} />
       </>
     );
@@ -149,7 +136,7 @@ export function Viewer() {
     if (!query.trim()) return;
     const r = await unwrap(
       api.GET("/document-versions/{documentVersionId}/search", {
-        params: { path: { documentVersionId: versionId! }, query: { q: query } },
+        params: { path: { documentVersionId: versionId }, query: { q: query } },
       }),
     );
     setHits(r.hits);
@@ -181,7 +168,7 @@ export function Viewer() {
           body: {
             scope: [
               {
-                document_version_id: versionId!,
+                document_version_id: versionId,
                 section_ids: [...picked],
                 page_from: from,
                 page_to: to,
@@ -210,15 +197,11 @@ export function Viewer() {
 
   return (
     <div className="viewer">
-      <h1 className="visually-hidden">Document viewer</h1>
-      <p className="viewer-back">
-        <Link to={back} className="btn">
-          {backLabel}
-        </Link>
-        {origin.state.status === "ready" && (
-          <span className="help"> {origin.state.data.title}</span>
-        )}
-      </p>
+      {origin.state.status === "ready" && (
+        <p className="viewer-back">
+          <Typography.Text strong>{origin.state.data.title}</Typography.Text>
+        </p>
+      )}
       <aside aria-label="Document navigation" className="viewer-side">
         <form
           role="search"
@@ -227,8 +210,18 @@ export function Viewer() {
             void search();
           }}
         >
-          <label htmlFor="doc-search">Search this document</label>
-          <input id="doc-search" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <label
+            htmlFor="doc-search"
+            style={{ display: "block", fontWeight: 500, marginBottom: 4 }}
+          >
+            Search this document
+          </label>
+          <Input
+            id="doc-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{ marginBottom: 8 }}
+          />
           <Button type="submit" onClick={() => void search()}>
             Search
           </Button>
@@ -237,11 +230,11 @@ export function Viewer() {
           <ol aria-label="Search results" className="hits">
             {hits.map((h) => (
               <li key={h.passage_id}>
-                <button
-                  type="button"
-                  className="linklike"
+                <AntButton
+                  type="link"
+                  style={{ padding: 0, height: "auto", textAlign: "start" }}
                   onClick={() => {
-                    setParams({ passage: h.passage_id });
+                    setPassageId(h.passage_id);
                     setPage(h.page_no);
                   }}
                 >
@@ -249,71 +242,83 @@ export function Viewer() {
                   {snippetParts(h.snippet).map((p, i) =>
                     p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>,
                   )}
-                </button>
+                </AntButton>
               </li>
             ))}
           </ol>
         )}
         {isMember && (
-          <section aria-label="Extract requirements" className="card">
-            <h2>Extract requirements</h2>
-            <p className="help">
-              Tick sections or give a page range. {picked.size} section(s)
-              {selectedPages ? `, ${selectedPages} pages` : ""} selected.
-            </p>
-            <Field label="From page">
-              {({ id }) => (
-                <input
-                  id={id}
-                  type="number"
-                  min={1}
-                  max={count}
-                  value={rangeFrom}
-                  onChange={(e) => setRangeFrom(e.target.value)}
-                />
-              )}
-            </Field>
-            <Field label="To page" error={rangeOk ? undefined : "Use pages inside the document"}>
-              {({ id, describedBy, invalid }) => (
-                <input
-                  id={id}
-                  aria-describedby={describedBy}
-                  aria-invalid={invalid}
-                  type="number"
-                  min={1}
-                  max={count}
-                  value={rangeTo}
-                  onChange={(e) => setRangeTo(e.target.value)}
-                />
-              )}
-            </Field>
-            <Button
-              variant="primary"
-              disabledReason={
-                !hasSelection
-                  ? "Choose sections or pages first"
-                  : !rangeOk
-                    ? "Fix the page range"
-                    : undefined
+          <section aria-label="Extract requirements">
+            <Card
+              size="small"
+              style={{ margin: "16px 0" }}
+              title={
+                <Typography.Title level={2} style={{ fontSize: 16, margin: 0 }}>
+                  Extract requirements
+                </Typography.Title>
               }
-              onClick={() => setConfirmExtract(true)}
             >
-              Start extraction
-            </Button>
-            <Button
-              onClick={() => {
-                setPicked(new Set());
-                setRangeFrom("");
-                setRangeTo("");
-              }}
-            >
-              Clear selection
-            </Button>
+              <Typography.Paragraph type="secondary">
+                Tick sections or give a page range. {picked.size} section(s)
+                {selectedPages ? `, ${selectedPages} pages` : ""} selected.
+              </Typography.Paragraph>
+              <Field label="From page">
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    type="number"
+                    min={1}
+                    max={count}
+                    value={rangeFrom}
+                    onChange={(e) => setRangeFrom(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="To page" error={rangeOk ? undefined : "Use pages inside the document"}>
+                {({ id, describedBy, invalid }) => (
+                  <Input
+                    id={id}
+                    aria-describedby={describedBy}
+                    aria-invalid={invalid}
+                    status={invalid ? "error" : undefined}
+                    type="number"
+                    min={1}
+                    max={count}
+                    value={rangeTo}
+                    onChange={(e) => setRangeTo(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Button
+                variant="primary"
+                disabledReason={
+                  !hasSelection
+                    ? "Choose sections or pages first"
+                    : !rangeOk
+                      ? "Fix the page range"
+                      : undefined
+                }
+                onClick={() => setConfirmExtract(true)}
+              >
+                Start extraction
+              </Button>
+              <Button
+                onClick={() => {
+                  setPicked(new Set());
+                  setRangeFrom("");
+                  setRangeTo("");
+                }}
+              >
+                Clear selection
+              </Button>
+            </Card>
           </section>
         )}
         <nav aria-label="Contents">
           {sections.length === 0 ? (
-            <p className="help">This document has no outline. Use the page controls.</p>
+            <Typography.Paragraph type="secondary">
+              This document has no outline. Use the page controls.
+            </Typography.Paragraph>
           ) : (
             <ul className="outline">
               {sections.map((s) => {
@@ -324,8 +329,7 @@ export function Viewer() {
                 return (
                   <li key={s.id} style={{ paddingLeft: (s.level - 1) * 12 }}>
                     {isMember && (
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label={`Extract from ${s.title}`}
                         checked={picked.has(s.id)}
                         onChange={(e) => {
@@ -336,9 +340,13 @@ export function Viewer() {
                         }}
                       />
                     )}{" "}
-                    <button type="button" className="linklike" onClick={() => go(s.start_page)}>
+                    <AntButton
+                      type="link"
+                      style={{ padding: 0, height: "auto", textAlign: "start" }}
+                      onClick={() => go(s.start_page)}
+                    >
                       {s.title}
-                    </button>
+                    </AntButton>
                     {cov && (
                       <>
                         {" "}
@@ -392,7 +400,7 @@ export function Viewer() {
         />
         {current !== null && (
           <PdfPage
-            versionId={versionId!}
+            versionId={versionId}
             pageNo={current}
             zoom={zoom}
             highlight={highlighted && highlighted.page_no === current ? highlighted.bbox : null}

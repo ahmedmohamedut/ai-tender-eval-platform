@@ -1,15 +1,47 @@
-import * as Dialog from "@radix-ui/react-dialog";
-import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import {
+  CheckOutlined,
+  LockOutlined,
+  TeamOutlined,
+  UnorderedListOutlined,
+} from "@ant-design/icons";
+import {
+  Alert,
+  Avatar,
+  Button as AntButton,
+  Card,
+  Checkbox,
+  Col,
+  Collapse,
+  Descriptions,
+  Drawer,
+  Flex,
+  Input,
+  Modal,
+  Progress,
+  Radio,
+  Row,
+  Segmented,
+  Select,
+  Space,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
+import { useState, type ReactNode } from "react";
+import { useParams, useSearchParams } from "react-router";
 import { ExportButton } from "../components/ExportButton";
 import {
   Button,
   ConfirmDialog,
   EmptyState,
   ErrorNotice,
+  LinkButton,
   Loading,
   NoteDialog,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { ApiError, unwrap, useApi } from "../lib/api";
@@ -25,6 +57,7 @@ import type { components } from "../api/generated/schema";
 import { useAsync } from "../lib/useAsync";
 import { usePush } from "../lib/usePush";
 import { useSession } from "../app/Session";
+import { useViewer } from "../app/ViewerHost";
 import { ChairPanel } from "./ChairPanel";
 import { TenderHeader, useTender } from "./TenderHome";
 
@@ -37,7 +70,7 @@ const statusLabel: Record<string, string> = {
 };
 
 function Grade({ grade }: { grade: string | null | undefined }) {
-  if (!grade) return <span className="help">No final grade</span>;
+  if (!grade) return <Typography.Text type="secondary">No final grade</Typography.Text>;
   return (
     <StatusChip
       label={`${gradeIcon[grade] ?? ""} ${gradeLabel[grade] ?? grade}`.trim()}
@@ -68,6 +101,8 @@ export function Report() {
   const [reopening, setReopening] = useState(false);
   const [missing, setMissing] = useState<{ code: string; message: string }[]>([]);
   const [busy, setBusy] = useState(false);
+  const [vendorPanel, setVendorPanel] = useState<string | null>(null);
+  const [method, setMethod] = useState(false);
 
   const header = useAsync(
     () =>
@@ -160,8 +195,10 @@ export function Report() {
     if (e instanceof ApiError && e.status === 404) {
       return (
         <>
-          <TenderHeader tender={tender.state.data} active="report" />
-          <h2>Report</h2>
+          <TenderHeader tender={tender.state.data} />
+          <Typography.Title level={2} style={{ fontSize: 20 }}>
+            Report
+          </Typography.Title>
           <EmptyState title="The report is not available yet">
             It opens when the Chair finalizes it. Until then the committee works on the evaluations.
           </EmptyState>
@@ -182,7 +219,20 @@ export function Report() {
     ),
   );
   const m = matrix.state.status === "ready" ? matrix.state.data : null;
-  const vendorOptions = m?.vendors ?? [];
+  // One column per vendor that has a cell in the matrix, even when the server's vendor list
+  // leaves it out (a proposal that is not yet marked evaluated); the name comes from the ranking.
+  const vendorOptions: { tender_vendor_id: string; name: string }[] = [...(m?.vendors ?? [])];
+  for (const row of m?.rows ?? []) {
+    for (const c of row.cells) {
+      if (!vendorOptions.some((v) => v.tender_vendor_id === c.tender_vendor_id)) {
+        const known = ranking.find((r) => r.tender_vendor_id === c.tender_vendor_id);
+        vendorOptions.push({
+          tender_vendor_id: c.tender_vendor_id,
+          name: known?.vendor_name ?? "Vendor",
+        });
+      }
+    }
+  }
 
   async function doFinalize() {
     setBusy(true);
@@ -242,50 +292,63 @@ export function Report() {
       }),
     );
 
+  const ranked = ranking.filter((v) => v.available && v.outcome !== "rejected_at_screening");
+  const waiting = ranking.filter((v) => !v.available && v.outcome !== "rejected_at_screening");
+  const rejected = ranking.filter((v) => v.outcome === "rejected_at_screening");
+  const failing = ranked.filter((v) => v.fails_mandatory);
+  const panel = ranking.find((v) => v.tender_vendor_id === vendorPanel) ?? null;
+  const jump = (id: string) =>
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const locked = h.status !== "in_progress";
+  const versionList = versions.state.status === "ready" ? versions.state.data : [];
+  const grades = (v: (typeof ranking)[number]) =>
+    `${String(v.counts?.fully_compliant ?? 0)} full · ${String(
+      v.counts?.partially_compliant ?? 0,
+    )} partial · ${String(v.counts?.non_compliant ?? 0)} non`;
+
   return (
     <div className="report">
-      <TenderHeader tender={tender.state.data} active="report" />
-      <section className="report-status" aria-label="Report status">
-        <h2>
-          Report version {h.version_no}{" "}
-          <StatusChip
-            label={statusLabel[h.status] ?? h.status}
-            tone={
-              h.status === "finalized" ? "success" : h.status === "superseded" ? "neutral" : "info"
-            }
-          />
-        </h2>
-        <p>
-          Baseline version {h.baseline_version} · Weighted scoring (fully{" "}
-          {h.scoring_model.points_fully}, partially {h.scoring_model.points_partially}, non{" "}
-          {h.scoring_model.points_non}; a mandatory failure is flagged, not removed)
-          {h.finalized_at && (
+      <TenderHeader tender={tender.state.data} />
+      <Flex justify="space-between" align="flex-start" wrap gap={16} style={{ marginBottom: 16 }}>
+        <div aria-label="Report status">
+          <Typography.Title level={2} style={{ fontSize: 22, margin: 0 }}>
+            Final evaluation report{" "}
+            <StatusChip
+              label={statusLabel[h.status] ?? h.status}
+              tone={
+                h.status === "finalized"
+                  ? "success"
+                  : h.status === "superseded"
+                    ? "neutral"
+                    : "info"
+              }
+            />
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            <span>Report version {h.version_no}</span>
+            {h.finalized_at
+              ? ` · Finalized ${new Date(h.finalized_at).toLocaleString()}${
+                  h.finalized_by ? ` · By ${h.finalized_by.display_name}` : ""
+                }`
+              : " · In progress"}
+          </Typography.Text>
+        </div>
+        <Space wrap className="report-actions">
+          {versionList.length > 1 && (
             <>
-              {" "}
-              · Finalized {new Date(h.finalized_at).toLocaleString()}
-              {h.finalized_by ? ` by ${h.finalized_by.display_name}` : ""}
+              <label htmlFor="report-version">Version</label>
+              <Select
+                id="report-version"
+                value={h.version_no}
+                onChange={(v) => setParams({ version: String(v) })}
+                style={{ minWidth: 190 }}
+                options={versionList.map((v) => ({
+                  value: v.version_no,
+                  label: `${v.version_no} · ${statusLabel[v.status] ?? v.status}`,
+                }))}
+              />
             </>
           )}
-        </p>
-        {h.ai_model_versions.length > 0 && (
-          <p className="help">AI model: {h.ai_model_versions.join(", ")}</p>
-        )}
-        <p className="help">Committee: {h.committee.map((c) => c.display_name).join(", ")}</p>
-        {(versions.state.status === "ready" ? versions.state.data : []).length > 1 && (
-          <p>
-            <label>
-              Version{" "}
-              <select value={h.version_no} onChange={(e) => setParams({ version: e.target.value })}>
-                {(versions.state.status === "ready" ? versions.state.data : []).map((v) => (
-                  <option key={v.version_no} value={v.version_no}>
-                    {v.version_no} · {statusLabel[v.status] ?? v.status}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </p>
-        )}
-        <p className="report-actions">
           {finalize && (
             <>
               <Button
@@ -295,262 +358,502 @@ export function Report() {
                 onClick={() => setConfirmFinalize(true)}
               >
                 Finalize report
-              </Button>{" "}
+              </Button>
               {!finalize.allowed && finalize.reason && h.disagreement_count === 0 && (
-                <span className="help">{finalize.reason}</span>
+                <Typography.Text type="secondary">{finalize.reason}</Typography.Text>
               )}
             </>
           )}
-          {reopen?.allowed && (
-            <Button type="button" onClick={() => setReopening(true)}>
-              Reopen report
-            </Button>
-          )}{" "}
           {h.actions?.export?.allowed && (
             <>
-              <ExportButton label="Export PDF" start={startExport("pdf")} />{" "}
+              <ExportButton label="Export PDF" start={startExport("pdf")} />
               <ExportButton label="Export Excel" start={startExport("xlsx")} />
             </>
-          )}{" "}
+          )}
           <Button type="button" onClick={() => window.print()}>
             Print
           </Button>
-        </p>
+        </Space>
+      </Flex>
+
+      <div
+        style={{
+          position: "sticky",
+          top: 56,
+          zIndex: 5,
+          background: "var(--ant-color-bg-layout)",
+          padding: "8px 0",
+          marginBottom: 12,
+        }}
+      >
+        <Segmented
+          aria-label="Report sections"
+          onChange={(v) => jump(String(v))}
+          options={[
+            { value: "summary", label: "Summary" },
+            { value: "ranking", label: "Vendors" },
+            { value: "matrix", label: "Requirements" },
+            { value: "governance", label: "Governance & audit" },
+          ]}
+        />
+      </div>
+
+      <div id="summary">
         {h.status === "in_progress" && (
-          <p role="note">
-            {h.disagreement_count === 0
-              ? "No disagreements are waiting for a final grade."
-              : `${h.disagreement_count} disagreements still need a final grade.`}
-          </p>
+          <Alert
+            showIcon
+            type="info"
+            role="note"
+            style={{ marginBottom: 12 }}
+            title={
+              h.disagreement_count === 0
+                ? "No disagreements are waiting for a final grade."
+                : `${h.disagreement_count} disagreements still need a final grade.`
+            }
+          />
         )}
         {missing.length > 0 && (
-          <div role="alert" className="notice">
-            <strong>The report is not ready to finalize</strong>
-            <ul>
-              {missing.map((f, i) => (
-                <li key={`${f.code}-${i}`}>{f.message}</li>
-              ))}
-            </ul>
-          </div>
+          <Alert
+            type="error"
+            showIcon
+            role="alert"
+            style={{ marginBottom: 12 }}
+            title="The report is not ready to finalize"
+            description={
+              <ul>
+                {missing.map((f, i) => (
+                  <li key={`${f.code}-${i}`}>{f.message}</li>
+                ))}
+              </ul>
+            }
+          />
         )}
-      </section>
+        {failing.length > 0 && (
+          <Alert
+            showIcon
+            type="warning"
+            title="Mandatory requirement failures · Review before procurement decision"
+            description={`${failing
+              .map((v) => `${v.vendor_name}: ${v.mandatory_failures}`)
+              .join(
+                "; ",
+              )}. A failure is flagged, not automatically excluded from the weighted ranking. The final score is not a procurement award decision.`}
+          />
+        )}
+      </div>
+      <Row gutter={[16, 16]} style={{ margin: "16px 0" }}>
+        {(
+          [
+            [
+              "Ranked vendors",
+              String(ranked.length),
+              `${rejected.length} rejected at screening`,
+              <TeamOutlined key="i" />,
+            ],
+            [
+              "Requirements",
+              String(m?.rows.length ?? 0),
+              `Baseline v${h.baseline_version}`,
+              <UnorderedListOutlined key="i" />,
+            ],
+            [
+              "Final disagreements",
+              String(h.disagreement_count),
+              locked ? "Resolved by Chair" : "Waiting for the Chair",
+              <CheckOutlined key="i" />,
+            ],
+            [
+              "Report version",
+              `v${h.version_no}`,
+              locked ? "Locked record" : "In progress",
+              <LockOutlined key="i" />,
+            ],
+          ] as [string, string, string, ReactNode][]
+        ).map(([t, v, hint, icon]) => (
+          <Col key={t} xs={24} sm={12} xl={6}>
+            <Card>
+              <Statistic title={t} value={v} prefix={icon} />
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {hint}
+              </Typography.Text>
+            </Card>
+          </Col>
+        ))}
+      </Row>
 
       {(me.user.role === "admin" || isChair) && h.status === "in_progress" && (
         <ChairPanel tenderId={tenderId!} isChair={isChair} />
       )}
 
-      <section aria-labelledby="overview-h">
-        <h2 id="overview-h">Overview</h2>
-        {ranking.length === 0 ? (
-          <EmptyState title="No results yet">
-            Results open for a vendor once every member has submitted it.
-          </EmptyState>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <caption>Vendors ranked by final score</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Rank</th>
-                  <th scope="col">Vendor</th>
-                  <th scope="col">Final score</th>
-                  <th scope="col">Compliance</th>
-                  <th scope="col">Mandatory</th>
-                  <th scope="col">Grades (full / partial / non)</th>
-                  <th scope="col">Agreement</th>
-                  <th scope="col">AI overridden</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranking.map((v) =>
-                  v.outcome === "rejected_at_screening" ? (
-                    <tr key={v.tender_vendor_id}>
-                      <td>-</td>
-                      <th scope="row">{v.vendor_name}</th>
-                      <td colSpan={6}>Rejected at screening{v.reason ? `: ${v.reason}` : ""}</td>
-                    </tr>
-                  ) : !v.available ? (
-                    <tr key={v.tender_vendor_id}>
-                      <td>-</td>
-                      <th scope="row">{v.vendor_name}</th>
-                      <td colSpan={6}>
-                        Results open once all members submit.
-                        {v.awaiting && v.awaiting.length > 0
-                          ? ` Waiting for ${v.awaiting.map((a) => a.display_name).join(", ")}.`
-                          : ""}
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={v.tender_vendor_id}>
-                      <td>{v.rank ?? "-"}</td>
-                      <th scope="row">{v.vendor_name}</th>
-                      <td>{v.final_score ?? "-"}%</td>
-                      <td>{v.compliance_percent ?? "-"}%</td>
-                      <td>
-                        {v.fails_mandatory ? (
-                          <StatusChip
-                            tone="error"
-                            label={`✕ ${v.mandatory_failures} failed (flag)`}
-                          />
-                        ) : (
-                          "None failed"
-                        )}
-                      </td>
-                      <td>
-                        {String(v.counts?.fully_compliant ?? 0)} /{" "}
-                        {String(v.counts?.partially_compliant ?? 0)} /{" "}
-                        {String(v.counts?.non_compliant ?? 0)}
-                      </td>
-                      <td>{v.agreement_level ?? "-"}%</td>
-                      <td>
-                        {overrideBy.has(v.tender_vendor_id)
-                          ? `${overrideBy.get(v.tender_vendor_id)}%`
-                          : "-"}
-                      </td>
-                    </tr>
-                  ),
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <div id="ranking">
+        <Card
+          title="Vendor comparison"
+          style={{ marginBottom: 16 }}
+          extra={<Button onClick={() => setMethod(true)}>How scoring works</Button>}
+        >
+          {ranking.length === 0 ? (
+            <EmptyState title="No results yet">
+              Results open for a vendor once every member has submitted it.
+            </EmptyState>
+          ) : (
+            <>
+              <Typography.Paragraph type="secondary">
+                Final scores ranked by the configured weighted methodology.
+              </Typography.Paragraph>
+              <Row gutter={[16, 16]}>
+                <Col xs={24} lg={12}>
+                  <Flex vertical gap={12}>
+                    {ranked.map((v, i) => (
+                      <Card key={v.tender_vendor_id} size="small">
+                        <Flex justify="space-between" align="center" gap={12}>
+                          <Space>
+                            <Avatar
+                              style={{
+                                background: i
+                                  ? "var(--ant-color-fill-secondary)"
+                                  : "var(--ant-color-primary-bg)",
+                                color: "var(--ant-color-text)",
+                              }}
+                            >
+                              {v.rank ?? i + 1}
+                            </Avatar>
+                            <div>
+                              <Typography.Text strong>{v.vendor_name}</Typography.Text>
+                              <br />
+                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                Rank {v.rank ?? i + 1} · {v.mandatory_failures ?? 0} mandatory{" "}
+                                {v.mandatory_failures === 1 ? "failure" : "failures"}
+                              </Typography.Text>
+                            </div>
+                          </Space>
+                          <Space>
+                            <Typography.Text strong style={{ fontSize: 20 }}>
+                              {v.final_score ?? "-"}%
+                            </Typography.Text>
+                            <AntButton
+                              size="small"
+                              aria-label={`Details of ${v.vendor_name}`}
+                              onClick={() => setVendorPanel(v.tender_vendor_id)}
+                            >
+                              Details
+                            </AntButton>
+                          </Space>
+                        </Flex>
+                        <Progress
+                          percent={Number(v.final_score ?? 0)}
+                          showInfo={false}
+                          style={{ marginBottom: 0 }}
+                          aria-label={`Final score of ${v.vendor_name}`}
+                        />
+                      </Card>
+                    ))}
+                    {waiting.map((v) => (
+                      <Card key={v.tender_vendor_id} size="small">
+                        <Typography.Text strong>{v.vendor_name}</Typography.Text>
+                        <br />
+                        <Typography.Text type="secondary">
+                          Results open once all members submit.
+                          {v.awaiting && v.awaiting.length > 0
+                            ? ` Waiting for ${v.awaiting.map((a) => a.display_name).join(", ")}.`
+                            : ""}
+                        </Typography.Text>
+                      </Card>
+                    ))}
+                  </Flex>
+                </Col>
+                <Col xs={24} lg={12}>
+                  <Typography.Text strong>Score comparison</Typography.Text>
+                  {ranked.map((v) => (
+                    <Flex key={v.tender_vendor_id} align="center" gap={12}>
+                      <span style={{ width: 120 }}>{v.vendor_name}</span>
+                      <Progress
+                        percent={Number(v.final_score ?? 0)}
+                        style={{ flex: 1 }}
+                        aria-label={`Score of ${v.vendor_name}`}
+                      />
+                    </Flex>
+                  ))}
+                  <Descriptions
+                    size="small"
+                    column={1}
+                    style={{ marginTop: 8 }}
+                    items={ranked.map((v) => ({
+                      key: v.tender_vendor_id,
+                      label: `Compliance · ${v.vendor_name}`,
+                      children: (
+                        <>
+                          <b>{v.compliance_percent ?? "-"}%</b>
+                          {overrideBy.has(v.tender_vendor_id)
+                            ? ` · AI overridden ${overrideBy.get(v.tender_vendor_id)}%`
+                            : ""}
+                        </>
+                      ),
+                    }))}
+                  />
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    Rank and compliance are different metrics; failure counts remain visible.
+                  </Typography.Text>
+                </Col>
+              </Row>
+            </>
+          )}
+        </Card>
+      </div>
 
-      <section aria-labelledby="matrix-h">
-        <h2 id="matrix-h">Matrix</h2>
-        <div className="filter-bar" role="search" aria-label="Matrix filters">
-          <label>
-            Vendor{" "}
-            <select
+      <div id="matrix">
+        <Card
+          title="Requirements compliance · head to head"
+          extra={<Tag>{m?.rows.length ?? 0} shown</Tag>}
+          style={{ marginBottom: 16 }}
+        >
+          <Typography.Paragraph type="secondary">
+            Select any grade to inspect the AI suggestion, human review, final decision and
+            citation.
+          </Typography.Paragraph>
+          <Flex
+            gap={12}
+            wrap
+            align="center"
+            role="search"
+            aria-label="Matrix filters"
+            style={{ marginBottom: 16 }}
+          >
+            <label htmlFor="matrix-vendor">Vendor</label>
+            <Select
+              id="matrix-vendor"
               value={filters.tenderVendorId}
-              onChange={(e) => setFilters({ ...filters, tenderVendorId: e.target.value })}
-            >
-              <option value="">All vendors</option>
-              {vendorOptions.map((v) => (
-                <option key={v.tender_vendor_id} value={v.tender_vendor_id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
-          </label>{" "}
-          <label>
-            Importance{" "}
-            <select
+              onChange={(v) => setFilters({ ...filters, tenderVendorId: v })}
+              style={{ minWidth: 180 }}
+              options={[
+                { value: "", label: "All vendors" },
+                ...vendorOptions.map((v) => ({ value: v.tender_vendor_id, label: v.name })),
+              ]}
+            />
+            <label htmlFor="matrix-importance">Importance</label>
+            <Select
+              id="matrix-importance"
               value={filters.importance}
-              onChange={(e) => setFilters({ ...filters, importance: e.target.value })}
-            >
-              <option value="">Any</option>
-              {Object.entries(importanceLabel).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>{" "}
-          <label>
-            Grade{" "}
-            <select
+              onChange={(v) => setFilters({ ...filters, importance: v })}
+              style={{ minWidth: 140 }}
+              options={[
+                { value: "", label: "Any" },
+                ...Object.entries(importanceLabel).map(([v, l]) => ({ value: v, label: l })),
+              ]}
+            />
+            <label htmlFor="matrix-grade">Grade</label>
+            <Select
+              id="matrix-grade"
               value={filters.grade}
-              onChange={(e) => setFilters({ ...filters, grade: e.target.value })}
-            >
-              <option value="">Any</option>
-              {Object.entries(gradeLabel).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>{" "}
-          <label>
-            <input
-              type="checkbox"
+              onChange={(v) => setFilters({ ...filters, grade: v })}
+              style={{ minWidth: 190 }}
+              options={[
+                { value: "", label: "Any" },
+                ...Object.entries(gradeLabel).map(([v, l]) => ({ value: v, label: l })),
+              ]}
+            />
+            <Checkbox
               checked={filters.disagreement}
               onChange={(e) => setFilters({ ...filters, disagreement: e.target.checked })}
-            />{" "}
-            Disagreements only ({h.disagreement_count})
-          </label>
-        </div>
-        {matrix.state.status === "loading" ? (
-          <Loading label="Loading the matrix" />
-        ) : !m || m.rows.length === 0 ? (
-          <EmptyState title="No rows">Nothing matches these filters.</EmptyState>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <caption>Final grade of each requirement for each vendor</caption>
-              <thead>
-                <tr>
-                  <th scope="col">No</th>
-                  <th scope="col">Requirement</th>
-                  {m.vendors.map((v) => (
-                    <th scope="col" key={v.tender_vendor_id}>
-                      {v.name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {m.rows.map((r) => (
-                  <tr key={r.requirement.id}>
-                    <th scope="row">{r.requirement.display_no}</th>
-                    <td>
-                      {r.requirement.text}{" "}
-                      <span className="help">
+            >
+              Disagreements only ({h.disagreement_count})
+            </Checkbox>
+            <Button
+              onClick={() =>
+                setFilters({ tenderVendorId: "", importance: "", grade: "", disagreement: false })
+              }
+            >
+              Clear filters
+            </Button>
+          </Flex>
+          {matrix.state.status === "loading" ? (
+            <Loading label="Loading the matrix" />
+          ) : !m || m.rows.length === 0 ? (
+            <EmptyState title="No rows">Nothing matches these filters.</EmptyState>
+          ) : (
+            <Table<(typeof m.rows)[number]>
+              rowKey={(r) => r.requirement.id}
+              components={rowHeaderComponents}
+              dataSource={m.rows}
+              pagination={false}
+              tableLayout="fixed"
+              title={() => (
+                <Typography.Text strong>
+                  Final grade of each requirement for each vendor
+                </Typography.Text>
+              )}
+              columns={[
+                {
+                  title: "No",
+                  width: 90,
+                  onCell: rowHeader,
+                  render: (_, r) => r.requirement.display_no,
+                },
+                {
+                  title: "Requirement",
+                  render: (_, r) => (
+                    <div style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
+                      {r.requirement.text}
+                      <br />
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         {importanceLabel[r.requirement.importance] ?? r.requirement.importance}
-                      </span>
-                    </td>
-                    {r.cells.map((c) => (
-                      <td key={c.tender_vendor_id}>
-                        {!c.available ? (
-                          <span className="help">Not available yet</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="link"
-                            onClick={() =>
-                              setCellOf({
-                                requirementId: r.requirement.id,
-                                tenderVendorId: c.tender_vendor_id,
-                              })
-                            }
-                          >
-                            <span className="visually-hidden">
-                              Open {r.requirement.display_no} for{" "}
-                              {
-                                m.vendors.find((v) => v.tender_vendor_id === c.tender_vendor_id)
-                                  ?.name
-                              }
-                              :{" "}
-                            </span>
-                            {c.has_disagreement && (
-                              <StatusChip tone="warning" label="Disagreement" />
-                            )}{" "}
-                            <Grade grade={c.final_grade} />
-                          </button>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                      </Typography.Text>
+                    </div>
+                  ),
+                },
+                ...vendorOptions.map((v) => ({
+                  title: v.name,
+                  key: v.tender_vendor_id,
+                  width: 170,
+                  render: (_: unknown, r: (typeof m.rows)[number]) => {
+                    const c = r.cells.find((x) => x.tender_vendor_id === v.tender_vendor_id);
+                    if (!c) return null;
+                    return !c.available ? (
+                      <Typography.Text type="secondary">Not available yet</Typography.Text>
+                    ) : (
+                      <AntButton
+                        type="link"
+                        style={{
+                          padding: 0,
+                          height: "auto",
+                          whiteSpace: "normal",
+                          textAlign: "start",
+                        }}
+                        onClick={() =>
+                          setCellOf({
+                            requirementId: r.requirement.id,
+                            tenderVendorId: c.tender_vendor_id,
+                          })
+                        }
+                      >
+                        <span className="visually-hidden">
+                          Open {r.requirement.display_no} for {v.name}:{" "}
+                        </span>
+                        <Flex vertical gap={4} align="flex-start">
+                          {c.has_disagreement && <StatusChip tone="warning" label="Disagreement" />}
+                          <Grade grade={c.final_grade} />
+                        </Flex>
+                      </AntButton>
+                    );
+                  },
+                })),
+              ]}
+            />
+          )}
+        </Card>
+      </div>
 
-      {outcomes.state.status === "ready" && outcomes.state.data.length > 0 && (
-        <section aria-labelledby="screen-h">
-          <h2 id="screen-h">Rejected at screening</h2>
-          <ul>
-            {outcomes.state.data.map((o) => (
-              <li key={o.tender_vendor_id}>
-                <strong>{o.vendor_name}</strong>
-                {o.reason ? `: ${o.reason}` : ""}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <div id="governance">
+        <Typography.Title level={3} style={{ fontSize: 18 }}>
+          Governance & audit
+        </Typography.Title>
+        <Collapse
+          items={[
+            {
+              key: "scr",
+              label: (
+                <Space>
+                  Proposal screening outcomes{" "}
+                  <Tag color={rejected.length ? "warning" : "success"}>
+                    {ranking.length - rejected.length} accepted
+                    {rejected.length ? ` · ${rejected.length} rejected` : ""}
+                  </Tag>
+                </Space>
+              ),
+              children: (
+                <>
+                  {outcomes.state.status === "ready" && outcomes.state.data.length > 0 ? (
+                    <ul>
+                      {outcomes.state.data.map((o) => (
+                        <li key={o.tender_vendor_id}>
+                          <strong>{o.vendor_name}</strong> · Rejected at screening
+                          {o.reason ? `: ${o.reason}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <Typography.Paragraph>
+                      Every vendor passed proposal screening, with the committee recommendations and
+                      the Chair decision on record.
+                    </Typography.Paragraph>
+                  )}
+                  <LinkButton to={`/tenders/${tenderId}/screening`}>
+                    Review screening records
+                  </LinkButton>
+                </>
+              ),
+            },
+            {
+              key: "his",
+              label: (
+                <Space>
+                  Committee sign-off and decision history <Tag>{h.committee.length} members</Tag>
+                </Space>
+              ),
+              children: (
+                <>
+                  <Typography.Paragraph>
+                    Committee: {h.committee.map((c) => c.display_name).join(", ")}.{" "}
+                    {h.disagreement_count} final disagreements
+                    {locked ? " were resolved by the Chair" : " wait for the Chair"}. Protected
+                    grades are never shown to unauthorised roles.
+                  </Typography.Paragraph>
+                  {me.user.role === "admin" && (
+                    <LinkButton to="/audit">Open audit trail</LinkButton>
+                  )}
+                </>
+              ),
+            },
+            {
+              key: "met",
+              label: (
+                <Space>
+                  Scoring methodology and report metadata <Tag>Baseline v{h.baseline_version}</Tag>
+                </Space>
+              ),
+              children: (
+                <Descriptions
+                  size="small"
+                  column={{ xs: 1, md: 2 }}
+                  items={[
+                    {
+                      key: "w",
+                      label: "Weighted scoring",
+                      children: `Fully compliant = ${h.scoring_model.points_fully}, partially = ${h.scoring_model.points_partially}, non-compliant = ${h.scoring_model.points_non}. Mandatory failures remain flagged.`,
+                    },
+                    {
+                      key: "v",
+                      label: "Source and version",
+                      children: `Baseline v${h.baseline_version} · Report v${h.version_no}${
+                        h.ai_model_versions.length
+                          ? ` · AI model ${h.ai_model_versions.join(", ")}`
+                          : ""
+                      }`,
+                    },
+                  ]}
+                />
+              ),
+            },
+          ]}
+        />
+      </div>
+
+      {locked ? (
+        <Alert
+          style={{ marginTop: 16 }}
+          showIcon
+          type="success"
+          icon={<LockOutlined />}
+          title={`${h.status === "superseded" ? "Superseded" : "Finalized"} record · Read-only`}
+          description="The report is an immutable version. Reopening requires a reason and produces a new report version. Export is allowed; direct editing is not."
+          action={
+            reopen?.allowed ? (
+              <Button type="button" onClick={() => setReopening(true)}>
+                Reopen report
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : null}
 
       {cellOf && (
         <CellDialog
@@ -564,6 +867,76 @@ export function Report() {
           }}
         />
       )}
+
+      <Drawer
+        open={panel !== null}
+        onClose={() => setVendorPanel(null)}
+        size={460}
+        title={panel ? `${panel.vendor_name} · Vendor details` : ""}
+      >
+        {panel && (
+          <Flex vertical gap={16}>
+            {panel.fails_mandatory ? (
+              <Alert
+                showIcon
+                type="warning"
+                title="Mandatory failures"
+                description={`${panel.mandatory_failures} mandatory requirement${
+                  (panel.mandatory_failures ?? 0) > 1 ? "s" : ""
+                } failed. This does not automatically exclude the vendor.`}
+              />
+            ) : (
+              <Alert showIcon type="success" title="No mandatory requirement failed" />
+            )}
+            <Row gutter={12}>
+              <Col span={12}>
+                <Card size="small">
+                  <Statistic title="Final score" value={`${panel.final_score ?? "-"}%`} />
+                </Card>
+              </Col>
+              <Col span={12}>
+                <Card size="small">
+                  <Statistic title="Compliance" value={`${panel.compliance_percent ?? "-"}%`} />
+                </Card>
+              </Col>
+            </Row>
+            <Descriptions
+              bordered
+              size="small"
+              column={1}
+              items={[
+                { key: "d", label: "Grade distribution", children: grades(panel) },
+                { key: "a", label: "Agreement", children: `${panel.agreement_level ?? "-"}%` },
+              ]}
+            />
+            <Button
+              variant="primary"
+              onClick={() => {
+                setFilters({ ...filters, tenderVendorId: panel.tender_vendor_id });
+                setVendorPanel(null);
+                jump("matrix");
+              }}
+            >
+              View requirement results
+            </Button>
+          </Flex>
+        )}
+      </Drawer>
+
+      <Modal
+        open={method}
+        onCancel={() => setMethod(false)}
+        footer={<Button onClick={() => setMethod(false)}>Close</Button>}
+        title="Scoring methodology"
+      >
+        <Typography.Paragraph>
+          Fully compliant = {h.scoring_model.points_fully}, partially compliant ={" "}
+          {h.scoring_model.points_partially}, non-compliant = {h.scoring_model.points_non}.
+          Mandatory failures remain visible and do not automatically remove a vendor from the
+          ranking.
+        </Typography.Paragraph>
+      </Modal>
+
       <ConfirmDialog
         open={confirmFinalize}
         onOpenChange={setConfirmFinalize}
@@ -602,6 +975,7 @@ function CellDialog({
   onClose: () => void;
   onDecided: () => void;
 }) {
+  const viewer = useViewer();
   const api = useApi();
   const announce = useAnnounce();
   const { me } = useSession();
@@ -663,143 +1037,143 @@ function CellDialog({
   }
 
   return (
-    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog wide">
-          <Dialog.Title asChild>
-            <h2>{d ? `${d.requirement.display_no}: ${d.requirement.text}` : "Requirement"}</h2>
-          </Dialog.Title>
-          <Dialog.Description>
-            Each member's grade and note, the AI's grade and the evidence behind it.
-          </Dialog.Description>
-          {detail.state.status === "loading" && <Loading label="Loading the cell" />}
-          {detail.state.status === "error" && (
-            <ErrorNotice error={detail.state.error} onRetry={detail.reload} />
+    <Drawer
+      open
+      size={640}
+      onClose={onClose}
+      title={d ? `${d.requirement.display_no}: ${d.requirement.text}` : "Requirement"}
+      extra={<Button onClick={onClose}>Close</Button>}
+    >
+      <Typography.Paragraph type="secondary">
+        Each member&apos;s grade and note, the AI&apos;s grade and the evidence behind it.
+      </Typography.Paragraph>
+      {detail.state.status === "loading" && <Loading label="Loading the cell" />}
+      {detail.state.status === "error" && (
+        <ErrorNotice error={detail.state.error} onRetry={detail.reload} />
+      )}
+      {d && (
+        <>
+          <Typography.Paragraph>
+            Final grade: <Grade grade={d.final_grade} />{" "}
+            {d.basis && (
+              <Typography.Text type="secondary">
+                ({d.basis === "all_agree" ? "all members agree" : "Chair's decision"})
+              </Typography.Text>
+            )}
+          </Typography.Paragraph>
+          {d.justification && (
+            <Typography.Paragraph>
+              <strong>Chair&apos;s justification:</strong> {d.justification}
+              {d.decided_by ? ` (${d.decided_by.display_name}` : ""}
+              {d.decided_by && d.decided_at
+                ? `, ${new Date(d.decided_at).toLocaleString()})`
+                : d.decided_by
+                  ? ")"
+                  : ""}
+            </Typography.Paragraph>
           )}
-          {d && (
-            <>
-              <p>
-                Final grade: <Grade grade={d.final_grade} />{" "}
-                {d.basis && (
-                  <span className="help">
-                    ({d.basis === "all_agree" ? "all members agree" : "Chair's decision"})
-                  </span>
-                )}
-              </p>
-              {d.justification && (
-                <p>
-                  <strong>Chair's justification:</strong> {d.justification}
-                  {d.decided_by ? ` (${d.decided_by.display_name}` : ""}
-                  {d.decided_by && d.decided_at
-                    ? `, ${new Date(d.decided_at).toLocaleString()})`
-                    : d.decided_by
-                      ? ")"
-                      : ""}
-                </p>
-              )}
-              {(d.history?.length ?? 0) > 0 && (
-                <section aria-label="Earlier decisions">
-                  <h3>Earlier decisions</h3>
-                  <ul>
-                    {d.history!.map((h, i) => (
-                      <li key={i}>
-                        <Grade grade={h.final_grade} /> {h.justification}{" "}
-                        <span className="help">
-                          {h.decided_by ? `${h.decided_by.display_name}, ` : ""}
-                          {h.decided_at
-                            ? `decided ${new Date(h.decided_at).toLocaleString()}, `
-                            : ""}
-                          replaced {new Date(h.superseded_at).toLocaleString()}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-              {d.ai && (
-                <section aria-label="AI grade">
-                  <h3>AI</h3>
-                  <p>
-                    <Grade grade={d.ai.grade} /> {d.ai.rationale_summary}
-                  </p>
-                  {d.ai.citations.length > 0 && (
-                    <ul>
-                      {d.ai.citations.map((c) => (
-                        <li key={c.citation_no}>
-                          <Link
-                            to={`/documents/${c.document_version_id}/view?passage=${c.passage_id}`}
-                          >
-                            Page {c.page_no}
-                          </Link>
-                          : {c.excerpt}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              )}
-              <h3>Members</h3>
+          {(d.history?.length ?? 0) > 0 && (
+            <section aria-label="Earlier decisions">
+              <Typography.Title level={3} style={{ fontSize: 16 }}>
+                Earlier decisions
+              </Typography.Title>
               <ul>
-                {d.member_grades.map((g) => (
-                  <li key={g.member.id}>
-                    <strong>{g.member.display_name}</strong>: <Grade grade={g.grade} />{" "}
-                    <span className="help">
-                      {reviewStateLabel[g.review_state ?? "not_reviewed"] ?? ""}
-                    </span>
-                    {g.note && <div>{g.note}</div>}
+                {d.history!.map((h, i) => (
+                  <li key={i}>
+                    <Grade grade={h.final_grade} /> {h.justification}{" "}
+                    <Typography.Text type="secondary">
+                      {h.decided_by ? `${h.decided_by.display_name}, ` : ""}
+                      {h.decided_at ? `decided ${new Date(h.decided_at).toLocaleString()}, ` : ""}
+                      replaced {new Date(h.superseded_at).toLocaleString()}
+                    </Typography.Text>
                   </li>
                 ))}
               </ul>
-              {canDecide && (differs || settled) && (
-                <section aria-label="Chair's final grade">
-                  <h3>Chair's final grade</h3>
-                  <fieldset>
-                    <legend>Final grade</legend>
-                    {Object.entries(gradeLabel).map(([v, l]) => (
-                      <label key={v}>
-                        <input
-                          type="radio"
-                          name="final-grade"
-                          value={v}
-                          checked={grade === v}
-                          onChange={() => setGrade(v)}
-                        />{" "}
-                        {l}
-                      </label>
-                    ))}
-                  </fieldset>
-                  <div className="field">
-                    <label htmlFor="why">Justification (required)</label>
-                    <textarea
-                      id="why"
-                      rows={3}
-                      value={why}
-                      onChange={(e) => setWhy(e.target.value)}
-                    />
-                    <span className="help">At least {min} characters, so the report says why.</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    disabled={busy || !grade || why.trim().length < min}
-                    onClick={() => void record()}
-                  >
-                    Record final grade
-                  </Button>
-                </section>
-              )}
-            </>
+            </section>
           )}
-          <div className="dialog-actions">
-            <Dialog.Close asChild>
-              <button type="button" className="btn">
-                Close
-              </button>
-            </Dialog.Close>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          {d.ai && (
+            <section aria-label="AI grade">
+              <Typography.Title level={3} style={{ fontSize: 16 }}>
+                AI
+              </Typography.Title>
+              <Typography.Paragraph>
+                <Grade grade={d.ai.grade} /> {d.ai.rationale_summary}
+              </Typography.Paragraph>
+              {d.ai.citations.length > 0 && (
+                <ul>
+                  {d.ai.citations.map((c) => (
+                    <li key={c.citation_no}>
+                      <AntButton
+                        type="link"
+                        style={{ padding: 0 }}
+                        onClick={() => viewer.open(c.document_version_id, c.passage_id)}
+                      >
+                        Page {c.page_no}
+                      </AntButton>
+                      : {c.excerpt}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+          <Typography.Title level={3} style={{ fontSize: 16 }}>
+            Members
+          </Typography.Title>
+          <ul>
+            {d.member_grades.map((g) => (
+              <li key={g.member.id}>
+                <strong>{g.member.display_name}</strong>: <Grade grade={g.grade} />{" "}
+                <Typography.Text type="secondary">
+                  {reviewStateLabel[g.review_state ?? "not_reviewed"] ?? ""}
+                </Typography.Text>
+                {g.note && <div>{g.note}</div>}
+              </li>
+            ))}
+          </ul>
+          {canDecide && (differs || settled) && (
+            <section aria-label="Chair's final grade">
+              <Typography.Title level={3} style={{ fontSize: 16 }}>
+                Chair&apos;s final grade
+              </Typography.Title>
+              <fieldset style={{ border: 0, padding: 0 }}>
+                <legend>Final grade</legend>
+                <Radio.Group
+                  value={grade || undefined}
+                  onChange={(e) => setGrade(e.target.value as string)}
+                  style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}
+                >
+                  {Object.entries(gradeLabel).map(([v, l]) => (
+                    <Radio key={v} value={v}>
+                      {l}
+                    </Radio>
+                  ))}
+                </Radio.Group>
+              </fieldset>
+              <label htmlFor="why" style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>
+                Justification (required)
+              </label>
+              <Input.TextArea
+                id="why"
+                rows={3}
+                value={why}
+                onChange={(e) => setWhy(e.target.value)}
+              />
+              <Typography.Paragraph type="secondary">
+                At least {min} characters, so the report says why.
+              </Typography.Paragraph>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={busy || !grade || why.trim().length < min}
+                onClick={() => void record()}
+              >
+                Record final grade
+              </Button>
+            </section>
+          )}
+        </>
+      )}
+    </Drawer>
   );
 }

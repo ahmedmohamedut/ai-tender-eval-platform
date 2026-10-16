@@ -181,7 +181,7 @@ Tables are grouped by the eleven areas in the overview. The standard columns fro
 
 | Table | Key columns | Rules and notes |
 | --- | --- | --- |
-| **vendors** | name, normalized_name, website, normalized_domain, description, registration_no, contact_person | Reusable across tenders. A new vendor is checked against normalized_name and normalized_domain, and a match shows a warning with a link to the existing profile. It is not a hard rule. website must be a valid URL. |
+| **vendors** | name, normalized_name, website, normalized_domain, description (shown as Notes), registration_no, contact_person, legal_name, country, industry, email, phone, address, status (active, inactive) | Reusable across tenders. A new vendor is checked against normalized_name and normalized_domain, and a match shows a warning with a link to the existing profile. It is not a hard rule. website must be a valid URL. An inactive vendor stays on its tenders and cannot be added to another one. |
 | **tender_vendors** | tender_id, vendor_id, added_by, added_at, removed_at | One row per vendor in a tender, unique on (tender_id, vendor_id). Everything vendor-specific in a tender hangs on this row, so removing a vendor from a tender never touches the vendor record. |
 | **proposal_versions** | tender_vendor_id, version_no, status, change_reason, uploaded_by, uploaded_at, superseded_at | status is uploaded, in_screening, accepted, rejected, resubmission_requested, evaluating, evaluated or superseded. A partial unique index allows only one version per vendor that is not superseded. change_reason is required from version 2 when AI evaluation has already run. |
 | **proposal_version_files** | proposal_version_id, document_version_id, file_role, sort_order | file_role is main or annex, and each proposal version has exactly one main file. An unchanged annex can be linked to the next version without uploading it again. |
@@ -600,7 +600,7 @@ Nothing is hard-deleted, so every foreign key uses ON DELETE RESTRICT and every 
 | tender_members | (user_id) where status is active | My tenders and the access policies |
 | jobs | (tender_id, queued_at), and (status) where status is queued or running | The job center, overlap checks and workers |
 | notifications | (user_id, created_at), and (user_id) where read_at is empty | The notification center and the unread count |
-| vendors | trigram indexes on normalized_name and normalized_domain | Near-match warnings (UX-VND-02) |
+| vendors | trigram indexes on normalized_name and normalized_domain; index on status | Near-match warnings (UX-VND-02) |
 | report_grades | (report_version_id, tender_vendor_id) | The report matrix, one vendor at a time |
 | audit_events | As listed in Audit trail and history | Audit search and history panels |
 

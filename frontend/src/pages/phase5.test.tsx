@@ -1,7 +1,7 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { accessibilityViolations, fakeApi, makeMe, renderPage } from "../test/helpers";
+import { accessibilityViolations, choose, fakeApi, makeMe, renderPage } from "../test/helpers";
 import { Audit } from "./Audit";
 import { Notifications } from "./Notifications";
 import { ChairPanel } from "./ChairPanel";
@@ -129,7 +129,7 @@ describe("Chair panel", () => {
       expect(screen.queryByText("Loading the committee's progress")).not.toBeInTheDocument(),
     );
     expect(
-      screen.queryByRole("heading", { name: "Evaluations by member" }),
+      screen.queryByRole("heading", { name: /Progress · vendor × member/ }),
     ).not.toBeInTheDocument();
   });
 });
@@ -277,6 +277,71 @@ describe("PG-19 Consolidated report", () => {
     );
   }
 
+  it("shows one grade column for every vendor that has a cell, even one the vendor list leaves out", async () => {
+    const TV2 = "99999999-9999-4999-8999-999999999999";
+    const api = handler((call) => {
+      if (call === "GET /tenders/{tenderId}/report/overview")
+        return {
+          data: {
+            vendors: [TV, TV2].map((id, i) => ({
+              tender_vendor_id: id,
+              vendor_name: i ? "Beta Systems" : "Acme Cloud",
+              available: true,
+              outcome: "evaluated",
+              rank: i + 1,
+              final_score: 50 - i * 10,
+              compliance_percent: 10,
+              mandatory_failures: 0,
+              fails_mandatory: false,
+              counts: {},
+              awaiting: [],
+            })),
+          },
+        };
+      if (call === "GET /tenders/{tenderId}/report/matrix")
+        return {
+          data: {
+            vendors: [{ tender_vendor_id: TV, name: "Acme Cloud" }],
+            rows: [
+              {
+                requirement: {
+                  id: R1,
+                  display_no: "REQ-001",
+                  text: "Encrypt data at rest",
+                  category: "",
+                  importance: "mandatory",
+                },
+                cells: [
+                  {
+                    tender_vendor_id: TV,
+                    available: true,
+                    has_disagreement: false,
+                    final_grade: "fully_compliant",
+                  },
+                  {
+                    tender_vendor_id: TV2,
+                    available: true,
+                    has_disagreement: false,
+                    final_grade: "non_compliant",
+                  },
+                ],
+              },
+            ],
+          },
+        };
+      return undefined;
+    });
+    renderPage(page(), { api, me: chair(), route: `/tenders/${T}/report` });
+    const table = (
+      await screen.findByText("Final grade of each requirement for each vendor")
+    ).closest(".ant-table-wrapper") as HTMLElement;
+    expect(within(table).getByRole("columnheader", { name: "Acme Cloud" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Beta Systems" })).toBeInTheDocument();
+    expect(
+      within(table).getByRole("button", { name: /Open REQ-001 for Beta Systems/ }),
+    ).toBeInTheDocument();
+  });
+
   it("shows the Chair the status, ranking and a disabled finalize with its reason", async () => {
     const api = handler(() => undefined);
     const { container } = renderPage(page(), {
@@ -285,8 +350,12 @@ describe("PG-19 Consolidated report", () => {
       route: `/tenders/${T}/report`,
     });
     expect(await screen.findByText("Report version 1")).toBeInTheDocument();
-    expect(screen.getAllByText("Acme Cloud", { selector: "th" }).length).toBeGreaterThan(0);
-    expect(screen.getByText(/1 failed \(flag\)/)).toBeInTheDocument();
+    expect(screen.getByText("Vendor comparison")).toBeInTheDocument();
+    expect(screen.getByText("Requirements compliance · head to head")).toBeInTheDocument();
+    expect(screen.getAllByText("Acme Cloud").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Rank 1 · 1 mandatory failure/)).toBeInTheDocument();
+    expect(screen.getByText(/Mandatory requirement failures/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Details of Acme Cloud" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Finalize report" })).toBeDisabled();
     expect(screen.getByText(/1 disagreements still need a final grade/)).toBeInTheDocument();
     expect(await accessibilityViolations(container)).toEqual([]);
@@ -485,7 +554,7 @@ describe("PG-20 Audit trail", () => {
     const { container } = renderPage(<Audit />, { api, me: makeMe("admin") });
     expect(await screen.findByText("Report finalized", { selector: "th" })).toBeInTheDocument();
     expect(await accessibilityViolations(container)).toEqual([]);
-    await userEvent.selectOptions(screen.getByLabelText("Tender"), T);
+    await choose("Tender", "Cloud platform");
     await userEvent.click(screen.getByRole("button", { name: "Search" }));
     await waitFor(() => expect(queries.some((q) => q.tender_id === T)).toBe(true));
     await userEvent.click(screen.getByRole("tab", { name: "Proposal access" }));

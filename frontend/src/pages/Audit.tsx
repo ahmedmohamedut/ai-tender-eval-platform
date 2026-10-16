@@ -1,6 +1,16 @@
+import { Card, DatePicker, Flex, Select, Space, Table, Tabs, Typography } from "antd";
+import dayjs from "dayjs";
 import { useCallback, useEffect, useState } from "react";
 import { ExportButton } from "../components/ExportButton";
-import { Button, EmptyState, ErrorNotice, Field, Loading } from "../components/ui";
+import {
+  Button,
+  EmptyState,
+  ErrorNotice,
+  Field,
+  Loading,
+  rowHeader,
+  rowHeaderComponents,
+} from "../components/ui";
 import { unwrap, useApi } from "../lib/api";
 import type { components } from "../api/generated/schema";
 
@@ -154,106 +164,95 @@ export function Audit() {
   const rows = tab === "trail" ? events.length : access.length;
   return (
     <>
-      <h1>Audit trail</h1>
-      <div role="tablist" aria-label="Log">
-        <Button
-          type="button"
-          role="tab"
-          aria-selected={tab === "trail"}
-          onClick={() => setTab("trail")}
-        >
-          Changes
-        </Button>{" "}
-        <Button
-          type="button"
-          role="tab"
-          aria-selected={tab === "access"}
-          onClick={() => setTab("access")}
-        >
-          Proposal access
-        </Button>
-      </div>
-      <form
-        className="filters"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setApplied(draft);
-        }}
-      >
-        <Field label="Tender">
-          {(p) => (
-            <select
-              id={p.id}
-              value={draft.tenderId}
-              onChange={(e) => setDraft({ ...draft, tenderId: e.target.value })}
-            >
-              <option value="">All tenders</option>
-              {tenders.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        {tab === "trail" && (
-          <Field label="Action">
-            {(p) => (
-              <select
-                id={p.id}
-                value={draft.action}
-                onChange={(e) => setDraft({ ...draft, action: e.target.value })}
-              >
-                <option value="">All actions</option>
-                {ACTIONS.map((a) => (
-                  <option key={a} value={a}>
-                    {actionText(a)}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-        )}
-        <Field label="From" help="Without a start date the last 30 days are shown.">
-          {(p) => (
-            <input
-              id={p.id}
-              type="date"
-              value={draft.from}
-              aria-describedby={p.describedBy}
-              onChange={(e) => setDraft({ ...draft, from: e.target.value })}
-            />
-          )}
-        </Field>
-        <Field label="To">
-          {(p) => (
-            <input
-              id={p.id}
-              type="date"
-              value={draft.to}
-              onChange={(e) => setDraft({ ...draft, to: e.target.value })}
-            />
-          )}
-        </Field>
-        <Button type="submit" variant="primary">
-          Search
-        </Button>{" "}
-        <Button
-          type="button"
-          onClick={() => {
-            setDraft(NONE);
-            setApplied(NONE);
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+        Audit trail
+      </Typography.Title>
+      <Tabs
+        aria-label="Log"
+        activeKey={tab}
+        onChange={(k) => setTab(k as "trail" | "access")}
+        items={[
+          { key: "trail", label: "Changes" },
+          { key: "access", label: "Proposal access" },
+        ]}
+      />
+      <Card style={{ marginBottom: 16 }}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setApplied(draft);
           }}
         >
-          Clear filters
-        </Button>
-        {tab === "trail" && (
-          <>
-            {" "}
-            <ExportButton label="Export CSV" start={startExport} />
-          </>
-        )}
-      </form>
+          <Flex gap={16} wrap align="flex-end">
+            <Field label="Tender">
+              {(p) => (
+                <Select
+                  id={p.id}
+                  value={draft.tenderId}
+                  onChange={(v) => setDraft({ ...draft, tenderId: v })}
+                  style={{ minWidth: 220 }}
+                  showSearch={{ optionFilterProp: "label" }}
+                  options={[
+                    { value: "", label: "All tenders" },
+                    ...tenders.map((t) => ({ value: t.id, label: t.name })),
+                  ]}
+                />
+              )}
+            </Field>
+            {tab === "trail" && (
+              <Field label="Action">
+                {(p) => (
+                  <Select
+                    id={p.id}
+                    value={draft.action}
+                    onChange={(v) => setDraft({ ...draft, action: v })}
+                    style={{ minWidth: 220 }}
+                    showSearch={{ optionFilterProp: "label" }}
+                    options={[
+                      { value: "", label: "All actions" },
+                      ...ACTIONS.map((a) => ({ value: a, label: actionText(a) })),
+                    ]}
+                  />
+                )}
+              </Field>
+            )}
+            <Field label="From" help="Without a start date the last 30 days are shown.">
+              {(p) => (
+                <DatePicker
+                  id={p.id}
+                  aria-describedby={p.describedBy}
+                  value={draft.from ? dayjs(draft.from) : null}
+                  onChange={(d) => setDraft({ ...draft, from: d ? d.format("YYYY-MM-DD") : "" })}
+                />
+              )}
+            </Field>
+            <Field label="To">
+              {(p) => (
+                <DatePicker
+                  id={p.id}
+                  value={draft.to ? dayjs(draft.to) : null}
+                  onChange={(d) => setDraft({ ...draft, to: d ? d.format("YYYY-MM-DD") : "" })}
+                />
+              )}
+            </Field>
+          </Flex>
+          <Space wrap>
+            <Button type="submit" variant="primary">
+              Search
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setDraft(NONE);
+                setApplied(NONE);
+              }}
+            >
+              Clear filters
+            </Button>
+            {tab === "trail" && <ExportButton label="Export CSV" start={startExport} />}
+          </Space>
+        </form>
+      </Card>
       {state === "error" && error ? (
         <ErrorNotice error={error} onRetry={() => setApplied({ ...applied })} />
       ) : state === "loading" && rows === 0 ? (
@@ -261,60 +260,52 @@ export function Audit() {
       ) : rows === 0 ? (
         <EmptyState title="Nothing found">No entries match these filters.</EmptyState>
       ) : tab === "trail" ? (
-        <div className="table-wrap">
-          <table>
-            <caption>Changes, newest first</caption>
-            <thead>
-              <tr>
-                <th scope="col">When</th>
-                <th scope="col">Who</th>
-                <th scope="col">Action</th>
-                <th scope="col">Object</th>
-                <th scope="col">Source</th>
-                <th scope="col">Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((e) => (
-                <tr key={e.id}>
-                  <td>{new Date(e.occurred_at).toLocaleString()}</td>
-                  <td>
-                    {e.actor?.display_name ?? "-"}
-                    {e.actor_role ? <span className="help"> ({e.actor_role})</span> : null}
-                  </td>
-                  <th scope="row">{actionText(e.action)}</th>
-                  <td>{e.object_type}</td>
-                  <td>{sourceText[e.source] ?? e.source}</td>
-                  <td>{e.note ?? ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table<AuditEvent>
+          rowKey="id"
+          components={rowHeaderComponents}
+          dataSource={events}
+          pagination={false}
+          scroll={{ x: "max-content" }}
+          title={() => <Typography.Text strong>Changes, newest first</Typography.Text>}
+          columns={[
+            { title: "When", render: (_, e) => new Date(e.occurred_at).toLocaleString() },
+            {
+              title: "Who",
+              render: (_, e) => (
+                <>
+                  {e.actor?.display_name ?? "-"}
+                  {e.actor_role ? (
+                    <Typography.Text type="secondary"> ({e.actor_role})</Typography.Text>
+                  ) : null}
+                </>
+              ),
+            },
+            { title: "Action", onCell: rowHeader, render: (_, e) => actionText(e.action) },
+            { title: "Object", dataIndex: "object_type" },
+            { title: "Source", render: (_, e) => sourceText[e.source] ?? e.source },
+            { title: "Note", render: (_, e) => e.note ?? "" },
+          ]}
+        />
       ) : (
-        <div className="table-wrap">
-          <table>
-            <caption>Proposal files opened, newest first</caption>
-            <thead>
-              <tr>
-                <th scope="col">When</th>
-                <th scope="col">Who</th>
-                <th scope="col">Document version</th>
-                <th scope="col">Watermark</th>
-              </tr>
-            </thead>
-            <tbody>
-              {access.map((e) => (
-                <tr key={e.id}>
-                  <td>{new Date(e.opened_at).toLocaleString()}</td>
-                  <th scope="row">{e.user.display_name}</th>
-                  <td>{e.document_version_id}</td>
-                  <td>{e.watermark_shown ? "Shown" : "Not shown"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table<AccessEvent>
+          rowKey="id"
+          components={rowHeaderComponents}
+          dataSource={access}
+          pagination={false}
+          scroll={{ x: "max-content" }}
+          title={() => (
+            <Typography.Text strong>Proposal files opened, newest first</Typography.Text>
+          )}
+          columns={[
+            { title: "When", render: (_, e) => new Date(e.opened_at).toLocaleString() },
+            { title: "Who", onCell: rowHeader, render: (_, e) => e.user.display_name },
+            { title: "Document version", dataIndex: "document_version_id" },
+            {
+              title: "Watermark",
+              render: (_, e) => (e.watermark_shown ? "Shown" : "Not shown"),
+            },
+          ]}
+        />
       )}
       {next && state === "ready" && (
         <p>

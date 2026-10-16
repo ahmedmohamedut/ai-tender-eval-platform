@@ -1,3 +1,4 @@
+import { Card, Flex, Input, Select, Space, Table, Typography } from "antd";
 import { useState } from "react";
 import {
   Button,
@@ -7,6 +8,8 @@ import {
   Field,
   Loading,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { ApiError, unwrap, useApi } from "../lib/api";
@@ -58,52 +61,61 @@ export function Users() {
 
   return (
     <>
-      <h1>Users</h1>
-      <div className="toolbar" role="search">
-        <div className="field grow" style={{ margin: 0 }}>
-          <label htmlFor="user-search">Search users</label>
-          <input
-            id="user-search"
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Name or email"
-          />
-        </div>
-        <div className="field" style={{ margin: 0 }}>
-          <label htmlFor="user-role">Role</label>
-          <select
-            id="user-role"
-            value={role}
-            onChange={(e) => setRole(e.target.value as UserRole | "")}
-          >
-            <option value="">All roles</option>
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {roleLabel[r]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field" style={{ margin: 0 }}>
-          <label htmlFor="user-status">Status</label>
-          <select
-            id="user-status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as UserStatus | "")}
-          >
-            <option value="">All statuses</option>
-            {(["invited", "active", "deactivated"] as UserStatus[]).map((s) => (
-              <option key={s} value={s}>
-                {userStatusLabel[s]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <Button variant="primary" onClick={() => setInviting(true)}>
-          Invite user
-        </Button>
-      </div>
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+        Users
+      </Typography.Title>
+      <Card style={{ marginBottom: 16 }}>
+        <Flex gap={16} wrap align="flex-end" role="search">
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <label htmlFor="user-search" style={{ display: "block", marginBottom: 4 }}>
+              Search users
+            </label>
+            <Input.Search
+              id="user-search"
+              allowClear
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Name or email"
+            />
+          </div>
+          <div>
+            <label htmlFor="user-role" style={{ display: "block", marginBottom: 4 }}>
+              Role
+            </label>
+            <Select
+              id="user-role"
+              value={role}
+              onChange={(v) => setRole(v as UserRole | "")}
+              style={{ minWidth: 180 }}
+              options={[
+                { value: "", label: "All roles" },
+                ...ROLES.map((r) => ({ value: r, label: roleLabel[r] })),
+              ]}
+            />
+          </div>
+          <div>
+            <label htmlFor="user-status" style={{ display: "block", marginBottom: 4 }}>
+              Status
+            </label>
+            <Select
+              id="user-status"
+              value={status}
+              onChange={(v) => setStatus(v as UserStatus | "")}
+              style={{ minWidth: 180 }}
+              options={[
+                { value: "", label: "All statuses" },
+                ...(["invited", "active", "deactivated"] as UserStatus[]).map((s) => ({
+                  value: s,
+                  label: userStatusLabel[s],
+                })),
+              ]}
+            />
+          </div>
+          <Button variant="primary" onClick={() => setInviting(true)}>
+            Invite user
+          </Button>
+        </Flex>
+      </Card>
 
       {error && <ErrorNotice error={error} />}
       {state.status === "loading" && <Loading label="Loading users" />}
@@ -114,70 +126,69 @@ export function Users() {
             Change the search or the filters, or invite a user.
           </EmptyState>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <caption>Users ({state.data.total ?? state.data.items.length})</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Email</th>
-                  <th scope="col">Role</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {state.data.items.map((u) => (
-                  <tr key={u.id}>
-                    <th scope="row">{u.display_name}</th>
-                    <td>{u.email}</td>
-                    <td>{roleLabel[u.role]}</td>
-                    <td>
-                      <StatusChip
-                        label={userStatusLabel[u.status]}
-                        tone={userStatusTone[u.status]}
-                      />
-                    </td>
-                    <td>
-                      <Button onClick={() => setChanging(u)}>Change role</Button>{" "}
-                      {u.status === "invited" && (
-                        <Button
-                          onClick={() =>
-                            act("Invitation sent again.", () =>
-                              unwrap(
-                                api.POST("/users/{userId}/resend-invitation", {
-                                  params: { path: { userId: u.id } },
-                                }),
-                              ),
-                            )
-                          }
-                        >
-                          Resend invitation
-                        </Button>
-                      )}
-                      {u.status === "deactivated" ? (
-                        <Button
-                          onClick={() =>
-                            act(`${u.display_name} is active again.`, () =>
-                              unwrap(
-                                api.POST("/users/{userId}/reactivate", {
-                                  params: { path: { userId: u.id } },
-                                }),
-                              ),
-                            )
-                          }
-                        >
-                          Reactivate
-                        </Button>
-                      ) : (
-                        <Button onClick={() => setDeactivating(u)}>Deactivate</Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table<User>
+            rowKey="id"
+            components={rowHeaderComponents}
+            dataSource={state.data.items}
+            pagination={false}
+            scroll={{ x: "max-content" }}
+            title={() => (
+              <Typography.Text strong>
+                Users ({state.data.total ?? state.data.items.length})
+              </Typography.Text>
+            )}
+            columns={[
+              { title: "Name", onCell: rowHeader, render: (_, u) => u.display_name },
+              { title: "Email", dataIndex: "email" },
+              { title: "Role", render: (_, u) => roleLabel[u.role] },
+              {
+                title: "Status",
+                render: (_, u) => (
+                  <StatusChip label={userStatusLabel[u.status]} tone={userStatusTone[u.status]} />
+                ),
+              },
+              {
+                title: "Actions",
+                render: (_, u) => (
+                  <Space wrap>
+                    <Button onClick={() => setChanging(u)}>Change role</Button>
+                    {u.status === "invited" && (
+                      <Button
+                        onClick={() =>
+                          act("Invitation sent again.", () =>
+                            unwrap(
+                              api.POST("/users/{userId}/resend-invitation", {
+                                params: { path: { userId: u.id } },
+                              }),
+                            ),
+                          )
+                        }
+                      >
+                        Resend invitation
+                      </Button>
+                    )}
+                    {u.status === "deactivated" ? (
+                      <Button
+                        onClick={() =>
+                          act(`${u.display_name} is active again.`, () =>
+                            unwrap(
+                              api.POST("/users/{userId}/reactivate", {
+                                params: { path: { userId: u.id } },
+                              }),
+                            ),
+                          )
+                        }
+                      >
+                        Reactivate
+                      </Button>
+                    ) : (
+                      <Button onClick={() => setDeactivating(u)}>Deactivate</Button>
+                    )}
+                  </Space>
+                ),
+              },
+            ]}
+          />
         ))}
 
       <InviteDialog
@@ -251,7 +262,7 @@ function InviteDialog({
     >
       <Field label="Email (required)">
         {({ id }) => (
-          <input
+          <Input
             id={id}
             type="email"
             value={email}
@@ -262,7 +273,7 @@ function InviteDialog({
       </Field>
       <Field label="Name (required)">
         {({ id }) => (
-          <input
+          <Input
             id={id}
             type="text"
             value={name}
@@ -273,13 +284,13 @@ function InviteDialog({
       </Field>
       <Field label="Role">
         {({ id }) => (
-          <select id={id} value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {roleLabel[r]}
-              </option>
-            ))}
-          </select>
+          <Select
+            id={id}
+            value={role}
+            onChange={(v) => setRole(v)}
+            style={{ width: "100%" }}
+            options={ROLES.map((r) => ({ value: r, label: roleLabel[r] }))}
+          />
         )}
       </Field>
     </ConfirmDialog>
@@ -307,13 +318,13 @@ function ChangeRoleDialog({
     >
       <Field label="Role">
         {({ id }) => (
-          <select id={id} value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {roleLabel[r]}
-              </option>
-            ))}
-          </select>
+          <Select
+            id={id}
+            value={role}
+            onChange={(v) => setRole(v)}
+            style={{ width: "100%" }}
+            options={ROLES.map((r) => ({ value: r, label: roleLabel[r] }))}
+          />
         )}
       </Field>
     </ConfirmDialog>
@@ -341,7 +352,9 @@ function DeactivateDialog({
       onConfirm={() => user && onDeactivate(user, "kept_as_history", note)}
     >
       <Field label="Note">
-        {({ id }) => <textarea id={id} value={note} onChange={(e) => setNote(e.target.value)} />}
+        {({ id }) => (
+          <Input.TextArea id={id} value={note} onChange={(e) => setNote(e.target.value)} />
+        )}
       </Field>
     </ConfirmDialog>
   );

@@ -1,3 +1,18 @@
+import {
+  Alert,
+  Button as AntButton,
+  Card,
+  Checkbox,
+  Col,
+  Flex,
+  Input,
+  Row,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import {
@@ -8,10 +23,14 @@ import {
   Field,
   Loading,
   NoteDialog,
+  LinkButton,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { useSession } from "../app/Session";
+import { useViewer } from "../app/ViewerHost";
 import { ApiError, unwrap, useApi } from "../lib/api";
 import {
   deleteReasonLabel,
@@ -153,19 +172,29 @@ export function Requirements() {
 
   return (
     <>
-      <TenderHeader tender={tender.state.data} active="requirements" />
-      <h2>Requirements</h2>
+      <TenderHeader tender={tender.state.data} />
+      <Typography.Title level={2} style={{ fontSize: 20 }}>
+        Requirements
+      </Typography.Title>
       {locked && (
-        <p className="banner" role="note">
-          <span aria-hidden="true">🔒 </span>The baseline is confirmed, so the list is read only.{" "}
-          <Link to={`/tenders/${tenderId}/baseline`}>Open baseline and scoring</Link>
-        </p>
+        <Alert
+          type="info"
+          showIcon
+          role="note"
+          style={{ marginBottom: 16 }}
+          title={
+            <>
+              <span aria-hidden="true">🔒 </span>The baseline is confirmed, so the list is read
+              only. <Link to={`/tenders/${tenderId}/baseline`}>Open baseline and scoring</Link>
+            </>
+          }
+        />
       )}
       {sum && (
-        <div className="summary-strip" role="group" aria-label="Summary">
-          <button
-            type="button"
+        <Space role="group" aria-label="Summary" wrap style={{ marginBottom: 16 }}>
+          <AntButton
             aria-pressed={!state && !flagged && !importance}
+            type={!state && !flagged && !importance ? "primary" : "default"}
             onClick={() => {
               setState("");
               setFlagged(false);
@@ -173,195 +202,227 @@ export function Requirements() {
             }}
           >
             {sum.total} requirements
-          </button>
-          <button
-            type="button"
+          </AntButton>
+          <AntButton
             aria-pressed={importance === "mandatory"}
+            type={importance === "mandatory" ? "primary" : "default"}
             onClick={() => setImportance(importance === "mandatory" ? "" : "mandatory")}
           >
             {sum.mandatory} mandatory
-          </button>
-          <button
-            type="button"
+          </AntButton>
+          <AntButton
             aria-pressed={importance === "optional"}
+            type={importance === "optional" ? "primary" : "default"}
             onClick={() => setImportance(importance === "optional" ? "" : "optional")}
           >
             {sum.optional} optional
-          </button>
-          <span role="status" aria-live="polite" className="chip">
-            {sum.reviewed} of {sum.total} reviewed
+          </AntButton>
+          <span role="status" aria-live="polite">
+            <Tag style={{ margin: 0 }}>
+              {sum.reviewed} of {sum.total} reviewed
+            </Tag>
           </span>
-          <button type="button" aria-pressed={flagged} onClick={() => setFlagged(!flagged)}>
+          <AntButton
+            aria-pressed={flagged}
+            type={flagged ? "primary" : "default"}
+            onClick={() => setFlagged(!flagged)}
+          >
             {sum.flagged} flagged
-          </button>
-        </div>
+          </AntButton>
+        </Space>
       )}
-      <div className="filter-bar">
-        <Field label="Search requirements">
-          {({ id }) => <input id={id} value={q} onChange={(e) => setQ(e.target.value)} />}
-        </Field>
-        <Field label="Category">
-          {({ id }) => (
-            <select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="">All categories</option>
-              {cats.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </Field>
-        <Field label="State">
-          {({ id }) => (
-            <select id={id} value={state} onChange={(e) => setState(e.target.value)}>
-              <option value="">Any state</option>
-              <option value="unreviewed">Not reviewed</option>
-              <option value="reviewed">Reviewed</option>
-            </select>
-          )}
-        </Field>
-        <label>
-          <input type="checkbox" checked={deleted} onChange={(e) => setDeleted(e.target.checked)} />{" "}
-          Show deleted
-        </label>
-        {isMember && (
-          <Button
-            variant="primary"
-            disabledReason={locked ? "The baseline is confirmed" : undefined}
-            onClick={() => setAdding(true)}
-          >
-            Add requirement
-          </Button>
-        )}
-        <Link to={`/tenders/${tenderId}/baseline`} className="btn">
-          Baseline and scoring
-        </Link>
-      </div>
+      <Card style={{ marginBottom: 16 }}>
+        <Flex gap={16} wrap align="flex-end">
+          <Field label="Search requirements">
+            {({ id }) => (
+              <Input.Search
+                id={id}
+                allowClear
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                style={{ minWidth: 240 }}
+              />
+            )}
+          </Field>
+          <Field label="Category">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={category}
+                onChange={(v) => setCategory(v)}
+                style={{ minWidth: 200 }}
+                options={[
+                  { value: "", label: "All categories" },
+                  ...cats.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
+            )}
+          </Field>
+          <Field label="State">
+            {({ id }) => (
+              <Select
+                id={id}
+                value={state}
+                onChange={(v) => setState(v)}
+                style={{ minWidth: 160 }}
+                options={[
+                  { value: "", label: "Any state" },
+                  { value: "unreviewed", label: "Not reviewed" },
+                  { value: "reviewed", label: "Reviewed" },
+                ]}
+              />
+            )}
+          </Field>
+          <div style={{ marginBottom: 16 }}>
+            <Checkbox checked={deleted} onChange={(e) => setDeleted(e.target.checked)}>
+              Show deleted
+            </Checkbox>
+          </div>
+          <Space style={{ marginBottom: 16 }}>
+            {isMember && (
+              <Button
+                variant="primary"
+                disabledReason={locked ? "The baseline is confirmed" : undefined}
+                onClick={() => setAdding(true)}
+              >
+                Add requirement
+              </Button>
+            )}
+            <LinkButton to={`/tenders/${tenderId}/baseline`}>Baseline and scoring</LinkButton>
+          </Space>
+        </Flex>
+      </Card>
       {selected.size > 0 && canEdit && (
-        <div className="bulk-bar" role="region" aria-label="Bulk actions">
-          <span>{selected.size} selected</span>
-          <Button onClick={() => setBulkNote("mark_reviewed")}>Mark reviewed</Button>
-          <select
-            aria-label="Category for the selection"
-            value={bulkCategory}
-            onChange={(e) => setBulkCategory(e.target.value)}
-          >
-            <option value="">Change category to…</option>
-            {cats.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <Button disabled={!bulkCategory} onClick={() => setBulkNote("change_category")}>
-            Apply category
-          </Button>
-          <select
-            aria-label="Importance for the selection"
-            value={bulkImportance}
-            onChange={(e) => setBulkImportance(e.target.value as "mandatory" | "optional")}
-          >
-            <option value="mandatory">Mandatory</option>
-            <option value="optional">Optional</option>
-          </select>
-          <Button onClick={() => setBulkNote("change_importance")}>Apply importance</Button>
-          <Button onClick={() => setSelected(new Set())}>Clear</Button>
-        </div>
+        <Card size="small" role="region" aria-label="Bulk actions" style={{ marginBottom: 16 }}>
+          <Flex gap={8} wrap align="center">
+            <span>{selected.size} selected</span>
+            <Button onClick={() => setBulkNote("mark_reviewed")}>Mark reviewed</Button>
+            <Select
+              aria-label="Category for the selection"
+              value={bulkCategory}
+              onChange={(v) => setBulkCategory(v)}
+              style={{ minWidth: 200 }}
+              options={[
+                { value: "", label: "Change category to…" },
+                ...cats.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+            <Button disabled={!bulkCategory} onClick={() => setBulkNote("change_category")}>
+              Apply category
+            </Button>
+            <Select
+              aria-label="Importance for the selection"
+              value={bulkImportance}
+              onChange={(v) => setBulkImportance(v)}
+              style={{ minWidth: 140 }}
+              options={[
+                { value: "mandatory", label: "Mandatory" },
+                { value: "optional", label: "Optional" },
+              ]}
+            />
+            <Button onClick={() => setBulkNote("change_importance")}>Apply importance</Button>
+            <Button onClick={() => setSelected(new Set())}>Clear</Button>
+          </Flex>
+        </Card>
       )}
-      <div className="req-layout">
-        <div>
+      <Row gutter={24}>
+        <Col xs={24} xl={open ? 14 : 24}>
           {items.length === 0 ? (
             <EmptyState title="No requirements yet">
               Select sections in the RFP to extract them.{" "}
               <Link to={`/tenders/${tenderId}/documents`}>Open the documents</Link>
             </EmptyState>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <caption>Requirements of this tender</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      <span className="visually-hidden">Select</span>
-                    </th>
-                    <th scope="col">ID</th>
-                    <th scope="col">Requirement</th>
-                    <th scope="col">Category</th>
-                    <th scope="col">Importance</th>
-                    <th scope="col">State</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((r) => (
-                    <tr key={r.id} aria-selected={r.id === openId}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${r.display_no}`}
-                          checked={selected.has(r.id)}
-                          onChange={(e) => {
-                            const next = new Set(selected);
-                            if (e.target.checked) next.add(r.id);
-                            else next.delete(r.id);
-                            setSelected(next);
-                          }}
-                        />
-                      </td>
-                      <th scope="row">
-                        <button type="button" className="linklike" onClick={() => setOpenId(r.id)}>
-                          {r.display_no}
-                        </button>{" "}
-                        <StatusChip
-                          label={originLabel[r.origin]}
-                          tone={r.origin === "ai" ? "ai" : "neutral"}
-                        />
-                      </th>
-                      <td>
-                        {r.text}
-                        {r.flags
-                          .filter((f) => !f.resolved_at)
-                          .map((f) => (
-                            <span key={f.id} title={f.detail ?? undefined}>
-                              {" "}
-                              <StatusChip
-                                label={flagLabel[f.flag_type] ?? f.flag_type}
-                                tone="warning"
-                              />
-                            </span>
-                          ))}
-                      </td>
-                      <td>{r.category?.name ?? "-"}</td>
-                      <td>{importanceLabel[r.importance]}</td>
-                      <td>
-                        {r.deleted ? (
-                          <StatusChip label="Deleted" tone="error" />
-                        ) : (
-                          <StatusChip
-                            label={reviewStateLabel[r.review_state]}
-                            tone={(reviewStateTone[r.review_state] ?? "neutral") as Tone}
-                          />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table<Req>
+              rowKey="id"
+              components={rowHeaderComponents}
+              dataSource={items}
+              pagination={false}
+              scroll={{ x: "max-content" }}
+              title={() => <Typography.Text strong>Requirements of this tender</Typography.Text>}
+              onRow={(r) => ({ "aria-selected": r.id === openId })}
+              columns={[
+                {
+                  title: <span className="visually-hidden">Select</span>,
+                  render: (_, r) => (
+                    <Checkbox
+                      aria-label={`Select ${r.display_no}`}
+                      checked={selected.has(r.id)}
+                      onChange={(e) => {
+                        const next = new Set(selected);
+                        if (e.target.checked) next.add(r.id);
+                        else next.delete(r.id);
+                        setSelected(next);
+                      }}
+                    />
+                  ),
+                },
+                {
+                  title: "ID",
+                  onCell: rowHeader,
+                  render: (_, r) => (
+                    <Space size={4} wrap>
+                      <AntButton type="link" style={{ padding: 0 }} onClick={() => setOpenId(r.id)}>
+                        {r.display_no}
+                      </AntButton>
+                      <StatusChip
+                        label={originLabel[r.origin]}
+                        tone={r.origin === "ai" ? "ai" : "neutral"}
+                      />
+                    </Space>
+                  ),
+                },
+                {
+                  title: "Requirement",
+                  render: (_, r) => (
+                    <>
+                      {r.text}
+                      {r.flags
+                        .filter((f) => !f.resolved_at)
+                        .map((f) => (
+                          <span key={f.id} title={f.detail ?? undefined}>
+                            {" "}
+                            <StatusChip
+                              label={flagLabel[f.flag_type] ?? f.flag_type}
+                              tone="warning"
+                            />
+                          </span>
+                        ))}
+                    </>
+                  ),
+                },
+                { title: "Category", render: (_, r) => r.category?.name ?? "-" },
+                { title: "Importance", render: (_, r) => importanceLabel[r.importance] },
+                {
+                  title: "State",
+                  render: (_, r) =>
+                    r.deleted ? (
+                      <StatusChip label="Deleted" tone="error" />
+                    ) : (
+                      <StatusChip
+                        label={reviewStateLabel[r.review_state]}
+                        tone={(reviewStateTone[r.review_state] ?? "neutral") as Tone}
+                      />
+                    ),
+                },
+              ]}
+            />
           )}
-        </div>
+        </Col>
         {open && (
-          <RequirementPanel
-            key={open.id + ":" + open.row_version}
-            req={open}
-            categories={cats}
-            others={items.filter((r) => r.id !== open.id && !r.deleted)}
-            minNote={minNote}
-            onChanged={refresh}
-            onClose={() => setOpenId(null)}
-          />
+          <Col xs={24} xl={10}>
+            <RequirementPanel
+              key={open.id + ":" + open.row_version}
+              req={open}
+              categories={cats}
+              others={items.filter((r) => r.id !== open.id && !r.deleted)}
+              minNote={minNote}
+              onChanged={refresh}
+              onClose={() => setOpenId(null)}
+            />
+          </Col>
         )}
-      </div>
+      </Row>
 
       <AddDialog
         open={adding}
@@ -401,6 +462,7 @@ function RequirementPanel({
   onChanged: () => void;
   onClose: () => void;
 }) {
+  const viewer = useViewer();
   const api = useApi();
   const announce = useAnnounce();
   const [draft, setDraft] = useState<Draft>(toDraft(req));
@@ -552,241 +614,268 @@ function RequirementPanel({
   }
 
   return (
-    <aside className="req-panel" aria-label={`Details of ${req.display_no}`}>
-      <h3>
-        {req.display_no}{" "}
-        <StatusChip label={originLabel[req.origin]} tone={req.origin === "ai" ? "ai" : "neutral"} />
-      </h3>
-      <Button onClick={onClose}>Close panel</Button>
-      <Field label="Requirement text">
-        {({ id }) => (
-          <textarea
-            id={id}
-            rows={5}
-            value={draft.text}
-            disabled={!canEdit}
-            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
-          />
-        )}
-      </Field>
-      <Field label="Category">
-        {({ id }) => (
-          <select
-            id={id}
-            value={draft.category_id}
-            disabled={!canEdit}
-            onChange={(e) => setDraft({ ...draft, category_id: e.target.value })}
-          >
-            <option value="">No category</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
-      <Field label="Importance">
-        {({ id }) => (
-          <select
-            id={id}
-            value={draft.importance}
-            disabled={!canEdit}
-            onChange={(e) =>
-              setDraft({ ...draft, importance: e.target.value as "mandatory" | "optional" })
-            }
-          >
-            <option value="mandatory">Mandatory</option>
-            <option value="optional">Optional</option>
-          </select>
-        )}
-      </Field>
-      <Field label="Acceptance criteria">
-        {({ id }) => (
-          <textarea
-            id={id}
-            rows={3}
-            value={draft.acceptance_criteria}
-            disabled={!canEdit}
-            onChange={(e) => setDraft({ ...draft, acceptance_criteria: e.target.value })}
-          />
-        )}
-      </Field>
-      {!canEdit && (
-        <p className="help">{req.actions?.edit?.reason ?? "You cannot edit this requirement."}</p>
-      )}
-      {req.flags.length > 0 && (
-        <section aria-label="Flags">
-          <h4>Flags</h4>
-          <ul>
-            {req.flags.map((f) => (
-              <li key={f.id}>
-                <StatusChip
-                  label={flagLabel[f.flag_type] ?? f.flag_type}
-                  tone={f.resolved_at ? "neutral" : "warning"}
-                />{" "}
-                {f.detail}
-                {f.resolved_at
-                  ? " (resolved)"
-                  : canEdit && <Button onClick={() => void resolve(f.id)}>Resolve</Button>}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      {req.sources.length > 0 && (
-        <section aria-label="Sources">
-          <h4>Sources</h4>
-          <ul>
-            {req.sources.map((s, i) => (
-              <li key={i}>
-                <Link
-                  to={`/documents/${s.document_version_id}/view${s.passage_id ? `?passage=${s.passage_id}` : ""}`}
-                >
-                  Page {s.page_no ?? "?"}
-                </Link>
-                {s.quote ? <blockquote>{s.quote}</blockquote> : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      <div className="dialog-actions">
-        {canEdit && (
-          <Button
-            variant="primary"
-            disabledReason={dirty ? undefined : "Nothing has changed"}
-            onClick={() => setSaving(true)}
-          >
-            Save changes
-          </Button>
-        )}
-        {canEdit && req.review_state === "unreviewed" && (
-          <Button onClick={() => void act("review")}>Mark reviewed</Button>
-        )}
-        {canEdit && <Button onClick={() => setDeleting(true)}>Delete</Button>}
-        {req.deleted && req.actions?.restore?.allowed && (
-          <Button onClick={() => setRestoring(true)}>Restore</Button>
-        )}
-        <Button onClick={() => setShowHistory(!showHistory)}>
-          {showHistory ? "Hide history" : "History"}
-        </Button>
-      </div>
-      {showHistory && history.state.status === "ready" && history.state.data && (
-        <section aria-label="History">
-          <h4>History</h4>
-          {history.state.data.ai_original && (
-            <p className="help">
-              The AI suggested: {String(history.state.data.ai_original.text ?? "")}
-            </p>
-          )}
-          <ol>
-            {history.state.data.events.map((e) => (
-              <li key={e.id}>
-                {new Date(e.occurred_at).toLocaleString()} ·{" "}
-                {e.actor?.display_name ?? "The platform"} · {e.action.replace(/_/g, " ")}
-                {e.note ? `: ${e.note}` : ""}
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      <NoteDialog
-        open={saving}
-        onOpenChange={setSaving}
-        title={`Save changes to ${req.display_no}`}
-        description="Say why, so the history explains the change."
-        confirmLabel="Save"
-        minLength={minNote}
-        onConfirm={(note) => void save(note)}
-      />
-      <NoteDialog
-        open={deleting}
-        onOpenChange={setDeleting}
-        title={`Delete ${req.display_no}`}
-        description="The requirement stays in the history and can be restored."
-        confirmLabel="Delete"
-        danger
-        minLength={minNote}
-        onConfirm={(note) => void remove(note)}
+    <aside aria-label={`Details of ${req.display_no}`}>
+      <Card
+        title={
+          <Typography.Title level={3} style={{ fontSize: 16, margin: 0 }}>
+            {req.display_no}{" "}
+            <StatusChip
+              label={originLabel[req.origin]}
+              tone={req.origin === "ai" ? "ai" : "neutral"}
+            />
+          </Typography.Title>
+        }
+        extra={<Button onClick={onClose}>Close panel</Button>}
       >
-        <Field label="Reason">
+        <Field label="Requirement text">
           {({ id }) => (
-            <select
+            <Input.TextArea
               id={id}
-              value={reason}
-              onChange={(e) => setReason(e.target.value as typeof reason)}
-            >
-              {Object.entries(deleteReasonLabel).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
+              rows={5}
+              value={draft.text}
+              disabled={!canEdit}
+              onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+            />
           )}
         </Field>
-        {reason === "duplicate" && (
-          <Field label="Requirement that is kept">
+        <Field label="Category">
+          {({ id }) => (
+            <Select
+              id={id}
+              value={draft.category_id}
+              disabled={!canEdit}
+              onChange={(v) => setDraft({ ...draft, category_id: v })}
+              style={{ width: "100%" }}
+              options={[
+                { value: "", label: "No category" },
+                ...categories.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+          )}
+        </Field>
+        <Field label="Importance">
+          {({ id }) => (
+            <Select
+              id={id}
+              value={draft.importance}
+              disabled={!canEdit}
+              onChange={(v) => setDraft({ ...draft, importance: v })}
+              style={{ width: "100%" }}
+              options={[
+                { value: "mandatory", label: "Mandatory" },
+                { value: "optional", label: "Optional" },
+              ]}
+            />
+          )}
+        </Field>
+        <Field label="Acceptance criteria">
+          {({ id }) => (
+            <Input.TextArea
+              id={id}
+              rows={3}
+              value={draft.acceptance_criteria}
+              disabled={!canEdit}
+              onChange={(e) => setDraft({ ...draft, acceptance_criteria: e.target.value })}
+            />
+          )}
+        </Field>
+        {!canEdit && (
+          <Typography.Paragraph type="secondary">
+            {req.actions?.edit?.reason ?? "You cannot edit this requirement."}
+          </Typography.Paragraph>
+        )}
+        {req.flags.length > 0 && (
+          <section aria-label="Flags">
+            <Typography.Title level={4} style={{ fontSize: 14 }}>
+              Flags
+            </Typography.Title>
+            <ul>
+              {req.flags.map((f) => (
+                <li key={f.id}>
+                  <StatusChip
+                    label={flagLabel[f.flag_type] ?? f.flag_type}
+                    tone={f.resolved_at ? "neutral" : "warning"}
+                  />{" "}
+                  {f.detail}
+                  {f.resolved_at
+                    ? " (resolved)"
+                    : canEdit && <Button onClick={() => void resolve(f.id)}>Resolve</Button>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {req.sources.length > 0 && (
+          <section aria-label="Sources">
+            <Typography.Title level={4} style={{ fontSize: 14 }}>
+              Sources
+            </Typography.Title>
+            <ul>
+              {req.sources.map((s, i) => (
+                <li key={i}>
+                  <AntButton
+                    type="link"
+                    style={{ padding: 0 }}
+                    onClick={() => viewer.open(s.document_version_id, s.passage_id ?? null)}
+                  >
+                    Page {s.page_no ?? "?"}
+                  </AntButton>
+                  {s.quote ? (
+                    <Typography.Paragraph type="secondary" italic>
+                      “{s.quote}”
+                    </Typography.Paragraph>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <Space wrap style={{ marginTop: 16 }}>
+          {canEdit && (
+            <Button
+              variant="primary"
+              disabledReason={dirty ? undefined : "Nothing has changed"}
+              onClick={() => setSaving(true)}
+            >
+              Save changes
+            </Button>
+          )}
+          {canEdit && req.review_state === "unreviewed" && (
+            <Button onClick={() => void act("review")}>Mark reviewed</Button>
+          )}
+          {canEdit && <Button onClick={() => setDeleting(true)}>Delete</Button>}
+          {req.deleted && req.actions?.restore?.allowed && (
+            <Button onClick={() => setRestoring(true)}>Restore</Button>
+          )}
+          <Button onClick={() => setShowHistory(!showHistory)}>
+            {showHistory ? "Hide history" : "History"}
+          </Button>
+        </Space>
+        {showHistory && history.state.status === "ready" && history.state.data && (
+          <section aria-label="History">
+            <Typography.Title level={4} style={{ fontSize: 14 }}>
+              History
+            </Typography.Title>
+            {history.state.data.ai_original && (
+              <Typography.Paragraph type="secondary">
+                The AI suggested: {String(history.state.data.ai_original.text ?? "")}
+              </Typography.Paragraph>
+            )}
+            <ol>
+              {history.state.data.events.map((e) => (
+                <li key={e.id}>
+                  {new Date(e.occurred_at).toLocaleString()} ·{" "}
+                  {e.actor?.display_name ?? "The platform"} · {e.action.replace(/_/g, " ")}
+                  {e.note ? `: ${e.note}` : ""}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        <NoteDialog
+          open={saving}
+          onOpenChange={setSaving}
+          title={`Save changes to ${req.display_no}`}
+          description="Say why, so the history explains the change."
+          confirmLabel="Save"
+          minLength={minNote}
+          onConfirm={(note) => void save(note)}
+        />
+        <NoteDialog
+          open={deleting}
+          onOpenChange={setDeleting}
+          title={`Delete ${req.display_no}`}
+          description="The requirement stays in the history and can be restored."
+          confirmLabel="Delete"
+          danger
+          minLength={minNote}
+          onConfirm={(note) => void remove(note)}
+        >
+          <Field label="Reason">
             {({ id }) => (
-              <select id={id} value={duplicateOf} onChange={(e) => setDuplicateOf(e.target.value)}>
-                <option value="">Choose the requirement that is kept</option>
-                {others.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.display_no}: {o.text.slice(0, 70)}
-                  </option>
-                ))}
-              </select>
+              <Select
+                id={id}
+                value={reason}
+                onChange={(v) => setReason(v)}
+                style={{ width: "100%" }}
+                options={Object.entries(deleteReasonLabel).map(([k, v]) => ({
+                  value: k,
+                  label: v,
+                }))}
+              />
             )}
           </Field>
-        )}
-      </NoteDialog>
-      <NoteDialog
-        open={restoring}
-        onOpenChange={setRestoring}
-        title={`Restore ${req.display_no}`}
-        description="The requirement returns to the list."
-        confirmLabel="Restore"
-        minLength={minNote}
-        onConfirm={(note) => void restore(note)}
-      />
-      <ConfirmDialog
-        open={conflict !== null}
-        onOpenChange={(o) => !o && setConflict(null)}
-        title="This requirement was changed"
-        description={
-          conflict
-            ? `${conflict.by} changed this requirement while you were editing it${
-                conflict.fields.length ? ` (${conflict.fields.join(", ")})` : ""
-              }. Choose which version to keep.`
-            : ""
-        }
-        confirmLabel="Keep mine"
-        onConfirm={() =>
-          conflict &&
-          void save(conflict.note, { draft: conflict.mine, version: conflict.current.row_version })
-        }
-      >
-        {conflict && (
-          <div className="conflict" role="group" aria-label="The two versions">
-            <p>
-              <strong>Theirs:</strong> {conflict.current.text}
-            </p>
-            <p>
-              <strong>Yours:</strong> {conflict.mine.text}
-            </p>
-            <Button
-              onClick={() => {
-                setDraft(toDraft(conflict.current));
-                setConflict(null);
-                onChanged();
-              }}
-            >
-              Keep theirs
-            </Button>
-          </div>
-        )}
-      </ConfirmDialog>
+          {reason === "duplicate" && (
+            <Field label="Requirement that is kept">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  value={duplicateOf}
+                  onChange={(v) => setDuplicateOf(v)}
+                  style={{ width: "100%" }}
+                  options={[
+                    { value: "", label: "Choose the requirement that is kept" },
+                    ...others.map((o) => ({
+                      value: o.id,
+                      label: `${o.display_no}: ${o.text.slice(0, 70)}`,
+                    })),
+                  ]}
+                />
+              )}
+            </Field>
+          )}
+        </NoteDialog>
+        <NoteDialog
+          open={restoring}
+          onOpenChange={setRestoring}
+          title={`Restore ${req.display_no}`}
+          description="The requirement returns to the list."
+          confirmLabel="Restore"
+          minLength={minNote}
+          onConfirm={(note) => void restore(note)}
+        />
+        <ConfirmDialog
+          open={conflict !== null}
+          onOpenChange={(o) => !o && setConflict(null)}
+          title="This requirement was changed"
+          description={
+            conflict
+              ? `${conflict.by} changed this requirement while you were editing it${
+                  conflict.fields.length ? ` (${conflict.fields.join(", ")})` : ""
+                }. Choose which version to keep.`
+              : ""
+          }
+          confirmLabel="Keep mine"
+          onConfirm={() =>
+            conflict &&
+            void save(conflict.note, {
+              draft: conflict.mine,
+              version: conflict.current.row_version,
+            })
+          }
+        >
+          {conflict && (
+            <div role="group" aria-label="The two versions">
+              <Typography.Paragraph>
+                <strong>Theirs:</strong> {conflict.current.text}
+              </Typography.Paragraph>
+              <Typography.Paragraph>
+                <strong>Yours:</strong> {conflict.mine.text}
+              </Typography.Paragraph>
+              <Button
+                onClick={() => {
+                  setDraft(toDraft(conflict.current));
+                  setConflict(null);
+                  onChanged();
+                }}
+              >
+                Keep theirs
+              </Button>
+            </div>
+          )}
+        </ConfirmDialog>
+      </Card>
     </aside>
   );
 }
@@ -844,36 +933,40 @@ function AddDialog({
     >
       <Field label="Requirement text" error={error}>
         {({ id }) => (
-          <textarea id={id} rows={4} value={text} onChange={(e) => setText(e.target.value)} />
+          <Input.TextArea id={id} rows={4} value={text} onChange={(e) => setText(e.target.value)} />
         )}
       </Field>
       <Field label="Category">
         {({ id }) => (
-          <select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">Choose a category</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <Select
+            id={id}
+            value={category}
+            onChange={(v) => setCategory(v)}
+            style={{ width: "100%" }}
+            options={[
+              { value: "", label: "Choose a category" },
+              ...categories.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
         )}
       </Field>
       <Field label="Importance">
         {({ id }) => (
-          <select
+          <Select
             id={id}
             value={importance}
-            onChange={(e) => setImportance(e.target.value as "mandatory" | "optional")}
-          >
-            <option value="mandatory">Mandatory</option>
-            <option value="optional">Optional</option>
-          </select>
+            onChange={(v) => setImportance(v)}
+            style={{ width: "100%" }}
+            options={[
+              { value: "mandatory", label: "Mandatory" },
+              { value: "optional", label: "Optional" },
+            ]}
+          />
         )}
       </Field>
       <Field label="Acceptance criteria">
         {({ id }) => (
-          <textarea
+          <Input.TextArea
             id={id}
             rows={2}
             value={criteria}

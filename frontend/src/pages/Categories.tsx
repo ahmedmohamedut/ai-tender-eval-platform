@@ -1,3 +1,4 @@
+import { Alert, Input, Space, Table, Typography } from "antd";
 import { useState } from "react";
 import {
   Button,
@@ -7,6 +8,8 @@ import {
   Field,
   Loading,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { ApiError, unwrap, useApi } from "../lib/api";
@@ -64,25 +67,21 @@ export function Categories() {
 
   return (
     <>
-      <h1>Categories</h1>
-      <p className="help">
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+        Categories
+      </Typography.Title>
+      <Typography.Paragraph type="secondary">
         Requirements are grouped by these categories, and the AI chooses from the active ones when
         it extracts requirements. A category that is in use is deactivated, not deleted.
-      </p>
-      <div className="toolbar">
+      </Typography.Paragraph>
+      <p>
         <Button variant="primary" onClick={() => setAdding(true)}>
           Add category
         </Button>
-      </div>
+      </p>
 
       {error && <ErrorNotice error={error} />}
-      {taken && (
-        <div role="alert" className="card" style={{ borderColor: "var(--error)" }}>
-          <p>
-            <strong>{TAKEN}</strong>
-          </p>
-        </div>
-      )}
+      {taken && <Alert type="error" showIcon role="alert" title={TAKEN} />}
       {state.status === "loading" && <Loading label="Loading categories" />}
       {state.status === "error" && <ErrorNotice error={state.error} onRetry={reload} />}
       {state.status === "ready" &&
@@ -92,63 +91,61 @@ export function Categories() {
             category and a baseline cannot be confirmed.
           </EmptyState>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <caption>Categories ({list.length})</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Order</th>
-                  <th scope="col">State</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((c, i) => (
-                  <tr key={c.id}>
-                    <th scope="row">{c.name}</th>
-                    <td>{c.sort_order}</td>
-                    <td>
-                      <StatusChip
-                        label={c.is_active ? "Active" : "Deactivated"}
-                        tone={c.is_active ? "success" : "neutral"}
-                      />
-                    </td>
-                    <td>
+          <Table<Category>
+            rowKey="id"
+            components={rowHeaderComponents}
+            dataSource={list}
+            pagination={false}
+            title={() => <Typography.Text strong>Categories ({list.length})</Typography.Text>}
+            columns={[
+              { title: "Name", dataIndex: "name", onCell: rowHeader },
+              { title: "Order", dataIndex: "sort_order" },
+              {
+                title: "State",
+                render: (_, c) => (
+                  <StatusChip
+                    label={c.is_active ? "Active" : "Deactivated"}
+                    tone={c.is_active ? "success" : "neutral"}
+                  />
+                ),
+              },
+              {
+                title: "Actions",
+                render: (_, c, i) => (
+                  <Space wrap>
+                    <Button
+                      aria-label="Move up"
+                      disabled={i === 0}
+                      onClick={() => void move(c, list[i - 1])}
+                    >
+                      Move up
+                    </Button>
+                    <Button
+                      aria-label="Move down"
+                      disabled={i === list.length - 1}
+                      onClick={() => void move(c, list[i + 1])}
+                    >
+                      Move down
+                    </Button>
+                    <Button onClick={() => setRenaming(c)}>Rename</Button>
+                    {c.is_active ? (
+                      <Button onClick={() => setDeactivating(c)}>Deactivate</Button>
+                    ) : (
                       <Button
-                        aria-label="Move up"
-                        disabled={i === 0}
-                        onClick={() => void move(c, list[i - 1])}
+                        onClick={() =>
+                          void act(`${c.name} is active again.`, () =>
+                            patch(c, { name: c.name, is_active: true }),
+                          )
+                        }
                       >
-                        Move up
-                      </Button>{" "}
-                      <Button
-                        aria-label="Move down"
-                        disabled={i === list.length - 1}
-                        onClick={() => void move(c, list[i + 1])}
-                      >
-                        Move down
-                      </Button>{" "}
-                      <Button onClick={() => setRenaming(c)}>Rename</Button>{" "}
-                      {c.is_active ? (
-                        <Button onClick={() => setDeactivating(c)}>Deactivate</Button>
-                      ) : (
-                        <Button
-                          onClick={() =>
-                            void act(`${c.name} is active again.`, () =>
-                              patch(c, { name: c.name, is_active: true }),
-                            )
-                          }
-                        >
-                          Activate
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        Activate
+                      </Button>
+                    )}
+                  </Space>
+                ),
+              },
+            ]}
+          />
         ))}
 
       <NameDialog
@@ -226,13 +223,7 @@ function NameDialog({
     >
       <Field label="Name (required)">
         {({ id }) => (
-          <input
-            id={id}
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
+          <Input id={id} value={name} onChange={(e) => setName(e.target.value)} required />
         )}
       </Field>
     </ConfirmDialog>

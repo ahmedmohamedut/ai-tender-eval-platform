@@ -9,6 +9,7 @@ import {
   NEW_PASSWORD,
   signIn,
   sql,
+  chooseOption,
 } from "./support";
 
 /**
@@ -68,13 +69,16 @@ test("invite, sign in, assign, open to committee, and refuse an outsider", async
   ]);
 
   // ---- the administrator creates a tender with a committee and a Chair -----------------------------
-  await admin.page.getByRole("link", { name: "Tenders" }).click();
+  await admin.page.getByRole("link", { name: "All tenders", exact: true }).click();
   await admin.page.getByRole("link", { name: "Create tender" }).first().click();
-  await admin.page.getByLabel(/Name \(required\)/).fill(tenderName);
-  await admin.page.getByLabel("Find committee members").fill("");
-  await admin.page.getByLabel(inviteeName).check();
-  await admin.page.getByLabel("Member 01").check();
-  await admin.page.getByLabel(/Chair \(required\)/).selectOption({ label: "Member 01" });
+  await admin.page.getByLabel("Tender name").fill(tenderName);
+  const members = admin.page.getByRole("combobox", { name: "Committee members" });
+  for (const person of [inviteeName, "Member 01"]) {
+    await members.fill(person);
+    await admin.page.getByRole("option", { name: person, exact: true }).first().click();
+  }
+  await admin.page.keyboard.press("Escape");
+  await chooseOption(admin.page, "Committee Chair", "Member 01");
   await admin.page.getByRole("button", { name: "Create tender" }).click();
   await expect(admin.page.getByRole("heading", { name: "Edit tender" })).toBeVisible();
   await expect(admin.page.getByText("RFP uploaded")).toBeVisible();

@@ -1,4 +1,12 @@
-import * as Dialog from "@radix-ui/react-dialog";
+import {
+  CheckCircleFilled,
+  CloseCircleFilled,
+  ExclamationCircleFilled,
+  InfoCircleFilled,
+  MinusCircleOutlined,
+  StarFilled,
+} from "@ant-design/icons";
+import { Alert, Button as AntButton, Card, Input, Modal, Spin, Tag, Typography } from "antd";
 import {
   createContext,
   useCallback,
@@ -8,9 +16,10 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type HTMLAttributes,
   type ReactNode,
 } from "react";
-import { Link, type LinkProps } from "react-router";
+import { useNavigate, type LinkProps } from "react-router";
 import type { Tone } from "../lib/labels";
 import { ApiError } from "../lib/api";
 import { problemMessage } from "../lib/labels";
@@ -21,39 +30,62 @@ export function Button({
   disabledReason,
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "color"> & {
   variant?: "primary" | "danger";
   disabledReason?: string;
+  loading?: boolean;
 }) {
   const reasonId = useId();
   const blocked = Boolean(disabledReason);
+  const inert = blocked || Boolean(rest.disabled);
+  const { disabled, type, onClick, ...other } = rest;
   return (
     <span>
-      <button
-        type="button"
-        {...rest}
-        className={`btn ${variant ?? ""} ${rest.className ?? ""}`.trim()}
-        aria-disabled={blocked || rest.disabled ? true : undefined}
+      <AntButton
+        {...other}
+        htmlType={type ?? "button"}
+        disabled={disabled}
+        type={variant === "primary" ? "primary" : "default"}
+        danger={variant === "danger"}
+        aria-disabled={inert ? true : undefined}
         aria-describedby={blocked ? reasonId : rest["aria-describedby"]}
-        onClick={blocked || rest.disabled ? (e) => e.preventDefault() : rest.onClick}
+        onClick={inert ? (e) => e.preventDefault() : onClick}
+        style={inert ? { opacity: 0.65, cursor: "not-allowed", ...rest.style } : rest.style}
       >
         {children}
-      </button>
+      </AntButton>
       {blocked && (
-        <span
-          id={reasonId}
-          className="help"
-          style={{ marginLeft: 8, color: "var(--text-secondary)" }}
-        >
+        <Typography.Text id={reasonId} type="secondary" style={{ marginInlineStart: 8 }}>
           {disabledReason}
-        </span>
+        </Typography.Text>
       )}
     </span>
   );
 }
 
-export function LinkButton({ variant, className, ...rest }: LinkProps & { variant?: "primary" }) {
-  return <Link {...rest} className={`btn ${variant ?? ""} ${className ?? ""}`.trim()} />;
+/** A link that looks like a button. It is a real anchor, so it opens in a new tab when asked to. */
+export function LinkButton({
+  variant,
+  to,
+  children,
+  state,
+  replace,
+}: Pick<LinkProps, "to" | "state" | "replace" | "children"> & { variant?: "primary" }) {
+  const navigate = useNavigate();
+  const href = typeof to === "string" ? to : `${to.pathname ?? ""}${to.search ?? ""}`;
+  return (
+    <AntButton
+      href={href}
+      type={variant === "primary" ? "primary" : "default"}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        void navigate(to, { state, replace });
+      }}
+    >
+      {children}
+    </AntButton>
+  );
 }
 
 export function Field({
@@ -73,39 +105,74 @@ export function Field({
   const describedBy =
     [help ? helpId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined;
   return (
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
+    <div style={{ marginBottom: 16 }}>
+      <label htmlFor={id} style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>
+        {label}
+      </label>
       {children({ id, describedBy, invalid: Boolean(error) })}
       {help && (
-        <span id={helpId} className="help">
+        <Typography.Text id={helpId} type="secondary" style={{ display: "block", fontSize: 12 }}>
           {help}
-        </span>
+        </Typography.Text>
       )}
       {error && (
-        <span id={errorId} className="error">
+        <Typography.Text id={errorId} type="danger" style={{ display: "block", fontSize: 12 }}>
           {error}
-        </span>
+        </Typography.Text>
       )}
     </div>
   );
 }
 
-const ICONS: Record<Tone, string> = {
-  ai: "✦",
-  neutral: "○",
-  success: "✓",
-  warning: "◐",
-  error: "!",
-  info: "●",
+const TONES: Record<Tone, { color: string; icon: ReactNode }> = {
+  ai: { color: "purple", icon: <StarFilled /> },
+  neutral: { color: "default", icon: <MinusCircleOutlined /> },
+  success: { color: "success", icon: <CheckCircleFilled /> },
+  warning: { color: "warning", icon: <ExclamationCircleFilled /> },
+  error: { color: "error", icon: <CloseCircleFilled /> },
+  info: { color: "processing", icon: <InfoCircleFilled /> },
 };
 
 /** Colour never carries the meaning alone: an icon and the label always accompany it. */
 export function StatusChip({ label, tone = "neutral" }: { label: string; tone?: Tone }) {
+  const t = TONES[tone];
   return (
-    <span className={`chip ${tone === "neutral" ? "" : tone}`.trim()}>
-      <span aria-hidden="true">{ICONS[tone]}</span>
+    <Tag
+      color={t.color}
+      icon={
+        <span aria-hidden="true" style={{ marginInlineEnd: 2 }}>
+          {t.icon}
+        </span>
+      }
+      style={{ margin: 0 }}
+    >
       {label}
-    </span>
+    </Tag>
+  );
+}
+
+/** A titled card: the one container for the groups of a page (title is a level 3 heading). */
+export function Section({
+  title,
+  extra,
+  children,
+}: {
+  title: ReactNode;
+  extra?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card
+      style={{ marginBottom: 16 }}
+      extra={extra}
+      title={
+        <Typography.Title level={3} style={{ fontSize: 16, margin: 0 }}>
+          {title}
+        </Typography.Title>
+      }
+    >
+      {children}
+    </Card>
   );
 }
 
@@ -119,19 +186,21 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="empty">
-      <h2>{title}</h2>
-      {children && <p>{children}</p>}
+    <Card style={{ textAlign: "center" }}>
+      <Typography.Title level={2} style={{ fontSize: 18 }}>
+        {title}
+      </Typography.Title>
+      {children && <Typography.Paragraph type="secondary">{children}</Typography.Paragraph>}
       {action}
-    </div>
+    </Card>
   );
 }
 
 export function Loading({ label = "Loading" }: { label?: string }) {
   return (
-    <p role="status" aria-live="polite">
-      {label}
-    </p>
+    <div role="status" aria-live="polite" style={{ padding: 16 }}>
+      <Spin size="small" /> <span style={{ marginInlineStart: 8 }}>{label}</span>
+    </div>
   );
 }
 
@@ -139,17 +208,20 @@ export function ErrorNotice({ error, onRetry }: { error: Error; onRetry?: () => 
   const api = error instanceof ApiError ? error : undefined;
   const text = api ? problemMessage(api.code, api.problem.title) : "Something went wrong.";
   return (
-    <div role="alert" className="card" style={{ borderColor: "var(--error)" }}>
-      <p>
-        <strong>{text}</strong>
-      </p>
-      {api?.problem.trace_id && (
-        <p className="help">
-          Reference <span className="mono">{api.problem.trace_id}</span>
-        </p>
-      )}
-      {onRetry && <Button onClick={onRetry}>Try again</Button>}
-    </div>
+    <Alert
+      type="error"
+      showIcon
+      role="alert"
+      title={text}
+      description={
+        api?.problem.trace_id ? (
+          <>
+            Reference <Typography.Text code>{api.problem.trace_id}</Typography.Text>
+          </>
+        ) : undefined
+      }
+      action={onRetry ? <Button onClick={onRetry}>Try again</Button> : undefined}
+    />
   );
 }
 
@@ -176,33 +248,19 @@ export function ConfirmDialog({
   children?: ReactNode;
 }) {
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog">
-          <Dialog.Title asChild>
-            <h2>{title}</h2>
-          </Dialog.Title>
-          <Dialog.Description>{description}</Dialog.Description>
-          {children}
-          <div className="dialog-actions">
-            <Dialog.Close asChild>
-              <button type="button" className="btn">
-                Cancel
-              </button>
-            </Dialog.Close>
-            <button
-              type="button"
-              className={`btn ${danger ? "danger" : "primary"}`}
-              disabled={busy}
-              onClick={onConfirm}
-            >
-              {confirmLabel}
-            </button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Modal
+      open={open}
+      title={title}
+      destroyOnHidden
+      onCancel={() => onOpenChange(false)}
+      cancelText="Cancel"
+      okText={confirmLabel}
+      okButtonProps={{ danger, disabled: busy }}
+      onOk={onConfirm}
+    >
+      <Typography.Paragraph>{description}</Typography.Paragraph>
+      {children}
+    </Modal>
   );
 }
 
@@ -234,61 +292,58 @@ export function NoteDialog({
   const id = useId();
   const short = note.trim().length < minLength;
   return (
-    <Dialog.Root
+    <Modal
       open={open}
-      onOpenChange={(o) => {
-        if (!o) setNote("");
-        onOpenChange(o);
+      title={title}
+      destroyOnHidden
+      afterClose={() => setNote("")}
+      onCancel={() => onOpenChange(false)}
+      cancelText="Cancel"
+      okText={confirmLabel}
+      okButtonProps={{
+        danger,
+        disabled: busy || short,
+        "aria-disabled": busy || short,
+      }}
+      onOk={() => {
+        if (!short) {
+          onConfirm(note.trim());
+        }
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog">
-          <Dialog.Title asChild>
-            <h2>{title}</h2>
-          </Dialog.Title>
-          <Dialog.Description>{description}</Dialog.Description>
-          {children}
-          <div className="field">
-            <label htmlFor={id}>Note (required)</label>
-            <textarea
-              id={id}
-              rows={3}
-              value={note}
-              aria-describedby={`${id}-help`}
-              onChange={(e) => setNote(e.target.value)}
-            />
-            <span id={`${id}-help`} className="help">
-              {short
-                ? `At least ${minLength} characters, so the history says why. ${note.trim().length} so far.`
-                : "The note is kept in the history."}
-            </span>
-          </div>
-          <div className="dialog-actions">
-            <Dialog.Close asChild>
-              <button type="button" className="btn">
-                Cancel
-              </button>
-            </Dialog.Close>
-            <button
-              type="button"
-              className={`btn ${danger ? "danger" : "primary"}`}
-              disabled={busy || short}
-              aria-disabled={busy || short}
-              onClick={() => {
-                if (!short) {
-                  onConfirm(note.trim());
-                }
-              }}
-            >
-              {confirmLabel}
-            </button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      <Typography.Paragraph>{description}</Typography.Paragraph>
+      {children}
+      <label htmlFor={id} style={{ display: "block", fontWeight: 500, marginBottom: 4 }}>
+        Note (required)
+      </label>
+      <Input.TextArea
+        id={id}
+        rows={3}
+        value={note}
+        aria-describedby={`${id}-help`}
+        onChange={(e) => setNote(e.target.value)}
+      />
+      <Typography.Text id={`${id}-help`} type="secondary" style={{ fontSize: 12 }}>
+        {short
+          ? `At least ${minLength} characters, so the history says why. ${note.trim().length} so far.`
+          : "The note is kept in the history."}
+      </Typography.Text>
+    </Modal>
   );
 }
+
+/**
+ * Row headers for antd tables: a column whose `onCell` is `rowHeader` renders `<th scope="row">`,
+ * so assistive technology reads the row's subject before its values. Pass `rowHeaderComponents`
+ * to the table's `components`.
+ */
+export const rowHeader = () => ({ "data-row-header": true }) as object;
+
+function RowHeaderCell(props: HTMLAttributes<HTMLElement> & { "data-row-header"?: boolean }) {
+  const { "data-row-header": isHeader, ...rest } = props;
+  return isHeader ? <th {...rest} scope="row" /> : <td {...rest} />;
+}
+export const rowHeaderComponents = { body: { cell: RowHeaderCell } };
 
 // ---- announcements: one polite live region for results (saved, invited, failed) ---------------
 
@@ -330,19 +385,30 @@ export function AnnounceProvider({ children }: { children: ReactNode }) {
     <AnnounceContext.Provider value={announce}>
       {children}
       {/* One polite live region: it is also the visible message, at the top under the header. */}
-      <div role="status" aria-live="polite" className={message ? "toast" : "visually-hidden"}>
+      <div
+        role="status"
+        aria-live="polite"
+        style={
+          message
+            ? { position: "fixed", top: 64, insetInlineEnd: 24, zIndex: 2000, maxWidth: 420 }
+            : {
+                position: "absolute",
+                width: 1,
+                height: 1,
+                overflow: "hidden",
+                clip: "rect(0 0 0 0)",
+              }
+        }
+      >
         {message && (
-          <>
-            <span>{message}</span>
-            <button
-              type="button"
-              className="toast-close"
-              onClick={clear}
-              aria-label="Dismiss message"
-            >
-              ×
-            </button>
-          </>
+          <Alert
+            role="none"
+            type="success"
+            showIcon
+            closable={{ closeIcon: true, "aria-label": "Dismiss message" }}
+            onClose={clear}
+            title={message}
+          />
         )}
       </div>
     </AnnounceContext.Provider>

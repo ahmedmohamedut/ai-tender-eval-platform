@@ -6225,6 +6225,12 @@ components:
       required:
       - hits
       - total
+    VendorStatus:
+      type: string
+      description: An inactive vendor stays on the tenders it is already part of and cannot be added to another one.
+      enum:
+      - active
+      - inactive
     Vendor:
       type: object
       properties:
@@ -6250,6 +6256,33 @@ components:
           type:
           - string
           - 'null'
+        legal_name:
+          type:
+          - string
+          - 'null'
+        country:
+          type:
+          - string
+          - 'null'
+        industry:
+          type:
+          - string
+          - 'null'
+        email:
+          type:
+          - string
+          - 'null'
+          format: email
+        phone:
+          type:
+          - string
+          - 'null'
+        address:
+          type:
+          - string
+          - 'null'
+        status:
+          $ref: '#/components/schemas/VendorStatus'
         created_at:
           type: string
           format: date-time
@@ -6259,6 +6292,7 @@ components:
       - id
       - name
       - row_version
+      - status
     VendorInput:
       type: object
       properties:
@@ -6281,6 +6315,33 @@ components:
           type:
           - string
           - 'null'
+        legal_name:
+          type:
+          - string
+          - 'null'
+        country:
+          type:
+          - string
+          - 'null'
+        industry:
+          type:
+          - string
+          - 'null'
+        email:
+          type:
+          - string
+          - 'null'
+          format: email
+        phone:
+          type:
+          - string
+          - 'null'
+        address:
+          type:
+          - string
+          - 'null'
+        status:
+          $ref: '#/components/schemas/VendorStatus'
         confirm_duplicate:
           type: boolean
           default: false
@@ -6309,6 +6370,33 @@ components:
           type:
           - string
           - 'null'
+        legal_name:
+          type:
+          - string
+          - 'null'
+        country:
+          type:
+          - string
+          - 'null'
+        industry:
+          type:
+          - string
+          - 'null'
+        email:
+          type:
+          - string
+          - 'null'
+          format: email
+        phone:
+          type:
+          - string
+          - 'null'
+        address:
+          type:
+          - string
+          - 'null'
+        status:
+          $ref: '#/components/schemas/VendorStatus'
     DuplicateCheck:
       type: object
       properties:

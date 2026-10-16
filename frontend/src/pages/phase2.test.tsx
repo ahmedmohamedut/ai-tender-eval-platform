@@ -1,8 +1,15 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
-import { accessibilityViolations, fakeApi, makeMe, renderPage } from "../test/helpers";
+import {
+  accessibilityViolations,
+  choose,
+  fakeApi,
+  makeMe,
+  optionsOf,
+  renderPage,
+} from "../test/helpers";
 import { parseFrames } from "../lib/events";
 import { highlightBoxes, snippetParts, startPage } from "../lib/viewer";
 import { Documents } from "./Documents";
@@ -64,6 +71,7 @@ describe("PG-04 Documents", () => {
     if (call === "GET /tenders/{tenderId}") return TENDER;
     if (call === "GET /tenders/{tenderId}/documents")
       return { items, next_cursor: null, total: items.length };
+    if (call === "GET /tenders/{tenderId}/vendors") return { items: [], total: 0 };
     return undefined;
   };
 
@@ -84,10 +92,7 @@ describe("PG-04 Documents", () => {
     expect(
       within(table).getByText(/no selectable text. Upload a text-based copy/i),
     ).toBeInTheDocument();
-    expect(within(table).getByRole("link", { name: "Open" })).toHaveAttribute(
-      "href",
-      "/documents/v1/view",
-    );
+    expect(within(table).getByRole("button", { name: /^Open / })).toBeInTheDocument();
     expect(await accessibilityViolations(container)).toEqual([]);
   });
 
@@ -97,9 +102,15 @@ describe("PG-04 Documents", () => {
       api,
       route: `/tenders/${TENDER_ID}/documents`,
     });
-    expect(await screen.findByText("Add a document")).toBeInTheDocument();
-    const rfp = screen.getByRole("option", { name: /RFP \(already uploaded\)/ });
-    expect(rfp).toBeDisabled();
+    await userEvent.click(await screen.findByRole("button", { name: "Upload document" }));
+    expect(await screen.findByText("Choose a file")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("combobox", { name: "Type" }));
+    const rfp = (
+      await screen.findByText(/RFP \(already uploaded\)/, {
+        selector: ".ant-select-item-option-content",
+      })
+    ).closest(".ant-select-item-option");
+    expect(rfp).toHaveClass("ant-select-item-option-disabled");
     expect(screen.getByText("Choose a file")).toBeInTheDocument();
   });
 
@@ -111,7 +122,7 @@ describe("PG-04 Documents", () => {
       route: `/tenders/${TENDER_ID}/documents`,
     });
     expect(await screen.findByRole("table")).toBeInTheDocument();
-    expect(screen.queryByText("Add a document")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upload document" })).not.toBeInTheDocument();
     expect(screen.queryByText("New version")).not.toBeInTheDocument();
   });
 
@@ -273,11 +284,49 @@ describe("PG-05 Vendors", () => {
       api,
       route: `/tenders/${TENDER_ID}/vendors`,
     });
+    await userEvent.click(await screen.findByRole("button", { name: "Add vendor to tender" }));
     await userEvent.type(await screen.findByLabelText("Vendor name"), "LUMEN Limited");
     await userEvent.click(screen.getByRole("button", { name: "Add vendor" }));
     expect(await screen.findByText("A similar vendor already exists:")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use this vendor" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add as a new vendor anyway" })).toBeInTheDocument();
+  });
+});
+
+describe("PG-05 adding a vendor from the registry", () => {
+  it("offers active registry vendors and adds the chosen one by id", async () => {
+    const api = fakeApi((call) => {
+      if (call === "GET /vendors")
+        return {
+          items: [
+            { id: "v1", name: "Lumen Systems", status: "active", row_version: 1 },
+            { id: "v2", name: "Dormant Co", status: "inactive", row_version: 1 },
+          ],
+          total: 2,
+        };
+      if (call === "POST /tenders/{tenderId}/vendors") return { id: "tv1" };
+      if (call === "GET /tenders/{tenderId}") return TENDER;
+      if (call === "GET /tenders/{tenderId}/vendors") return { items: [], total: 0 };
+      return undefined;
+    });
+    renderPage(at(<Vendors />, "/tenders/:tenderId/vendors"), {
+      api,
+      route: `/tenders/${TENDER_ID}/vendors`,
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "Add vendor to tender" }));
+    await screen.findByLabelText("Choose from the vendor registry");
+    expect(await optionsOf("Choose from the vendor registry")).toEqual([
+      "Lumen Systems",
+      "Dormant Co (inactive)",
+    ]);
+    await choose("Choose from the vendor registry", "Lumen Systems");
+    fireEvent.click(await screen.findByRole("button", { name: "Add from registry" }));
+    await waitFor(() =>
+      expect(api.POST).toHaveBeenCalledWith(
+        "/tenders/{tenderId}/vendors",
+        expect.objectContaining({ body: { vendor_id: "v1" } }),
+      ),
+    );
   });
 });
 
@@ -347,7 +396,7 @@ describe("result messages", () => {
     });
     const status = view.getByRole("status");
     expect(status).toHaveTextContent("Tender saved.");
-    expect(status.className).toContain("toast");
+    expect(within(status).getByRole("button", { name: "Dismiss message" })).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(TOAST_MS + 50);
     });

@@ -125,6 +125,76 @@ class VendorsApiIT extends AbstractApiIT {
   }
 
   @Test
+  void aVendorProfileIsStoredAndAnInactiveVendorCannotJoinATender() {
+    TestUser admin = TestUsers.create("admin");
+    TestUser chair = TestUsers.create("member");
+    UUID tender = Fixtures.tender(admin, chair);
+    String name = "Profile" + UUID.randomUUID();
+    byte[] body =
+        post("/vendors", admin)
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(
+                Map.of(
+                    "name", name,
+                    "legal_name", name + " Holdings",
+                    "country", "Egypt",
+                    "industry", "Software",
+                    "email", "bid@" + name.toLowerCase() + ".example",
+                    "phone", "+20 100 000 0000",
+                    "address", "1 Test Street",
+                    "description", "Notes"))
+            .exchange()
+            .expectStatus()
+            .isCreated()
+            .expectBody()
+            .jsonPath("$.status")
+            .isEqualTo("active")
+            .jsonPath("$.country")
+            .isEqualTo("Egypt")
+            .jsonPath("$.description")
+            .isEqualTo("Notes")
+            .returnResult()
+            .getResponseBody();
+    String id = JsonPath.read(new String(body), "$.id");
+    String etag =
+        get("/vendors/" + id, admin)
+            .exchange()
+            .returnResult(String.class)
+            .getResponseHeaders()
+            .getETag();
+    patch("/vendors/" + id, admin)
+        .header("If-Match", etag)
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(Map.of("status", "inactive"))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.status")
+        .isEqualTo("inactive")
+        .jsonPath("$.legal_name")
+        .isEqualTo(name + " Holdings");
+    post("/tenders/" + tender + "/vendors", admin)
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(Map.of("vendor_id", id))
+        .exchange()
+        .expectStatus()
+        .isEqualTo(422)
+        .expectBody()
+        .jsonPath("$.errors[0].code")
+        .isEqualTo("vendor_inactive");
+    // a member cannot read the registry or change a vendor
+    get("/vendors/" + id, chair).exchange().expectStatus().isForbidden();
+    patch("/vendors/" + id, chair)
+        .header("If-Match", etag)
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(Map.of("status", "active"))
+        .exchange()
+        .expectStatus()
+        .isForbidden();
+  }
+
+  @Test
   void aMemberCannotManageVendorsButSeesThoseOfTheirTender() {
     TestUser admin = TestUsers.create("admin");
     TestUser chair = TestUsers.create("member");

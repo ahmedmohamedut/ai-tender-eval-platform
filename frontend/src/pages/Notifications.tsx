@@ -1,3 +1,4 @@
+import { Card, Checkbox, Flex, List, Typography } from "antd";
 import { useState } from "react";
 import { Link } from "react-router";
 import {
@@ -56,75 +57,80 @@ export function Notifications() {
   const items = list.state.data.items;
   return (
     <>
-      <h1>Notifications</h1>
-      <p>
-        <label>
-          <input
-            type="checkbox"
-            checked={unreadOnly}
-            onChange={(e) => setUnreadOnly(e.target.checked)}
-          />{" "}
+      <Typography.Title level={1} style={{ fontSize: 24, marginTop: 0 }}>
+        Notifications
+      </Typography.Title>
+      <Flex gap={16} align="center" style={{ marginBottom: 16 }}>
+        <Checkbox checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)}>
           Only unread
-        </label>{" "}
+        </Checkbox>
         <Button type="button" onClick={() => void readAll()}>
           Mark all as read
         </Button>
-      </p>
+      </Flex>
       {items.length === 0 ? (
         <EmptyState title="Nothing new">
           You are told here when something needs your attention.
         </EmptyState>
       ) : (
-        <ul className="notification-list">
-          {items.map((n) => (
-            <li key={n.id}>
-              <strong>{n.title}</strong>{" "}
-              {n.read_at === null || n.read_at === undefined ? (
-                <StatusChip label="Unread" tone="info" />
-              ) : null}
-              <div className="help">
-                {n.tender && typeof n.tender === "object" && "name" in n.tender
-                  ? String(n.tender.name)
-                  : ""}{" "}
-                · {new Date(n.created_at).toLocaleString()}
-              </div>
-              {n.body && <p>{n.body}</p>}
-              <p>
-                {n.link && (
-                  <Link to={n.link} onClick={() => void read(n.id)}>
-                    Open
-                  </Link>
-                )}{" "}
-                {(n.read_at === null || n.read_at === undefined) && (
-                  <button type="button" className="link" onClick={() => void read(n.id)}>
-                    Mark as read
-                  </button>
-                )}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <Card styles={{ body: { padding: 0 } }}>
+          <List
+            dataSource={items}
+            renderItem={(n) => {
+              const unread = n.read_at === null || n.read_at === undefined;
+              return (
+                <List.Item
+                  key={n.id}
+                  actions={[
+                    n.link ? (
+                      <Link key="open" to={n.link} onClick={() => void read(n.id)}>
+                        Open
+                      </Link>
+                    ) : null,
+                    unread ? (
+                      <Button key="read" type="button" onClick={() => void read(n.id)}>
+                        Mark as read
+                      </Button>
+                    ) : null,
+                  ].filter(Boolean)}
+                >
+                  <div>
+                    <Typography.Text strong>{n.title}</Typography.Text>{" "}
+                    {unread ? <StatusChip label="Unread" tone="info" /> : null}
+                    <div>
+                      <Typography.Text type="secondary">
+                        {n.tender && typeof n.tender === "object" && "name" in n.tender
+                          ? String(n.tender.name)
+                          : ""}{" "}
+                        · {new Date(n.created_at).toLocaleString()}
+                      </Typography.Text>
+                    </div>
+                    {n.body && <div>{n.body}</div>}
+                  </div>
+                </List.Item>
+              );
+            }}
+          />
+        </Card>
       )}
-      <h2>Email</h2>
-      <p className="help">
-        By default you are told in the app only. Choose the notifications you also want by email.
-      </p>
-      {prefs.state.status === "ready" && (
-        <ul className="plain">
-          {prefs.state.data.items.map((p) => (
-            <li key={p.notification_type}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={p.email_enabled}
-                  onChange={(e) => void setEmail(p.notification_type, e.target.checked)}
-                />{" "}
+      <Card title="Email" style={{ marginTop: 16 }}>
+        <Typography.Paragraph type="secondary">
+          By default you are told in the app only. Choose the notifications you also want by email.
+        </Typography.Paragraph>
+        {prefs.state.status === "ready" && (
+          <Flex vertical gap={8}>
+            {prefs.state.data.items.map((p) => (
+              <Checkbox
+                key={p.notification_type}
+                checked={p.email_enabled}
+                onChange={(e) => void setEmail(p.notification_type, e.target.checked)}
+              >
                 {p.notification_type.replace(/_/g, " ")}
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
+              </Checkbox>
+            ))}
+          </Flex>
+        )}
+      </Card>
     </>
   );
 }

@@ -1,5 +1,18 @@
-import { useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { InboxOutlined } from "@ant-design/icons";
+import {
+  Alert,
+  Flex,
+  Input,
+  Modal,
+  Progress,
+  Select,
+  Space,
+  Table,
+  Typography,
+  Upload,
+} from "antd";
+import { useState } from "react";
+import { useParams } from "react-router";
 import {
   Button,
   EmptyState,
@@ -7,9 +20,12 @@ import {
   Field,
   Loading,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { useSession } from "../app/Session";
+import { useViewer } from "../app/ViewerHost";
 import { unwrap, useApi, ApiError } from "../lib/api";
 import {
   docTypeLabel,
@@ -21,6 +37,7 @@ import {
 import { uploadForm, type UploadHandle } from "../lib/upload";
 import { usePush } from "../lib/usePush";
 import { useAsync } from "../lib/useAsync";
+import { VendorsPanel } from "./Vendors";
 import { TenderHeader, useTender } from "./TenderHome";
 import type { components } from "../api/generated/schema";
 
@@ -37,9 +54,9 @@ function VersionStatus({ v }: { v: Version }) {
         tone={(documentStatusTone[v.status] ?? "neutral") as Tone}
       />
       {v.status === "failed" && v.failure_reason && (
-        <p className="help" role="note">
+        <Typography.Paragraph type="secondary" role="note" style={{ margin: "4px 0 0" }}>
           {failureText[v.failure_reason] ?? failureText.other}
-        </p>
+        </Typography.Paragraph>
       )}
     </>
   );
@@ -57,6 +74,7 @@ export function Documents() {
   const { tenderId } = useParams();
   const api = useApi();
   const announce = useAnnounce();
+  const viewer = useViewer();
   const { me } = useSession();
   const isAdmin = me.user.role === "admin";
   const tender = useTender(tenderId);
@@ -74,8 +92,8 @@ export function Documents() {
   const [parent, setParent] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
   const [fieldError, setFieldError] = useState<string | undefined>();
-  const [dragging, setDragging] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [addVendor, setAddVendor] = useState(false);
 
   if (tender.state.status === "loading" || list.state.status === "loading") {
     return <Loading label="Loading documents" />;
@@ -129,6 +147,7 @@ export function Documents() {
       setFieldError("Choose the RFP this addendum belongs to.");
       return;
     }
+    setUploadOpen(false);
     start(`/tenders/${tenderId}/documents`, file, {
       doc_type: docType,
       title,
@@ -152,26 +171,51 @@ export function Documents() {
 
   return (
     <>
-      <TenderHeader tender={tender.state.data} active="documents" />
-      <h2>Documents</h2>
+      <TenderHeader tender={tender.state.data} />
+      <Flex justify="space-between" align="flex-start" wrap gap={12} style={{ marginBottom: 16 }}>
+        <div>
+          <Typography.Title level={2} style={{ fontSize: 20, marginBottom: 4 }}>
+            Documents & vendors
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            The RFP, each vendor and their proposal in one place.
+          </Typography.Text>
+        </div>
+        {isAdmin && (
+          <Space>
+            <Button onClick={() => setUploadOpen(true)}>Upload document</Button>
+            <Button variant="primary" onClick={() => setAddVendor(true)}>
+              Add vendor to tender
+            </Button>
+          </Space>
+        )}
+      </Flex>
       {isAdmin && (
-        <section className="card" aria-labelledby="upload-h">
-          <h3 id="upload-h">Add a document</h3>
+        <Modal
+          open={uploadOpen}
+          title="Upload document"
+          footer={null}
+          destroyOnHidden
+          onCancel={() => setUploadOpen(false)}
+        >
           <Field label="Type">
             {({ id }) => (
-              <select id={id} value={docType} onChange={(e) => setDocType(e.target.value)}>
-                {TENDER_TYPES.map((t) => (
-                  <option key={t} value={t} disabled={t === "rfp" && Boolean(rfp)}>
-                    {docTypeLabel[t]}
-                    {t === "rfp" && rfp ? " (already uploaded)" : ""}
-                  </option>
-                ))}
-              </select>
+              <Select
+                id={id}
+                value={docType}
+                onChange={(v) => setDocType(v)}
+                style={{ minWidth: 260 }}
+                options={TENDER_TYPES.map((t) => ({
+                  value: t,
+                  disabled: t === "rfp" && Boolean(rfp),
+                  label: `${docTypeLabel[t]}${t === "rfp" && rfp ? " (already uploaded)" : ""}`,
+                }))}
+              />
             )}
           </Field>
           <Field label="Title" help="Leave empty to use the file name.">
             {({ id, describedBy }) => (
-              <input
+              <Input
                 id={id}
                 aria-describedby={describedBy}
                 value={title}
@@ -182,82 +226,67 @@ export function Documents() {
           {docType === "addendum" && (
             <Field label="Belongs to" error={fieldError}>
               {({ id, describedBy, invalid }) => (
-                <select
+                <Select
                   id={id}
                   aria-describedby={describedBy}
-                  aria-invalid={invalid}
+                  status={invalid ? "error" : undefined}
                   value={parent}
-                  onChange={(e) => setParent(e.target.value)}
-                >
-                  <option value="">Choose the RFP</option>
-                  {docs
-                    .filter((d) => d.doc_type === "rfp")
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.title}
-                      </option>
-                    ))}
-                </select>
+                  onChange={(v) => setParent(v)}
+                  style={{ minWidth: 260 }}
+                  options={[
+                    { value: "", label: "Choose the RFP" },
+                    ...docs
+                      .filter((d) => d.doc_type === "rfp")
+                      .map((d) => ({ value: d.id, label: d.title })),
+                  ]}
+                />
               )}
             </Field>
           )}
-          <div
-            className={`dropzone ${dragging ? "over" : ""}`.trim()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragging(false);
-              pick(e.dataTransfer.files[0]);
+          <Upload.Dragger
+            id="document-file"
+            multiple={false}
+            showUploadList={false}
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            beforeUpload={(file) => {
+              pick(file);
+              return false;
             }}
           >
+            <p className="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
             <p>Drop a PDF or Word file here, or</p>
-            <input
-              ref={input}
-              type="file"
-              className="visually-hidden"
-              id="document-file"
-              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(e) => {
-                pick(e.target.files?.[0]);
-                e.target.value = "";
-              }}
+            <Typography.Text strong>Choose a file</Typography.Text>
+          </Upload.Dragger>
+        </Modal>
+      )}
+      {pending && (
+        <div role="status" aria-live="polite" style={{ marginTop: 16 }}>
+          {pending.error ? (
+            <Alert
+              type="error"
+              showIcon
+              title={
+                <>
+                  <strong>{pending.name}</strong> could not be uploaded. {pending.error}
+                </>
+              }
+              action={<Button onClick={() => setPending(null)}>Dismiss</Button>}
             />
-            <label htmlFor="document-file" className="btn primary">
-              Choose a file
-            </label>
-          </div>
-          {pending && (
-            <div role="status" aria-live="polite">
+          ) : (
+            <>
               <p>
-                {pending.error ? (
-                  <>
-                    <strong>{pending.name}</strong> could not be uploaded. {pending.error}
-                  </>
-                ) : (
-                  <>
-                    Uploading <strong>{pending.name}</strong>: {Math.round(pending.fraction * 100)}%
-                  </>
-                )}
+                Uploading <strong>{pending.name}</strong>: {Math.round(pending.fraction * 100)}%
               </p>
-              {!pending.error && (
-                <progress
-                  max={1}
-                  value={pending.fraction}
-                  aria-label={`Uploading ${pending.name}`}
-                />
-              )}
-              {pending.error ? (
-                <Button onClick={() => setPending(null)}>Dismiss</Button>
-              ) : (
-                <Button onClick={() => pending.handle?.cancel()}>Cancel upload</Button>
-              )}
-            </div>
+              <Progress
+                percent={Math.round(pending.fraction * 100)}
+                aria-label={`Uploading ${pending.name}`}
+              />
+              <Button onClick={() => pending.handle?.cancel()}>Cancel upload</Button>
+            </>
           )}
-        </section>
+        </div>
       )}
       {docs.length === 0 ? (
         <EmptyState title="No documents yet">
@@ -266,55 +295,53 @@ export function Documents() {
             : "The administrator has not uploaded documents for this tender yet."}
         </EmptyState>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <caption>Documents of this tender</caption>
-            <thead>
-              <tr>
-                <th scope="col">Title</th>
-                <th scope="col">Type</th>
-                <th scope="col">Version</th>
-                <th scope="col">Status</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {docs.map((d) => {
+        <Table<Doc>
+          rowKey="id"
+          components={rowHeaderComponents}
+          dataSource={docs}
+          pagination={false}
+          scroll={{ x: "max-content" }}
+          title={() => <Typography.Text strong>Documents of this tender</Typography.Text>}
+          columns={[
+            { title: "Title", onCell: rowHeader, render: (_, d) => d.title },
+            { title: "Type", render: (_, d) => docTypeLabel[d.doc_type] ?? d.doc_type },
+            {
+              title: "Version",
+              render: (_, d) =>
+                `${d.current_version.version_no}${d.version_count > 1 ? ` of ${d.version_count}` : ""}`,
+            },
+            { title: "Status", render: (_, d) => <VersionStatus v={d.current_version} /> },
+            {
+              title: "Actions",
+              render: (_, d) => {
                 const v = d.current_version;
                 return (
-                  <tr key={d.id}>
-                    <th scope="row">{d.title}</th>
-                    <td>{docTypeLabel[d.doc_type] ?? d.doc_type}</td>
-                    <td>
-                      {v.version_no}
-                      {d.version_count > 1 ? ` of ${d.version_count}` : ""}
-                    </td>
-                    <td>
-                      <VersionStatus v={v} />
-                    </td>
-                    <td>
-                      {v.status === "ready" && (
-                        <Link to={`/documents/${v.id}/view`} className="btn">
-                          Open
-                        </Link>
-                      )}{" "}
-                      {isAdmin && v.status === "failed" && !isFileCause(v.failure_reason) && (
-                        <Button onClick={() => void retry(v)}>Try again</Button>
-                      )}
-                      {isAdmin && (
-                        <NewVersion
-                          doc={d}
-                          onStart={(file) => start(`/documents/${d.id}/versions`, file, {})}
-                        />
-                      )}
-                    </td>
-                  </tr>
+                  <Space wrap>
+                    {v.status === "ready" && (
+                      <Button onClick={() => viewer.open(v.id)} aria-label={`Open ${d.title}`}>
+                        Open
+                      </Button>
+                    )}
+                    {isAdmin && v.status === "failed" && !isFileCause(v.failure_reason) && (
+                      <Button onClick={() => void retry(v)}>Try again</Button>
+                    )}
+                    {isAdmin && (
+                      <NewVersion
+                        doc={d}
+                        onStart={(file) => start(`/documents/${d.id}/versions`, file, {})}
+                      />
+                    )}
+                  </Space>
                 );
-              })}
-            </tbody>
-          </table>
-        </div>
+              },
+            },
+          ]}
+        />
       )}
+      <Typography.Title level={3} style={{ fontSize: 16, marginTop: 24 }}>
+        Vendors & proposals
+      </Typography.Title>
+      <VendorsPanel tenderId={tenderId!} addOpen={addVendor} onAddOpenChange={setAddVendor} />
     </>
   );
 }
@@ -328,23 +355,17 @@ function isFileCause(reason?: string | null): boolean {
 }
 
 function NewVersion({ doc, onStart }: { doc: Doc; onStart: (f: File) => void }) {
-  const id = `nv-${doc.id}`;
   return (
-    <>
-      <input
-        id={id}
-        type="file"
-        className="visually-hidden"
-        accept=".pdf,.docx"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (f) onStart(f);
-        }}
-      />
-      <label htmlFor={id} className="btn">
-        New version
-      </label>
-    </>
+    <Upload
+      accept=".pdf,.docx"
+      showUploadList={false}
+      aria-label={`New version of ${doc.title}`}
+      beforeUpload={(file) => {
+        onStart(file);
+        return false;
+      }}
+    >
+      <Button>New version</Button>
+    </Upload>
   );
 }
