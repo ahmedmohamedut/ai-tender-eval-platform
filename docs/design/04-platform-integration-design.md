@@ -597,6 +597,7 @@ One image, two deployments: `WORKER_ROLE` chooses the code path. Numeric default
 | `WORKER_ROLE` | both | config | required: `ingest` or `agent` | Which consumers and which code the process starts. |
 | `WORKER_ID` | both | config | host name | Appears in status messages and traces. |
 | `NATS_URL`, `NATS_TLS_CA_FILE` | both | config | required | Broker address and CA bundle. |
+| `OPENBAO_ADDR`, `OPENBAO_ROLE_ID`, `OPENBAO_SECRET_ID` | both | config, secret id | none | The worker's own AppRole. With an address set, the secrets in this table marked OpenBao are read from `kv/tender-eval/worker-{role}/` once at start and override the environment; without one the environment is used (development and tests). A failed read stops the start. |
 | `NATS_CREDENTIALS` | both | secret | OpenBao `{role}/nats` | The role's NATS user (5.11). |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_PATH_STYLE` | both | config | required, `us-east-1`, `true` | RustFS endpoint. |
 | `S3_BUCKET_DOCUMENTS`, `S3_BUCKET_DERIVED` | ingest | config | section 4 names | Read originals, write derived files. |

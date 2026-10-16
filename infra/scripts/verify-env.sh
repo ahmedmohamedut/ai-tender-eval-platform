@@ -79,6 +79,19 @@ WT=$(bao_login "$OPENBAO_WORKER_AGENT_ROLE_ID" "$OPENBAO_WORKER_AGENT_SECRET_ID"
 [ "$(bao_read "$WT" backend/db-app)" = 403 ] && ok "agent cannot read the backend's database credentials" || bad "agent can read backend/db-app"
 [ -z "$(bao_login "$OPENBAO_BACKEND_ROLE_ID" wrong-secret-id)" ] && ok "a wrong secret id is refused" || bad "wrong secret id accepted"
 
+# G3: the workers hold an AppRole, not the secrets themselves.
+for w in worker-ingest worker-agent; do
+  c=${PROJECT}-$w-1
+  if docker ps --format '{{.Names}}' | grep -q "^$c$"; then
+    wenv=$(docker exec "$c" env)
+    leaked=
+    for v in "$RUSTFS_SECRET_KEY" "$QDRANT_API_KEY" "$QDRANT_READ_ONLY_API_KEY" "$EMBEDDING_API_KEY"; do
+      [ -n "$v" ] && printf '%s' "$wenv" | grep -qF "=$v" && leaked=1
+    done
+    [ -z "$leaked" ] && ok "$w environment holds no storage, Qdrant or embedding secret" || bad "$w environment holds a secret that belongs in OpenBao"
+  fi
+done
+
 echo "== Gateway (PI Q13)"
 check "gateway answers /healthz" curl -fsS "http://localhost:$GATEWAY_PORT/config.json"
 # The body limit is enforced while the body is read, so something must read it.

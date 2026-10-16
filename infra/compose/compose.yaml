@@ -109,6 +109,8 @@ services:
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      LLM_API_KEY: ${LLM_API_KEY:-dev-llm-key}
       KEYCLOAK_BACKEND_ADMIN_SECRET: ${KEYCLOAK_BACKEND_ADMIN_SECRET}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       PHOENIX_SECRET: ${PHOENIX_SECRET}
@@ -367,22 +369,23 @@ services:
     depends_on:
       provision-nats: { condition: service_completed_successfully }
       provision-rustfs: { condition: service_completed_successfully }
+      provision-openbao: { condition: service_completed_successfully }
       qdrant: { condition: service_healthy }
       embedding-stub: { condition: service_healthy }
     environment:
       WORKER_ROLE: ingest
+      # Secrets come from OpenBao over this worker's own AppRole (PI 7.2; G3).
+      OPENBAO_ADDR: http://openbao:8200
+      OPENBAO_ROLE_ID: ${OPENBAO_WORKER_INGEST_ROLE_ID}
+      OPENBAO_SECRET_ID: ${OPENBAO_WORKER_INGEST_SECRET_ID}
       WORKER_ID: worker-ingest-1
       NATS_URL: nats://nats:4222
       S3_ENDPOINT: http://rustfs:9000
       S3_REGION: ${S3_REGION}
-      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
-      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY}
       QDRANT_URL: http://qdrant:6333
-      QDRANT_API_KEY: ${QDRANT_API_KEY}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embedding-stub:8000/v1}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
       EMBEDDING_DOCUMENT_PREFIX: ${EMBEDDING_DOCUMENT_PREFIX:-}
       EMBEDDING_QUERY_PREFIX: ${EMBEDDING_QUERY_PREFIX:-}
       LOG_LEVEL: ${LOG_LEVEL}
@@ -410,8 +413,10 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       WORKER_ROLE: agent
+      OPENBAO_ADDR: http://openbao:8200
+      OPENBAO_ROLE_ID: ${OPENBAO_WORKER_AGENT_ROLE_ID}
+      OPENBAO_SECRET_ID: ${OPENBAO_WORKER_AGENT_SECRET_ID}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://llm-stub:8000/v1}
-      LLM_API_KEY: ${LLM_API_KEY:-dev-llm-key}
       LLM_MODEL_EXTRACTION: ${LLM_MODEL_EXTRACTION:-stub-llm}
       LLM_MODEL_VERSION: ${LLM_MODEL_VERSION:-stub-1}
       LLM_STRUCTURED_OUTPUT: ${LLM_STRUCTURED_OUTPUT:-json_schema}
@@ -424,14 +429,10 @@ services:
       NATS_URL: nats://nats:4222
       S3_ENDPOINT: http://rustfs:9000
       S3_REGION: ${S3_REGION}
-      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
-      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY}
       QDRANT_URL: http://qdrant:6333
-      QDRANT_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://embedding-stub:8000/v1}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
       EMBEDDING_DOCUMENT_PREFIX: ${EMBEDDING_DOCUMENT_PREFIX:-}
       EMBEDDING_QUERY_PREFIX: ${EMBEDDING_QUERY_PREFIX:-}
       LOG_LEVEL: ${LOG_LEVEL}

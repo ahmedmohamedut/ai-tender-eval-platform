@@ -145,7 +145,7 @@ Notable problems found while building, how each was found and what guards agains
 | --- | --- | --- | --- |
 | G1 | Nothing has been pushed, so CI has never run on GitHub | Every gate was run locally | Push to a remote and read the first run |
 | G2 | No staging environment; NATS and Phoenix run without authentication or TLS locally (D8) | Shared environments | Phase 0 staging skeleton |
-| G3 | Workers read secrets from the environment, not OpenBao (D7) | Security review | Worker AppRole client |
+| G3 | Workers read secrets from the environment, not OpenBao (D7) | Security review | Closed: `tender_worker/secrets.py` and `load_settings()` read the worker's own OpenBao paths over AppRole at start (P92); compose no longer passes those secrets; `test_secrets.py` (7), `make verify-env` check |
 | G4 | Recall and precision on real RFPs are unmeasured; the only figures are on synthetic RFPs with the stub or the local model | Release gate | An approved endpoint and real or anonymised documents (rule 15) |
 | G5 | Duplicate detection is not exercised well: the development embedding is a hash (duplicates flagged 0 of 2 in the release record) | Extraction quality | A real embedding model, then re-run `make eval` |
 | G6 | Phoenix tracing for the agent: extraction is traced (P80); evaluation and pre-check are not | Observability | Wrap their graph nodes and model calls with `tracing.span` and `tracing.purpose`, as extraction does; keep `TRACE_CAPTURE_CONTENT` off |
@@ -162,3 +162,4 @@ Notable problems found while building, how each was found and what guards agains
 | G17 | Notification types with no producer yet: added_to_tender, tender_opened, job_completed, job_failed, proposal_screened, evaluation_ready, new_proposal_version, conflict_declared, resubmission_requested, document_added | UX-NOT-01 | Add each at its event; job events need a system-context path (the worker status handler runs without a person) |
 | G18 | With several backend instances the email batch could be sent twice (`app_notifications_email_next` does not lock) | UX-NOT-03 | Claim rows with `FOR UPDATE SKIP LOCKED` in a transaction that spans the send |
 | G19 | The report published no push event, so an open report page refreshed only on tender or evaluation events and on reload | UX-GEN-06 | Closed in P5-7: `report.changed` on `ui.push.tender.{id}` after a final grade, finalize and reopen (after the commit; ids and a reason only); `ReportApiIT` |
+| G20 | Workers read OpenBao once at start: no token renewal and no re-read after an authentication failure (PI 7.2) | Rotation of S3, Qdrant, embedding or LLM keys | Restart the worker today; later re-read on a 401/403 and rebuild the clients |

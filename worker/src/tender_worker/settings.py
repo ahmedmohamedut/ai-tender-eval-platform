@@ -7,12 +7,15 @@ that needs it (docs/decisions.md).
 
 from __future__ import annotations
 
+import os
 import socket
 import sys
 from typing import Literal
 
 from pydantic import Field, SecretStr, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from tender_worker.secrets import SecretsError, fetch_worker_secrets
 
 
 class Settings(BaseSettings):
@@ -22,6 +25,12 @@ class Settings(BaseSettings):
     WORKER_ID: str = Field(default_factory=socket.gethostname)
 
     NATS_URL: str
+
+    # With OPENBAO_ADDR set the worker signs in with its own AppRole and reads its secrets from
+    # OpenBao at start; they then win over the environment (PI 7.2). Unset: environment only.
+    OPENBAO_ADDR: str | None = None
+    OPENBAO_ROLE_ID: str | None = None
+    OPENBAO_SECRET_ID: SecretStr | None = None
 
     S3_ENDPOINT: str
     S3_REGION: str = "us-east-1"
@@ -110,10 +119,29 @@ class Settings(BaseSettings):
         return __version__
 
 
+def _openbao_secrets() -> dict[str, str]:
+    """Secrets from OpenBao as Settings init values, or nothing when OpenBao is not configured."""
+    addr = os.environ.get("OPENBAO_ADDR")
+    if not addr:
+        return {}
+    role = os.environ.get("WORKER_ROLE", "")
+    missing = [k for k in ("OPENBAO_ROLE_ID", "OPENBAO_SECRET_ID") if not os.environ.get(k)] + (
+        [] if role in ("ingest", "agent") else ["WORKER_ROLE"]
+    )
+    if missing:
+        raise SecretsError(f"missing or invalid: {', '.join(missing)}")
+    return fetch_worker_secrets(
+        addr, os.environ["OPENBAO_ROLE_ID"], os.environ["OPENBAO_SECRET_ID"], role
+    )
+
+
 def load_settings() -> Settings:
     """Load settings or exit non-zero, naming the keys but never their values."""
     try:
-        return Settings()  # type: ignore[call-arg]
+        return Settings(**_openbao_secrets())  # type: ignore[arg-type]
+    except SecretsError as exc:
+        print(f"configuration error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from None
     except ValidationError as exc:
         problems = sorted({".".join(str(p) for p in e["loc"]) or e["msg"] for e in exc.errors()})
         print(f"configuration error: missing or invalid: {', '.join(problems)}", file=sys.stderr)
