@@ -160,5 +160,5 @@ export async function axeViolations(page: Page): Promise<string[]> {
 /** Picks an option of an antd Select by its visible label (the control is a combobox). */
 export async function chooseOption(page: Page, label: string | RegExp, option: string) {
   await page.getByRole("combobox", { name: label }).click();
-  await page.getByRole("option", { name: option, exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).last().click();
 }

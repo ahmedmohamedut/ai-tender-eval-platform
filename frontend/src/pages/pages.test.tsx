@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Shell } from "../app/Shell";
 import {
   accessibilityViolations,
@@ -100,6 +100,14 @@ describe("PG-02 All tenders", () => {
   });
 });
 
+const uploads: string[] = [];
+vi.mock("../lib/upload", () => ({
+  uploadForm: (path: string) => {
+    uploads.push(path);
+    return { done: Promise.resolve(null), cancel: () => undefined };
+  },
+}));
+
 describe("PG-03 Create tender", () => {
   const lookup = {
     items: [
@@ -120,12 +128,11 @@ describe("PG-03 Create tender", () => {
       return undefined;
     });
     const { container } = renderPage(<TenderForm />, { api, route: "/tenders/new" });
-    await screen.findByLabelText("Casey Chair");
-    await userEvent.type(screen.getByLabelText(/Name \(required\)/), "Cloud platform");
-    await userEvent.click(screen.getByLabelText("Casey Chair"));
-    await choose(/Chair \(required\)/, "Casey Chair");
+    await userEvent.type(await screen.findByLabelText("Tender name"), "Cloud platform");
+    await choose("Committee members", "Casey Chair");
+    await choose("Committee Chair", "Casey Chair");
     await userEvent.click(screen.getByRole("button", { name: "Create tender" }));
-    const nameField = screen.getByLabelText(/Name \(required\)/);
+    const nameField = screen.getByLabelText("Tender name");
     await waitFor(() => expect(nameField).toHaveAttribute("aria-invalid", "true"));
     expect(screen.getByText(/A tender with this name already exists/)).toBeInTheDocument();
     expect(nameField).toHaveValue("Cloud platform");
@@ -142,13 +149,59 @@ describe("PG-03 Create tender", () => {
     );
   });
 
+  it("asks for the mandatory fields before it sends anything", async () => {
+    const api = fakeApi((call) => (call === "GET /users/lookup" ? lookup : undefined));
+    renderPage(<TenderForm />, { api, route: "/tenders/new" });
+    await userEvent.click(await screen.findByRole("button", { name: "Create tender" }));
+    expect(await screen.findByText("Enter a tender name.")).toBeInTheDocument();
+    expect(screen.getByText("Choose at least one committee member.")).toBeInTheDocument();
+    expect(screen.getByText("Choose the Chair from the members.")).toBeInTheDocument();
+    expect(api.POST).not.toHaveBeenCalled();
+  });
+
+  it("ticks each part of the readiness list as it is completed", async () => {
+    const api = fakeApi((call) => (call === "GET /users/lookup" ? lookup : undefined));
+    renderPage(<TenderForm />, { api, route: "/tenders/new" });
+    const panel = await screen.findByRole("complementary", { name: "Readiness" });
+    expect(within(panel).getAllByText(/\(missing\)/)).toHaveLength(4);
+    await userEvent.type(screen.getByLabelText("Tender name"), "Cloud platform");
+    await choose("Committee members", "Casey Chair");
+    await choose("Committee Chair", "Casey Chair");
+    await waitFor(() => expect(within(panel).getAllByText(/\(done\)/)).toHaveLength(3));
+    expect(within(panel).getByText(/Incomplete/)).toBeInTheDocument();
+  });
+
+  it("uploads the RFP right after the tender is created", async () => {
+    const api = fakeApi((call) => {
+      if (call === "GET /users/lookup") return lookup;
+      if (call === "POST /tenders") return { ...TENDER, id: "new-tender", name: "Cloud platform" };
+      return undefined;
+    });
+    uploads.length = 0;
+    renderPage(
+      <Routes>
+        <Route path="/tenders/new" element={<TenderForm />} />
+        <Route path="/tenders/:tenderId/edit" element={<p>Edit page</p>} />
+      </Routes>,
+      { api, route: "/tenders/new" },
+    );
+    await userEvent.type(await screen.findByLabelText("Tender name"), "Cloud platform");
+    await choose("Committee members", "Casey Chair");
+    await choose("Committee Chair", "Casey Chair");
+    const input = document.querySelector("#tender-rfp") as HTMLInputElement;
+    await userEvent.upload(input, new File(["%PDF-1.7"], "rfp.pdf", { type: "application/pdf" }));
+    await userEvent.click(screen.getByRole("button", { name: "Create tender" }));
+    expect(await screen.findByText("Edit page")).toBeInTheDocument();
+    expect(uploads).toEqual(["/tenders/new-tender/documents"]);
+  });
+
   it("only offers the chosen members as Chair", async () => {
     const api = fakeApi((call) => (call === "GET /users/lookup" ? lookup : undefined));
     renderPage(<TenderForm />, { api, route: "/tenders/new" });
-    await screen.findByLabelText("Morgan Member");
-    expect(await optionsOf(/Chair \(required\)/)).not.toContain("Morgan Member");
-    await userEvent.click(screen.getByLabelText("Morgan Member"));
-    expect(await optionsOf(/Chair \(required\)/)).toContain("Morgan Member");
+    await screen.findByLabelText("Committee members");
+    expect(await optionsOf("Committee Chair")).not.toContain("Morgan Member");
+    await choose("Committee members", "Morgan Member");
+    expect(await optionsOf("Committee Chair")).toContain("Morgan Member");
   });
 });
 
@@ -195,7 +248,7 @@ describe("PG-03 Edit tender", () => {
       </Routes>,
       { api, route: `/tenders/${TENDER.id}/edit` },
     );
-    const name = await screen.findByLabelText(/Name \(required\)/);
+    const name = await screen.findByLabelText("Tender name");
     await userEvent.clear(name);
     await userEvent.type(name, "Renamed");
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
