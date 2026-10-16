@@ -675,29 +675,35 @@ export function Report() {
               components={rowHeaderComponents}
               dataSource={m.rows}
               pagination={false}
-              scroll={{ x: "max-content" }}
+              tableLayout="fixed"
               title={() => (
                 <Typography.Text strong>
                   Final grade of each requirement for each vendor
                 </Typography.Text>
               )}
               columns={[
-                { title: "No", onCell: rowHeader, render: (_, r) => r.requirement.display_no },
+                {
+                  title: "No",
+                  width: 90,
+                  onCell: rowHeader,
+                  render: (_, r) => r.requirement.display_no,
+                },
                 {
                   title: "Requirement",
                   render: (_, r) => (
-                    <>
+                    <div style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
                       {r.requirement.text}
                       <br />
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                         {importanceLabel[r.requirement.importance] ?? r.requirement.importance}
                       </Typography.Text>
-                    </>
+                    </div>
                   ),
                 },
                 ...vendorOptions.map((v) => ({
                   title: v.name,
                   key: v.tender_vendor_id,
+                  width: 170,
                   render: (_: unknown, r: (typeof m.rows)[number]) => {
                     const c = r.cells.find((x) => x.tender_vendor_id === v.tender_vendor_id);
                     if (!c) return null;
@@ -706,7 +712,12 @@ export function Report() {
                     ) : (
                       <AntButton
                         type="link"
-                        style={{ padding: 0, height: "auto" }}
+                        style={{
+                          padding: 0,
+                          height: "auto",
+                          whiteSpace: "normal",
+                          textAlign: "start",
+                        }}
                         onClick={() =>
                           setCellOf({
                             requirementId: r.requirement.id,
@@ -717,8 +728,10 @@ export function Report() {
                         <span className="visually-hidden">
                           Open {r.requirement.display_no} for {v.name}:{" "}
                         </span>
-                        {c.has_disagreement && <StatusChip tone="warning" label="Disagreement" />}{" "}
-                        <Grade grade={c.final_grade} />
+                        <Flex vertical gap={4} align="flex-start">
+                          {c.has_disagreement && <StatusChip tone="warning" label="Disagreement" />}
+                          <Grade grade={c.final_grade} />
+                        </Flex>
                       </AntButton>
                     );
                   },
