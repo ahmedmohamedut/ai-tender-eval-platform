@@ -1,5 +1,16 @@
 import { InboxOutlined } from "@ant-design/icons";
-import { Alert, Card, Input, Progress, Select, Space, Table, Typography, Upload } from "antd";
+import {
+  Alert,
+  Flex,
+  Input,
+  Modal,
+  Progress,
+  Select,
+  Space,
+  Table,
+  Typography,
+  Upload,
+} from "antd";
 import { useState } from "react";
 import { useParams } from "react-router";
 import {
@@ -7,7 +18,6 @@ import {
   EmptyState,
   ErrorNotice,
   Field,
-  LinkButton,
   Loading,
   StatusChip,
   rowHeader,
@@ -15,6 +25,7 @@ import {
   useAnnounce,
 } from "../components/ui";
 import { useSession } from "../app/Session";
+import { useViewer } from "../app/ViewerHost";
 import { unwrap, useApi, ApiError } from "../lib/api";
 import {
   docTypeLabel,
@@ -26,7 +37,7 @@ import {
 import { uploadForm, type UploadHandle } from "../lib/upload";
 import { usePush } from "../lib/usePush";
 import { useAsync } from "../lib/useAsync";
-import { SetupSwitch } from "../components/SetupSwitch";
+import { VendorsPanel } from "./Vendors";
 import { TenderHeader, useTender } from "./TenderHome";
 import type { components } from "../api/generated/schema";
 
@@ -63,6 +74,7 @@ export function Documents() {
   const { tenderId } = useParams();
   const api = useApi();
   const announce = useAnnounce();
+  const viewer = useViewer();
   const { me } = useSession();
   const isAdmin = me.user.role === "admin";
   const tender = useTender(tenderId);
@@ -80,6 +92,8 @@ export function Documents() {
   const [parent, setParent] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
   const [fieldError, setFieldError] = useState<string | undefined>();
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [addVendor, setAddVendor] = useState(false);
 
   if (tender.state.status === "loading" || list.state.status === "loading") {
     return <Loading label="Loading documents" />;
@@ -133,6 +147,7 @@ export function Documents() {
       setFieldError("Choose the RFP this addendum belongs to.");
       return;
     }
+    setUploadOpen(false);
     start(`/tenders/${tenderId}/documents`, file, {
       doc_type: docType,
       title,
@@ -157,12 +172,32 @@ export function Documents() {
   return (
     <>
       <TenderHeader tender={tender.state.data} />
-      <SetupSwitch tenderId={tenderId!} active="documents" />
-      <Typography.Title level={2} style={{ fontSize: 20 }}>
-        Documents
-      </Typography.Title>
+      <Flex justify="space-between" align="flex-start" wrap gap={12} style={{ marginBottom: 16 }}>
+        <div>
+          <Typography.Title level={2} style={{ fontSize: 20, marginBottom: 4 }}>
+            Documents & vendors
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            The RFP, each vendor and their proposal in one place.
+          </Typography.Text>
+        </div>
+        {isAdmin && (
+          <Space>
+            <Button onClick={() => setUploadOpen(true)}>Upload document</Button>
+            <Button variant="primary" onClick={() => setAddVendor(true)}>
+              Add vendor to tender
+            </Button>
+          </Space>
+        )}
+      </Flex>
       {isAdmin && (
-        <Card title="Add a document" style={{ marginBottom: 16 }}>
+        <Modal
+          open={uploadOpen}
+          title="Upload document"
+          footer={null}
+          destroyOnHidden
+          onCancel={() => setUploadOpen(false)}
+        >
           <Field label="Type">
             {({ id }) => (
               <Select
@@ -224,34 +259,34 @@ export function Documents() {
             <p>Drop a PDF or Word file here, or</p>
             <Typography.Text strong>Choose a file</Typography.Text>
           </Upload.Dragger>
-          {pending && (
-            <div role="status" aria-live="polite" style={{ marginTop: 16 }}>
-              {pending.error ? (
-                <Alert
-                  type="error"
-                  showIcon
-                  title={
-                    <>
-                      <strong>{pending.name}</strong> could not be uploaded. {pending.error}
-                    </>
-                  }
-                  action={<Button onClick={() => setPending(null)}>Dismiss</Button>}
-                />
-              ) : (
+        </Modal>
+      )}
+      {pending && (
+        <div role="status" aria-live="polite" style={{ marginTop: 16 }}>
+          {pending.error ? (
+            <Alert
+              type="error"
+              showIcon
+              title={
                 <>
-                  <p>
-                    Uploading <strong>{pending.name}</strong>: {Math.round(pending.fraction * 100)}%
-                  </p>
-                  <Progress
-                    percent={Math.round(pending.fraction * 100)}
-                    aria-label={`Uploading ${pending.name}`}
-                  />
-                  <Button onClick={() => pending.handle?.cancel()}>Cancel upload</Button>
+                  <strong>{pending.name}</strong> could not be uploaded. {pending.error}
                 </>
-              )}
-            </div>
+              }
+              action={<Button onClick={() => setPending(null)}>Dismiss</Button>}
+            />
+          ) : (
+            <>
+              <p>
+                Uploading <strong>{pending.name}</strong>: {Math.round(pending.fraction * 100)}%
+              </p>
+              <Progress
+                percent={Math.round(pending.fraction * 100)}
+                aria-label={`Uploading ${pending.name}`}
+              />
+              <Button onClick={() => pending.handle?.cancel()}>Cancel upload</Button>
+            </>
           )}
-        </Card>
+        </div>
       )}
       {docs.length === 0 ? (
         <EmptyState title="No documents yet">
@@ -283,7 +318,9 @@ export function Documents() {
                 return (
                   <Space wrap>
                     {v.status === "ready" && (
-                      <LinkButton to={`/documents/${v.id}/view`}>Open</LinkButton>
+                      <Button onClick={() => viewer.open(v.id)} aria-label={`Open ${d.title}`}>
+                        Open
+                      </Button>
                     )}
                     {isAdmin && v.status === "failed" && !isFileCause(v.failure_reason) && (
                       <Button onClick={() => void retry(v)}>Try again</Button>
@@ -301,6 +338,10 @@ export function Documents() {
           ]}
         />
       )}
+      <Typography.Title level={3} style={{ fontSize: 16, marginTop: 24 }}>
+        Vendors & proposals
+      </Typography.Title>
+      <VendorsPanel tenderId={tenderId!} addOpen={addVendor} onAddOpenChange={setAddVendor} />
     </>
   );
 }

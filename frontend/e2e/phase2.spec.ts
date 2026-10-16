@@ -42,6 +42,7 @@ test("upload an RFP and a proposal, read them, and open a passage highlighted", 
   expect(await axeViolations(admin.page), "Documents (empty)").toEqual([]);
 
   // ---- upload the RFP: it is read in the background and becomes Ready ------------------------------
+  await admin.page.getByRole("button", { name: "Upload document" }).click();
   await admin.page.locator("#document-file").setInputFiles(join(dir, "rfp.pdf"));
   const row = admin.page.getByRole("row", { name: /rfp/i });
   await expect(row).toBeVisible();
@@ -71,11 +72,15 @@ test("upload an RFP and a proposal, read them, and open a passage highlighted", 
   });
   expect(await axeViolations(admin.page), "Viewer").toEqual([]);
 
-  // ---- the page itself leads back to the tender's documents ------------------------------------------
-  await admin.page.getByRole("link", { name: "Back to tender documents" }).click();
-  await expect(admin.page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
+  // ---- the viewer is a window over the tender's documents; closing it leaves them in view -------------
   await expect(admin.page).toHaveURL(new RegExp(`/tenders/${tenderId}/documents$`));
-  await admin.page.goBack();
+  await admin.page
+    .getByRole("dialog", { name: "Document viewer" })
+    .getByRole("button", { name: "Close" })
+    .click();
+  await expect(
+    admin.page.getByRole("heading", { name: "Documents & vendors", exact: true }),
+  ).toBeVisible();
 
   // ---- the file cannot be fetched as a download or by a storage address ---------------------------
   const token = await admin.page.evaluate(() =>
@@ -85,11 +90,13 @@ test("upload an RFP and a proposal, read them, and open a passage highlighted", 
 
   // ---- a DOCX and a failing file --------------------------------------------------------------------
   await admin.page.goto(`/tenders/${tenderId}/documents`);
+  await admin.page.getByRole("button", { name: "Upload document" }).click();
   await chooseOption(admin.page, "Type", "Other document");
   await admin.page.locator("#document-file").setInputFiles(join(dir, "sow.docx"));
   const docx = admin.page.getByRole("row", { name: /sow/i });
   await expect(docx.getByText("Ready")).toBeVisible({ timeout: 120_000 });
 
+  await admin.page.getByRole("button", { name: "Upload document" }).click();
   await admin.page.locator("#document-file").setInputFiles(join(dir, "protected.pdf"));
   const prot = admin.page.getByRole("row", { name: /protected/i });
   await expect(prot.getByText("Failed")).toBeVisible({ timeout: 60_000 });
@@ -103,12 +110,11 @@ test("upload an RFP and a proposal, read them, and open a passage highlighted", 
   expect(await axeViolations(admin.page), "Jobs").toEqual([]);
 
   // ---- a vendor with a two-file proposal -------------------------------------------------------------
-  await admin.page.goto(`/tenders/${tenderId}/vendors`);
+  await admin.page.goto(`/tenders/${tenderId}/documents`);
+  await admin.page.getByRole("button", { name: "Add vendor to tender" }).click();
   await admin.page.getByLabel("Vendor name").fill(`Lumen ${stamp}`);
-  await admin.page.getByRole("button", { name: "Add vendor" }).click();
-  await expect(
-    admin.page.getByRole("heading", { name: new RegExp(`Lumen ${stamp}`) }),
-  ).toBeVisible();
+  await admin.page.getByRole("button", { name: "Add vendor", exact: true }).click();
+  await expect(admin.page.getByText(new RegExp(`Lumen ${stamp}`)).first()).toBeVisible();
   await admin.page
     .getByLabel("Upload the proposal")
     .setInputFiles([join(dir, "sow.docx"), join(dir, "rfp.pdf")]);

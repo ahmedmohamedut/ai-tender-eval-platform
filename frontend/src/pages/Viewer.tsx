@@ -1,7 +1,6 @@
 import { Button as AntButton, Card, Checkbox, Input, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
-import { Field, LinkButton } from "../components/ui";
-import { useParams, useSearchParams } from "react-router";
+import { Field } from "../components/ui";
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import {
@@ -24,17 +23,21 @@ import { highlightBoxes, snippetParts, startPage } from "../lib/viewer";
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 /** PG-10 (document part): outline, pages, search, zoom, text selection, passage highlight. */
-export function Viewer() {
-  const { versionId } = useParams();
-  const [params, setParams] = useSearchParams();
+export function Viewer({
+  versionId,
+  passage: firstPassage,
+}: {
+  versionId: string;
+  passage: string | null;
+}) {
   const api = useApi();
-  const passageId = params.get("passage");
+  const [passageId, setPassageId] = useState<string | null>(firstPassage);
 
   const outline = useAsync(
     () =>
       unwrap(
         api.GET("/document-versions/{documentVersionId}/outline", {
-          params: { path: { documentVersionId: versionId! } },
+          params: { path: { documentVersionId: versionId } },
         }),
       ),
     [api, versionId],
@@ -43,7 +46,7 @@ export function Viewer() {
     () =>
       unwrap(
         api.GET("/document-versions/{documentVersionId}/pages", {
-          params: { path: { documentVersionId: versionId! } },
+          params: { path: { documentVersionId: versionId } },
         }),
       ),
     [api, versionId],
@@ -52,7 +55,7 @@ export function Viewer() {
   const origin = useAsync(async () => {
     const v = await unwrap(
       api.GET("/document-versions/{documentVersionId}", {
-        params: { path: { documentVersionId: versionId! } },
+        params: { path: { documentVersionId: versionId } },
       }),
     );
     const d = await unwrap(
@@ -60,13 +63,6 @@ export function Viewer() {
     );
     return { tenderId: d.tender_id, title: d.title };
   }, [api, versionId]);
-  const back =
-    origin.state.status === "ready"
-      ? `/tenders/${origin.state.data.tenderId}/documents`
-      : "/tenders";
-  const backLabel =
-    origin.state.status === "ready" ? "Back to tender documents" : "Back to tenders";
-
   const { me } = useSession();
   const announce = useAnnounce();
   const isMember = me.user.role === "member";
@@ -109,20 +105,14 @@ export function Viewer() {
     (pages.state.status === "ready" && passageReady
       ? startPage(
           passageState.status === "ready" ? passageState.data?.page_no : undefined,
-          params.get("page"),
+          null,
           count,
         )
       : null);
 
-  const backLink = (
-    <p className="viewer-back">
-      <LinkButton to={back}>{backLabel}</LinkButton>
-    </p>
-  );
   if (pages.state.status === "loading" || outline.state.status === "loading") {
     return (
       <>
-        {backLink}
         <Loading label="Opening the document" />
       </>
     );
@@ -130,14 +120,12 @@ export function Viewer() {
   if (pages.state.status === "error")
     return (
       <>
-        {backLink}
         <ErrorNotice error={pages.state.error} onRetry={pages.reload} />
       </>
     );
   if (outline.state.status === "error")
     return (
       <>
-        {backLink}
         <ErrorNotice error={outline.state.error} onRetry={outline.reload} />
       </>
     );
@@ -148,7 +136,7 @@ export function Viewer() {
     if (!query.trim()) return;
     const r = await unwrap(
       api.GET("/document-versions/{documentVersionId}/search", {
-        params: { path: { documentVersionId: versionId! }, query: { q: query } },
+        params: { path: { documentVersionId: versionId }, query: { q: query } },
       }),
     );
     setHits(r.hits);
@@ -180,7 +168,7 @@ export function Viewer() {
           body: {
             scope: [
               {
-                document_version_id: versionId!,
+                document_version_id: versionId,
                 section_ids: [...picked],
                 page_from: from,
                 page_to: to,
@@ -209,13 +197,11 @@ export function Viewer() {
 
   return (
     <div className="viewer">
-      <h1 className="visually-hidden">Document viewer</h1>
-      <p className="viewer-back">
-        <LinkButton to={back}>{backLabel}</LinkButton>
-        {origin.state.status === "ready" && (
-          <Typography.Text type="secondary"> {origin.state.data.title}</Typography.Text>
-        )}
-      </p>
+      {origin.state.status === "ready" && (
+        <p className="viewer-back">
+          <Typography.Text strong>{origin.state.data.title}</Typography.Text>
+        </p>
+      )}
       <aside aria-label="Document navigation" className="viewer-side">
         <form
           role="search"
@@ -248,7 +234,7 @@ export function Viewer() {
                   type="link"
                   style={{ padding: 0, height: "auto", textAlign: "start" }}
                   onClick={() => {
-                    setParams({ passage: h.passage_id });
+                    setPassageId(h.passage_id);
                     setPage(h.page_no);
                   }}
                 >
@@ -414,7 +400,7 @@ export function Viewer() {
         />
         {current !== null && (
           <PdfPage
-            versionId={versionId!}
+            versionId={versionId}
             pageNo={current}
             zoom={zoom}
             highlight={highlighted && highlighted.page_no === current ? highlighted.bbox : null}

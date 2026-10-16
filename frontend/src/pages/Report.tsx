@@ -13,7 +13,7 @@ import {
   Typography,
 } from "antd";
 import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { ExportButton } from "../components/ExportButton";
 import {
   Button,
@@ -41,6 +41,7 @@ import type { components } from "../api/generated/schema";
 import { useAsync } from "../lib/useAsync";
 import { usePush } from "../lib/usePush";
 import { useSession } from "../app/Session";
+import { useViewer } from "../app/ViewerHost";
 import { ChairPanel } from "./ChairPanel";
 import { TenderHeader, useTender } from "./TenderHome";
 
@@ -629,6 +630,7 @@ function CellDialog({
   onClose: () => void;
   onDecided: () => void;
 }) {
+  const viewer = useViewer();
   const api = useApi();
   const announce = useAnnounce();
   const { me } = useSession();
@@ -756,9 +758,13 @@ function CellDialog({
                 <ul>
                   {d.ai.citations.map((c) => (
                     <li key={c.citation_no}>
-                      <Link to={`/documents/${c.document_version_id}/view?passage=${c.passage_id}`}>
+                      <AntButton
+                        type="link"
+                        style={{ padding: 0 }}
+                        onClick={() => viewer.open(c.document_version_id, c.passage_id)}
+                      >
                         Page {c.page_no}
-                      </Link>
+                      </AntButton>
                       : {c.excerpt}
                     </li>
                   ))}

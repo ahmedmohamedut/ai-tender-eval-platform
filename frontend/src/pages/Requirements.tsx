@@ -30,6 +30,7 @@ import {
   useAnnounce,
 } from "../components/ui";
 import { useSession } from "../app/Session";
+import { useViewer } from "../app/ViewerHost";
 import { ApiError, unwrap, useApi } from "../lib/api";
 import {
   deleteReasonLabel,
@@ -461,6 +462,7 @@ function RequirementPanel({
   onChanged: () => void;
   onClose: () => void;
 }) {
+  const viewer = useViewer();
   const api = useApi();
   const announce = useAnnounce();
   const [draft, setDraft] = useState<Draft>(toDraft(req));
@@ -711,11 +713,13 @@ function RequirementPanel({
             <ul>
               {req.sources.map((s, i) => (
                 <li key={i}>
-                  <Link
-                    to={`/documents/${s.document_version_id}/view${s.passage_id ? `?passage=${s.passage_id}` : ""}`}
+                  <AntButton
+                    type="link"
+                    style={{ padding: 0 }}
+                    onClick={() => viewer.open(s.document_version_id, s.passage_id ?? null)}
                   >
                     Page {s.page_no ?? "?"}
-                  </Link>
+                  </AntButton>
                   {s.quote ? (
                     <Typography.Paragraph type="secondary" italic>
                       “{s.quote}”

@@ -1,7 +1,7 @@
 import { Button as AntButton, Input, Modal, Radio, Typography } from "antd";
 import { useId, useState } from "react";
-import { useNavigate } from "react-router";
 import { useSession } from "../app/Session";
+import { useViewer } from "../app/ViewerHost";
 import { ApiError, unwrap, useApi } from "../lib/api";
 import { ErrorNotice, useAnnounce } from "./ui";
 
@@ -25,7 +25,7 @@ export function OpenProposalFile({
 }) {
   const api = useApi();
   const { me } = useSession();
-  const navigate = useNavigate();
+  const viewer = useViewer();
   const announce = useAnnounce();
   const [open, setOpen] = useState(false);
   const [conflict, setConflict] = useState<"no" | "yes">("no");
@@ -33,11 +33,10 @@ export function OpenProposalFile({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | undefined>();
   const statementId = useId();
-  const target = `/documents/${documentVersionId}/view`;
 
   async function start() {
     if (me.user.role !== "member") {
-      navigate(target);
+      viewer.open(documentVersionId);
       return;
     }
     try {
@@ -51,7 +50,7 @@ export function OpenProposalFile({
       } else if (mine.has_conflict) {
         announce(`You declared a conflict for ${vendorName}, so you cannot open its proposal`);
       } else {
-        navigate(target);
+        viewer.open(documentVersionId);
       }
     } catch (e) {
       announce(e instanceof Error ? e.message : "The declaration could not be loaded");
@@ -74,7 +73,7 @@ export function OpenProposalFile({
       if (hasConflict) {
         announce(`Conflict recorded. You are excluded from evaluating ${vendorName}`);
       } else {
-        navigate(target);
+        viewer.open(documentVersionId);
       }
     } catch (e) {
       setError(

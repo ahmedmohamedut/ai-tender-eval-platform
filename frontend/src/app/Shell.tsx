@@ -188,10 +188,12 @@ function tenderMenu(id: string, role: Role, tender: Tender | null) {
       entries: [
         {
           key: "screening",
-          to: `${base}/vendors`,
+          to: `${base}/screening`,
           icon: <SafetyCertificateOutlined />,
           label: "Screening",
-          matches: (p) => starts(`${base}/vendors`)(p),
+          matches: (p) =>
+            starts(`${base}/screening`)(p) ||
+            (starts(`${base}/vendors`)(p) && p.endsWith("/screening")),
         },
         ...(role === "admin"
           ? []
@@ -253,7 +255,7 @@ const PAGE_NAMES: Record<string, string> = {
   documents: "Documents & vendors",
   requirements: "Requirements",
   baseline: "Baseline and scoring",
-  vendors: "Screening",
+  screening: "Screening",
   evaluation: "Evaluation",
   report: "Final report",
   edit: "Edit tender",

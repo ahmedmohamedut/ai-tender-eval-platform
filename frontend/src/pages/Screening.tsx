@@ -9,6 +9,7 @@ import {
   Field,
   Loading,
   NoteDialog,
+  LinkButton,
   Section,
   StatusChip,
   rowHeader,
@@ -193,7 +194,7 @@ export function Screening() {
     <>
       {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
       <Typography.Paragraph>
-        <Link to={`/tenders/${tenderId}/vendors`}>Back to vendors</Link>
+        <Link to={`/tenders/${tenderId}/screening`}>Back to screening</Link>
       </Typography.Paragraph>
       <Typography.Title level={2} style={{ fontSize: 20 }}>
         Screening: {vendorName}{" "}
@@ -436,6 +437,80 @@ export function Screening() {
         busy={busy}
         onConfirm={reinstate}
       />
+    </>
+  );
+}
+
+/** The tender's proposals and where each stands in screening; each opens its own screening. */
+export function ScreeningList() {
+  const { tenderId } = useParams();
+  const api = useApi();
+  const tender = useTender(tenderId);
+  const list = useAsync(
+    () =>
+      unwrap(api.GET("/tenders/{tenderId}/vendors", { params: { path: { tenderId: tenderId! } } })),
+    [api, tenderId],
+  );
+  usePush(tenderId, list.reload, ["tender.changed", "job.updated"]);
+  if (tender.state.status === "loading" || list.state.status === "loading") {
+    return <Loading label="Loading screening" />;
+  }
+  if (tender.state.status === "error")
+    return <ErrorNotice error={tender.state.error} onRetry={tender.reload} />;
+  if (list.state.status === "error")
+    return <ErrorNotice error={list.state.error} onRetry={list.reload} />;
+  const items = list.state.data.items;
+  return (
+    <>
+      <TenderHeader tender={tender.state.data} />
+      <Typography.Title level={2} style={{ fontSize: 20, marginBottom: 4 }}>
+        Screening
+      </Typography.Title>
+      <Typography.Paragraph type="secondary">
+        Members tick the checklist and recommend; the Chair decides.
+      </Typography.Paragraph>
+      {items.length === 0 ? (
+        <EmptyState title="No proposals to screen">
+          Add vendors and upload their proposals on the Documents &amp; vendors page.
+        </EmptyState>
+      ) : (
+        <Table<(typeof items)[number]>
+          rowKey="id"
+          components={rowHeaderComponents}
+          dataSource={items}
+          pagination={false}
+          scroll={{ x: "max-content" }}
+          columns={[
+            { title: "Vendor", onCell: rowHeader, render: (_, v) => v.vendor.name },
+            {
+              title: "Proposal",
+              render: (_, v) =>
+                v.proposal_version_no ? `Version ${v.proposal_version_no}` : "No proposal yet",
+            },
+            {
+              title: "Screening",
+              render: (_, v) =>
+                v.status ? (
+                  <StatusChip
+                    label={proposalStatusLabel[v.status] ?? v.status}
+                    tone={proposalStatusTone[v.status] ?? "neutral"}
+                  />
+                ) : (
+                  "-"
+                ),
+            },
+            {
+              title: "Action",
+              render: (_, v) =>
+                v.proposal_version_no ? (
+                  <LinkButton to={`/tenders/${tenderId}/vendors/${v.id}/screening`}>
+                    Open screening
+                  </LinkButton>
+                ) : null,
+            },
+          ]}
+        />
+      )}
     </>
   );
 }

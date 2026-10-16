@@ -1,13 +1,15 @@
 import {
   Alert,
-  Card,
   Divider,
+  Flex,
   Input,
   List,
+  Modal,
   Progress,
   Radio,
   Select,
   Space,
+  Table,
   Typography,
 } from "antd";
 import { useEffect, useState } from "react";
@@ -17,18 +19,27 @@ import {
   EmptyState,
   ErrorNotice,
   Field,
+  LinkButton,
   Loading,
   StatusChip,
+  rowHeader,
+  rowHeaderComponents,
   useAnnounce,
 } from "../components/ui";
 import { useSession } from "../app/Session";
 import { OpenProposalFile } from "../components/OpenProposalFile";
 import { ApiError, unwrap, useApi } from "../lib/api";
-import { documentStatusLabel, documentStatusTone, failureText, type Tone } from "../lib/labels";
+import {
+  documentStatusLabel,
+  documentStatusTone,
+  failureText,
+  proposalStatusLabel,
+  proposalStatusTone,
+  type Tone,
+} from "../lib/labels";
 import { uploadForm } from "../lib/upload";
 import { usePush } from "../lib/usePush";
 import { useAsync } from "../lib/useAsync";
-import { SetupSwitch } from "../components/SetupSwitch";
 import { TenderHeader, useTender } from "./TenderHome";
 import type { components } from "../api/generated/schema";
 
@@ -38,14 +49,47 @@ type ProposalVersion = components["schemas"]["ProposalVersion"];
 /** PG-05 Vendors and proposals (T1 list): add vendors, upload proposal files, see versions. */
 export function Vendors() {
   const { tenderId } = useParams();
+  const tender = useTender(tenderId);
+  const { me } = useSession();
+  const [addOpen, setAddOpen] = useState(false);
+  if (tender.state.status === "loading") return <Loading label="Loading vendors" />;
+  if (tender.state.status === "error")
+    return <ErrorNotice error={tender.state.error} onRetry={tender.reload} />;
+  return (
+    <>
+      <TenderHeader tender={tender.state.data} />
+      <Flex justify="space-between" align="center" wrap gap={12}>
+        <Typography.Title level={2} style={{ fontSize: 20 }}>
+          Vendors
+        </Typography.Title>
+        {me.user.role === "admin" && (
+          <Button variant="primary" onClick={() => setAddOpen(true)}>
+            Add vendor to tender
+          </Button>
+        )}
+      </Flex>
+      <VendorsPanel tenderId={tenderId!} addOpen={addOpen} onAddOpenChange={setAddOpen} />
+    </>
+  );
+}
+
+/** The vendors of a tender with their proposals; the Documents & vendors page shows it too. */
+export function VendorsPanel({
+  tenderId,
+  addOpen,
+  onAddOpenChange,
+}: {
+  tenderId: string;
+  addOpen: boolean;
+  onAddOpenChange: (open: boolean) => void;
+}) {
   const api = useApi();
   const announce = useAnnounce();
   const { me } = useSession();
   const isAdmin = me.user.role === "admin";
-  const tender = useTender(tenderId);
   const list = useAsync(
     () =>
-      unwrap(api.GET("/tenders/{tenderId}/vendors", { params: { path: { tenderId: tenderId! } } })),
+      unwrap(api.GET("/tenders/{tenderId}/vendors", { params: { path: { tenderId: tenderId } } })),
     [api, tenderId],
   );
   usePush(tenderId, list.reload, ["document.updated", "job.updated", "tender.changed"]);
@@ -83,11 +127,9 @@ export function Vendors() {
     };
   }, [api, isAdmin, registryQ]);
 
-  if (tender.state.status === "loading" || list.state.status === "loading") {
+  if (list.state.status === "loading") {
     return <Loading label="Loading vendors" />;
   }
-  if (tender.state.status === "error")
-    return <ErrorNotice error={tender.state.error} onRetry={tender.reload} />;
   if (list.state.status === "error")
     return <ErrorNotice error={list.state.error} onRetry={list.reload} />;
   const items: TenderVendor[] = list.state.data.items;
@@ -107,7 +149,7 @@ export function Vendors() {
           };
       await unwrap(
         api.POST("/tenders/{tenderId}/vendors", {
-          params: { path: { tenderId: tenderId! } },
+          params: { path: { tenderId: tenderId } },
           body,
         }),
       );
@@ -116,6 +158,7 @@ export function Vendors() {
       setRegistryId("");
       setDuplicates([]);
       announce("The vendor was added to the tender");
+      onAddOpenChange(false);
       list.reload();
     } catch (e) {
       if (e instanceof ApiError && e.code === "possible_duplicate") {
@@ -134,13 +177,14 @@ export function Vendors() {
 
   return (
     <>
-      <TenderHeader tender={tender.state.data} />
-      <SetupSwitch tenderId={tenderId!} active="vendors" />
-      <Typography.Title level={2} style={{ fontSize: 20 }}>
-        Vendors
-      </Typography.Title>
       {isAdmin && (
-        <Card title="Add a vendor" style={{ marginBottom: 16 }}>
+        <Modal
+          open={addOpen}
+          title="Add vendor to this tender"
+          footer={null}
+          destroyOnHidden
+          onCancel={() => onAddOpenChange(false)}
+        >
           <Field label="Choose from the vendor registry">
             {({ id }) => (
               <Space.Compact style={{ width: "100%" }}>
@@ -171,7 +215,7 @@ export function Vendors() {
           </Field>
           <Typography.Paragraph type="secondary">
             Not in the registry yet?{" "}
-            <Link to="/vendors/new" state={{ returnTo: `/tenders/${tenderId}/vendors` }}>
+            <Link to="/vendors/new" state={{ returnTo: `/tenders/${tenderId}/documents` }}>
               Create the vendor in the registry
             </Link>
             , or add it here by name.
@@ -238,7 +282,7 @@ export function Vendors() {
           >
             Add vendor
           </Button>
-        </Card>
+        </Modal>
       )}
       {items.length === 0 ? (
         <EmptyState title="No vendors yet">
@@ -247,16 +291,72 @@ export function Vendors() {
             : "The administrator has not added vendors to this tender yet."}
         </EmptyState>
       ) : (
-        items.map((tv) => (
-          <VendorCard
-            key={tv.id}
-            tv={tv}
-            tenderId={tenderId!}
-            isMember={me.user.role === "member"}
-            canUpload={tv.actions?.upload_proposal?.allowed === true}
-            onChanged={list.reload}
-          />
-        ))
+        <Table<TenderVendor>
+          rowKey="id"
+          components={rowHeaderComponents}
+          dataSource={items}
+          pagination={false}
+          scroll={{ x: "max-content" }}
+          expandable={{
+            defaultExpandAllRows: true,
+            columnTitle: <span className="visually-hidden">Proposal</span>,
+            expandedRowRender: (tv) => (
+              <VendorCard
+                tv={tv}
+                tenderId={tenderId}
+                isMember={me.user.role === "member"}
+                canUpload={tv.actions?.upload_proposal?.allowed === true}
+                onChanged={list.reload}
+              />
+            ),
+          }}
+          columns={[
+            {
+              title: "Vendor",
+              onCell: rowHeader,
+              render: (_, tv) =>
+                isAdmin ? (
+                  <Link to={`/vendors/${tv.vendor.id}`}>{tv.vendor.name}</Link>
+                ) : (
+                  tv.vendor.name
+                ),
+            },
+            {
+              title: "Documents",
+              render: (_, tv) =>
+                tv.file_count > 0
+                  ? `${tv.file_count} file${tv.file_count === 1 ? "" : "s"} · version ${tv.proposal_version_no}`
+                  : "No proposal yet",
+            },
+            {
+              title: "Screening",
+              render: (_, tv) =>
+                tv.status ? (
+                  <StatusChip
+                    label={proposalStatusLabel[tv.status] ?? tv.status}
+                    tone={proposalStatusTone[tv.status] ?? "neutral"}
+                  />
+                ) : (
+                  "-"
+                ),
+            },
+            {
+              title: "Action",
+              render: (_, tv) => (
+                <Space wrap>
+                  {tv.file_count > 0 && (
+                    <LinkButton to={`/tenders/${tenderId}/vendors/${tv.id}/screening`}>
+                      Screening
+                    </LinkButton>
+                  )}
+                  {isAdmin && (
+                    <LinkButton to={`/vendors/${tv.vendor.id}`}>Vendor profile</LinkButton>
+                  )}
+                </Space>
+              ),
+            },
+          ]}
+        />
       )}
     </>
   );
@@ -331,15 +431,7 @@ function VendorCard({
     versions.state.status === "ready" ? versions.state.data[0] : undefined;
 
   return (
-    <Card
-      style={{ marginBottom: 16 }}
-      title={
-        <Typography.Title level={3} style={{ fontSize: 16, margin: 0 }} id={`v-${tv.id}`}>
-          {tv.vendor.name}{" "}
-          {current && <StatusChip label={`Version ${current.version_no}`} tone="info" />}
-        </Typography.Title>
-      }
-    >
+    <div aria-label={`Proposal of ${tv.vendor.name}`} role="group">
       {versions.state.status === "loading" && <Loading label="Loading proposal versions" />}
       {current ? (
         <>
@@ -475,6 +567,6 @@ function VendorCard({
           </ul>
         </details>
       )}
-    </Card>
+    </div>
   );
 }

@@ -1,5 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import userEvent, { PointerEventsCheckLevel } from "@testing-library/user-event";
+
+// antd animates its dialogs; during the fade the element reports pointer-events: none.
+const user = () => userEvent.setup({ pointerEventsCheck: PointerEventsCheckLevel.Never });
 import axe from "axe-core";
 import { MemoryRouter } from "react-router";
 import type { ReactElement } from "react";
@@ -92,20 +95,22 @@ export async function choose(
   option: string,
   scope: HTMLElement = document.body,
 ) {
-  await userEvent.click(within(scope).getByRole("combobox", { name: label }));
+  const u = user();
+  await u.click(within(scope).getByRole("combobox", { name: label }));
   const hits = await screen.findAllByText(option, { selector: ".ant-select-item-option-content" });
-  await userEvent.click(hits[hits.length - 1]!);
+  await u.click(hits[hits.length - 1]!);
 }
 
 /** The labels an antd Select offers, read by opening it (and closing it again). */
 export async function optionsOf(label: string | RegExp): Promise<string[]> {
   const box = screen.getByRole("combobox", { name: label });
-  await userEvent.click(box);
+  const u = user();
+  await u.click(box);
   const items = Array.from(
     document.querySelectorAll(".ant-select-item-option-content"),
     (n) => n.textContent ?? "",
   );
-  await userEvent.keyboard("{Escape}");
+  await u.click(box); // closes the list again, without closing a dialog around it
   return items;
 }
 

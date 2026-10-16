@@ -27,6 +27,7 @@ import {
   useAnnounce,
 } from "../components/ui";
 import { useSession } from "../app/Session";
+import { useViewer } from "../app/ViewerHost";
 import { ApiError, unwrap, useApi } from "../lib/api";
 import {
   evaluationStatusLabel,
@@ -62,6 +63,7 @@ export function EvaluationSheet() {
   const { tenderId, tenderVendorId } = useParams();
   const api = useApi();
   const announce = useAnnounce();
+  const viewer = useViewer();
   const { me } = useSession();
   const minNote = me.client_config.min_note_length;
   const tender = useTender(tenderId);
@@ -526,11 +528,13 @@ export function EvaluationSheet() {
                               >
                                 Show in context
                               </AntButton>{" "}
-                              <Link
-                                to={`/documents/${c.document_version_id}/view?passage=${c.passage_id}`}
+                              <AntButton
+                                type="link"
+                                style={{ padding: 0 }}
+                                onClick={() => viewer.open(c.document_version_id, c.passage_id)}
                               >
                                 Open page {c.page_no}
-                              </Link>
+                              </AntButton>
                             </li>
                           ))}
                         </ul>

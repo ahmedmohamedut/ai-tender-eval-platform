@@ -40,6 +40,7 @@ test("extract, review, conflict, confirm, reopen and confirm again", async ({ br
   const admin = await newContext(browser);
   await signIn(admin.page, E2E_ADMIN, [env("DEV_SEED_USER_PASSWORD")]);
   await admin.page.goto(`/tenders/${tender}/documents`);
+  await admin.page.getByRole("button", { name: "Upload document" }).click();
   await admin.page.locator("#document-file").setInputFiles(join(dir, "rfp.pdf"));
   await expect(admin.page.getByRole("row", { name: /rfp/i }).getByText("Ready")).toBeVisible({
     timeout: 90_000,
@@ -56,7 +57,10 @@ test("extract, review, conflict, confirm, reopen and confirm again", async ({ br
   await one.page.getByLabel(/Extract from 1\. Chapter 1/).check();
   expect(await axeViolations(one.page), "Extraction selection").toEqual([]);
   await one.page.getByRole("button", { name: "Start extraction" }).click();
-  await one.page.getByRole("dialog").getByRole("button", { name: "Start extraction" }).click();
+  await one.page
+    .getByRole("dialog", { name: "Start extraction" })
+    .getByRole("button", { name: "Start extraction" })
+    .click();
   await expect(one.page.getByText(/Extracted/).first()).toBeVisible({
     timeout: 120_000,
   });

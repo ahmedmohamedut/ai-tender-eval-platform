@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
@@ -71,6 +71,7 @@ describe("PG-04 Documents", () => {
     if (call === "GET /tenders/{tenderId}") return TENDER;
     if (call === "GET /tenders/{tenderId}/documents")
       return { items, next_cursor: null, total: items.length };
+    if (call === "GET /tenders/{tenderId}/vendors") return { items: [], total: 0 };
     return undefined;
   };
 
@@ -91,10 +92,7 @@ describe("PG-04 Documents", () => {
     expect(
       within(table).getByText(/no selectable text. Upload a text-based copy/i),
     ).toBeInTheDocument();
-    expect(within(table).getByRole("link", { name: "Open" })).toHaveAttribute(
-      "href",
-      "/documents/v1/view",
-    );
+    expect(within(table).getByRole("button", { name: /^Open / })).toBeInTheDocument();
     expect(await accessibilityViolations(container)).toEqual([]);
   });
 
@@ -104,7 +102,8 @@ describe("PG-04 Documents", () => {
       api,
       route: `/tenders/${TENDER_ID}/documents`,
     });
-    expect(await screen.findByText("Add a document")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Upload document" }));
+    expect(await screen.findByText("Choose a file")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("combobox", { name: "Type" }));
     const rfp = (
       await screen.findByText(/RFP \(already uploaded\)/, {
@@ -123,7 +122,7 @@ describe("PG-04 Documents", () => {
       route: `/tenders/${TENDER_ID}/documents`,
     });
     expect(await screen.findByRole("table")).toBeInTheDocument();
-    expect(screen.queryByText("Add a document")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upload document" })).not.toBeInTheDocument();
     expect(screen.queryByText("New version")).not.toBeInTheDocument();
   });
 
@@ -285,6 +284,7 @@ describe("PG-05 Vendors", () => {
       api,
       route: `/tenders/${TENDER_ID}/vendors`,
     });
+    await userEvent.click(await screen.findByRole("button", { name: "Add vendor to tender" }));
     await userEvent.type(await screen.findByLabelText("Vendor name"), "LUMEN Limited");
     await userEvent.click(screen.getByRole("button", { name: "Add vendor" }));
     expect(await screen.findByText("A similar vendor already exists:")).toBeInTheDocument();
@@ -313,13 +313,14 @@ describe("PG-05 adding a vendor from the registry", () => {
       api,
       route: `/tenders/${TENDER_ID}/vendors`,
     });
+    await userEvent.click(await screen.findByRole("button", { name: "Add vendor to tender" }));
     await screen.findByLabelText("Choose from the vendor registry");
     expect(await optionsOf("Choose from the vendor registry")).toEqual([
       "Lumen Systems",
       "Dormant Co (inactive)",
     ]);
     await choose("Choose from the vendor registry", "Lumen Systems");
-    await userEvent.click(screen.getByRole("button", { name: "Add from registry" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add from registry" }));
     await waitFor(() =>
       expect(api.POST).toHaveBeenCalledWith(
         "/tenders/{tenderId}/vendors",

@@ -140,10 +140,7 @@ describe("PG-15 Evaluation sheet", () => {
     const detail = await screen.findByLabelText("Detail of REQ-001");
     expect(within(detail).getByText(/data is encrypted at rest/)).toBeInTheDocument();
     expect(within(detail).getByText(/\(page 7\)/)).toBeInTheDocument();
-    expect(within(detail).getByRole("link", { name: "Open page 7" })).toHaveAttribute(
-      "href",
-      "/documents/dv1/view?passage=p1",
-    );
+    expect(within(detail).getByRole("button", { name: "Open page 7" })).toBeInTheDocument();
     const submit = screen.getByRole("button", { name: "Submit this vendor" });
     expect(submit).toBeDisabled();
     expect(await accessibilityViolations(container)).toEqual([]);
