@@ -95,10 +95,11 @@ async def test_an_evaluation_job_is_traced_row_by_row_without_text(exporter, llm
     names = {s.name for s in spans}
     assert {
         "job.evaluation",
+        "batch",
         "row",
         "step.retrieve",
         "step.grade",
-        "step.validate",
+        "step.check",
         "step.record",
         "llm.grade",
     } <= names
@@ -113,7 +114,7 @@ async def test_an_evaluation_job_is_traced_row_by_row_without_text(exporter, llm
     assert {r.attributes["tender.row_outcome"] for r in rows} <= {"graded", "failed"}
     assert all("tender.requirement_id" in r.attributes for r in rows)
     grade = next(s for s in spans if s.name == "llm.grade")
-    assert ancestors(grade, spans)[:2] == ["step.grade", "row"]
+    assert ancestors(grade, spans)[:2] == ["step.grade", "batch"]
     assert ancestors(grade, spans)[-1] == "job.evaluation"
     assert {s.context.trace_id for s in spans} == {job.context.trace_id}
     text = blob(spans)

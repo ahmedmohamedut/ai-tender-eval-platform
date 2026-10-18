@@ -478,7 +478,7 @@ Each screen follows one template and has its own set of states to design; this t
 | PG-14 Proposal screening | T4 | Files in viewer, checklist, members' recommendations, Chair decision | Recommend; Confirm decision (Chair) | Waiting for requirements, rejected, resubmission requested |
 | PG-15 Evaluation sheet with proposal viewer | T5 | Sheet with filters, progress and row expand. Right: proposal viewer. Top: summary strip. | Submit evaluation | Job running, failed rows, outdated rows, submitted (read-only) |
 | PG-16 Cross-vendor requirement view | T5 | Requirement header, one column per vendor with grade, rationale and citations | Next requirement | A vendor not evaluated or rejected |
-| PG-17 Job center | T1 | Jobs with type, target, status and progress | Retry; Cancel | No jobs, failure with reason |
+| PG-17 Job center | T1 | Jobs with work, target, status (progress while open), start time and last update | View job details; Retry; Cancel | No jobs. The job details dialog shows the summary and timestamps, the cause of a failure, the steps with start and finish times and the activity log |
 | PG-18 Notification center | T1 | Items grouped by tender, unread marker | Mark all read | No notifications |
 | PG-19 Consolidated evaluation report | T6 | Header, progress matrix, overview, matrix, disagreements, screening outcomes | Finalize (Chair); Export | In progress with limited results, finalized, reopened version |
 | PG-20 Audit trail | T1 | Filter bar and a table with before and after values | Export CSV | No results |

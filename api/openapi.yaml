@@ -6621,6 +6621,29 @@ components:
       - step_no
       - name
       - status
+    JobEvent:
+      type: object
+      description: One line of a job's activity log. Messages come from a fixed vocabulary and never carry document text.
+      properties:
+        at:
+          type: string
+          format: date-time
+        level:
+          type: string
+          enum:
+          - info
+          - warning
+          - error
+        step:
+          type:
+          - string
+          - 'null'
+        message:
+          type: string
+      required:
+      - at
+      - level
+      - message
     Job:
       type: object
       properties:
@@ -6664,6 +6687,12 @@ components:
           - string
           - 'null'
           format: date-time
+        updated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: When the job last changed (a status message, a step or the watchdog).
         duration_seconds:
           type:
           - integer
@@ -6676,6 +6705,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/JobStep'
+        events:
+          type: array
+          description: Activity log, oldest first. Filled by GET /jobs/{jobId} only, empty in lists.
+          items:
+            $ref: '#/components/schemas/JobEvent'
         failure:
           type:
           - object

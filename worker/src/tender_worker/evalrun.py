@@ -26,6 +26,7 @@ from tender_worker import stub_embedding, stub_llm
 from tender_worker.agent.extraction import ExtractionGraph, ExtractionSettings
 from tender_worker.agent.grounding import verify_quote
 from tender_worker.agent.llm import OpenAiCompatible
+from tender_worker.agent.markdown import MarkdownSource
 from tender_worker.agent.retrieval import PassageRef, ScopeItem
 from tender_worker.prompts import EXTRACTION_VERSION, bundle_hash
 
@@ -62,6 +63,10 @@ class _Source:
         return self._p
 
 
+async def _no_blocks(tender_id, version_id):
+    return None  # the cases are PDF-like: the passages are the text
+
+
 _EMBEDDER = None  # an EmbeddingClient when a real embedding endpoint is given; else the hash stub
 
 
@@ -71,7 +76,7 @@ async def _embed(texts: list[str]) -> list[list[float]]:
     return [stub_embedding.embed(t) for t in texts]
 
 
-async def run_case(data: dict, llm, window_chars: int = 4000) -> CaseResult:
+async def run_case(data: dict, llm, chunk_chars: int = 3000) -> CaseResult:
     passages = [
         PassageRef(
             id=p["id"],
@@ -86,11 +91,11 @@ async def run_case(data: dict, llm, window_chars: int = 4000) -> CaseResult:
     by_id = {p.id: p for p in passages}
     graph = ExtractionGraph(
         llm=llm,
-        passages=_Source(passages),
+        source=MarkdownSource(_Source(passages), _no_blocks),
         embed=_embed,
         tender_id=TENDER,
         job_id=JOB,
-        settings=ExtractionSettings(window_chars=window_chars, overlap_passages=1),
+        settings=ExtractionSettings(chunk_chars=chunk_chars),
     )
     items, counters = await graph.run([ScopeItem(version_id=VERSION)], data["categories"], [])
     expected = data["expected"]
@@ -159,7 +164,7 @@ def render(
     model: str,
     endpoint: str,
     embedding: str = "hash stub (256)",
-    window_chars: int = 4000,
+    chunk_chars: int = 3000,
     max_tokens: int = 4096,
 ) -> str:
     tot = lambda f: sum(getattr(r, f) for r in results)  # noqa: E731
@@ -169,7 +174,7 @@ def render(
         f"- Run: {datetime.now(UTC):%Y-%m-%d %H:%M} UTC",
         f"- Model: `{model}` at `{endpoint}`",
         f"- Embedding: {embedding}",
-        f"- Window: {window_chars} characters, output limit {max_tokens} tokens",
+        f"- Chunk: {chunk_chars} characters, output limit {max_tokens} tokens",
         f"- Prompt: `{EXTRACTION_VERSION}` (bundle `{bundle_hash()[:12]}`)",
         "- Documents: synthetic (evalset/extraction)",
         "",
@@ -250,7 +255,7 @@ async def main_async(args: argparse.Namespace) -> int:
     results = []
     try:
         for path in sorted(SET_DIR.glob("*.json")):
-            results.append(await run_case(json.loads(path.read_text()), llm, args.window_chars))
+            results.append(await run_case(json.loads(path.read_text()), llm, args.chunk_chars))
     finally:
         if server is not None:
             await server.close()
@@ -259,7 +264,7 @@ async def main_async(args: argparse.Namespace) -> int:
         model or "unknown",
         args.base_url or "in-process stub",
         embedding_label,
-        args.window_chars,
+        args.chunk_chars,
         args.max_output_tokens,
     )
     sys.stdout.write(text)
@@ -290,7 +295,7 @@ def main() -> None:
     p.add_argument("--embedding-api-key", default=os.environ.get("EVAL_EMBEDDING_API_KEY"))
     p.add_argument("--embedding-dimensions", type=int, default=256)
     p.add_argument("--embedding-document-prefix", default="")
-    p.add_argument("--window-chars", type=int, default=4000)
+    p.add_argument("--chunk-chars", type=int, default=3000)
     p.add_argument("--max-output-tokens", type=int, default=4096)
     p.add_argument("--write", action="store_true")
     args = p.parse_args()

@@ -194,6 +194,39 @@ class JobProcessingIT extends AbstractApiIT {
   }
 
   @Test
+  void theActivityLogRecordsEachFactOnceWithPlainText() {
+    Setup s = setup();
+    Map<String, Object> first =
+        Map.of("step", "parse", "steps", List.of("fetch", "parse", "index"));
+    apply(status(s, 1, "running", first));
+    apply(status(s, 1, "running", first));
+    apply(status(s, 2, "running", Map.of("step", "index")));
+    apply(
+        status(
+            s,
+            3,
+            "failed",
+            Map.of(
+                "failure",
+                Map.of(
+                    "code",
+                    "llm_unavailable",
+                    "message",
+                    "secret document text",
+                    "retryable",
+                    true))));
+    assertThat(
+            TestUsers.scalar(
+                "SELECT string_agg(level || '|' || coalesce(step, '-') || '|' || message, ';'"
+                    + " ORDER BY at, id) FROM job_events WHERE job_id = ?",
+                s.job()))
+        .isEqualTo(
+            "info|-|The job started;info|parse|Started step parse;info|index|Started step index;"
+                + "error|index|The job failed: The language model did not answer."
+                + " Try again in a few minutes.");
+  }
+
+  @Test
   void anOlderOrRepeatedStatusChangesNothing() {
     Setup s = setup();
     apply(status(s, 5, "running", Map.of("step", "parse", "progress_percent", 50)));

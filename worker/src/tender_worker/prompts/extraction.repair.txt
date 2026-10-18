@@ -1,11 +1,16 @@
-Some of your answer was rejected because the checks below failed. Fix it using only the passages
-shown. Every quote must be copied word for word from the passage it names.
+Some of your answer was rejected because the checks below failed. Fix it using only the section
+text shown. Every source_quote must be copied word for word from the line its tag names, without
+the tag or any label.
 
 Problems:
 {problems}
 
-Passages:
-{passages}
+Heading path: {heading}
+
+Section text:
+---
+{text}
+---
 
 Your previous answer:
 {previous}

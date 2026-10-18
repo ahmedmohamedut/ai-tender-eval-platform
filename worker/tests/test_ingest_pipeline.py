@@ -284,3 +284,48 @@ async def test_a_file_cause_raised_in_a_pool_process_keeps_its_code():
     with ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("spawn")) as pool:
         await build(blobs, bus, executor=pool).run(r, 1, "00-" + "a" * 32 + "-" + "b" * 16 + "-01")
     assert bus.statuses()[-1].failure.code == "password_protected"
+
+
+def _parsed(*texts: str):
+    from tender_worker.ingest.model import ParseResult, PassageResult
+
+    return ParseResult(
+        pages=[],
+        sections=[],
+        passages=[
+            PassageResult(f"p{i}", None, 1, i, t, [], 0, len(t), "h") for i, t in enumerate(texts)
+        ],
+        warnings=[],
+        parser_versions={},
+    )
+
+
+async def test_a_docx_gets_markdown_blocks_written_before_the_manifest():
+    import io
+
+    import docx
+
+    d = docx.Document()
+    d.add_heading("Security", level=1)
+    d.add_paragraph("The vendor shall encrypt all data at rest and in transit.")
+    d.add_paragraph("This sentence is missing from the converted pages entirely.")
+    out = io.BytesIO()
+    d.save(out)
+    blobs, bus = Blobs(), Bus()
+    r = ref(fmt="docx")
+    stats = await build(blobs, bus)._write_markdown(
+        r,
+        out.getvalue(),
+        _parsed("Security", "The vendor shall encrypt all data at rest and in transit."),
+    )
+    assert stats == {"block_count": 3, "blocks_unaligned": 1}
+    assert blobs.puts == [r.blocks_key, r.markdown_key]
+    blocks = [json.loads(x) for x in blobs.objects[("tender-derived", r.blocks_key)].splitlines()]
+    assert blocks[1]["passage_ids"] == ["p1"] and blocks[2]["passage_ids"] == []
+    assert blobs.objects[("tender-derived", r.markdown_key)].startswith(b"# Security")
+
+
+async def test_unreadable_blocks_do_not_fail_the_document():
+    blobs, bus = Blobs(), Bus()
+    stats = await build(blobs, bus)._write_markdown(ref(fmt="docx"), b"not a docx", _parsed("x"))
+    assert stats == {} and blobs.puts == []

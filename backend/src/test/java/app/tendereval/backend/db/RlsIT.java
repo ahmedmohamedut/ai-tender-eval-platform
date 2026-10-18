@@ -143,6 +143,10 @@ class RlsIT {
         owner,
         "INSERT INTO job_steps (job_id, step_no, name) VALUES (?, 1, 'Reading document')",
         job1);
+    exec(
+        owner,
+        "INSERT INTO job_events (job_id, message, dedup_key) VALUES (?, 'The job started', 'state:running')",
+        job1);
 
     exec(
         owner,
@@ -323,6 +327,9 @@ class RlsIT {
     assertThat(count(m1, "member", "SELECT id FROM jobs WHERE id = ?", job2)).isZero();
     assertThat(count(m1, "member", "SELECT id FROM job_steps WHERE job_id = ?", job1)).isEqualTo(1);
     assertThat(count(m2, "member", "SELECT id FROM job_steps WHERE job_id = ?", job1)).isZero();
+    assertThat(count(m1, "member", "SELECT id FROM job_events WHERE job_id = ?", job1))
+        .isEqualTo(1);
+    assertThat(count(m2, "member", "SELECT id FROM job_events WHERE job_id = ?", job1)).isZero();
     assertThat(count(admin, "admin", "SELECT id FROM jobs WHERE id IN (?, ?)", job1, job2))
         .isEqualTo(2);
   }
@@ -629,6 +636,7 @@ class RlsIT {
             "proposal_versions",
             "jobs",
             "job_steps",
+            "job_events",
             "audit_events",
             "conflict_declarations",
             "drafts",

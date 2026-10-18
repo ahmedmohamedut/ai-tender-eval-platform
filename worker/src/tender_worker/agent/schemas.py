@@ -7,25 +7,21 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-class SourceRef(BaseModel):
-    passage_id: str
-    quote: str
+class RequirementCandidate(BaseModel):
+    """One requirement the model proposes (AI 4.6). The quote comes first: it anchors the rest of
+    the answer to the text, and code checks it against the block the tag names (rule 6)."""
 
-
-class Candidate(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
-    importance: Literal["mandatory", "optional"] = "mandatory"
-    acceptance_criteria: list[str] = Field(default_factory=list, max_length=20)
+    source_quote: str = Field(max_length=600)
+    tag: str = Field(max_length=16)
+    title: str = Field(default="", max_length=200)
+    description: str = Field(min_length=1, max_length=2000)
     category_id: str | None = None
-    # Required in the schema: without it a model may leave the key out, and a requirement
-    # without a source is never shown (rule 6).
-    sources: list[SourceRef] = Field(max_length=10)
-    several_obligations: bool = False
-    certainty: Literal["high", "medium", "low"] = "medium"
+    is_mandatory: bool = True
+    acceptance_criteria: list[str] = Field(default_factory=list, max_length=8)
 
 
-class Candidates(BaseModel):
-    items: list[Candidate] = Field(default_factory=list, max_length=60)
+class RequirementExtraction(BaseModel):
+    requirements: list[RequirementCandidate] = Field(default_factory=list, max_length=60)
 
 
 class PairJudgement(BaseModel):
@@ -49,19 +45,30 @@ class SectionMatch(BaseModel):
     passage_ids: list[str] = Field(default_factory=list, max_length=6)
 
 
-class GradeCitation(BaseModel):
-    passage_id: str
-    quote: str = Field(max_length=600)
+CriterionResult = Literal["Met", "Partially Met", "Not Met", "No Evidence"]
 
 
-class GradeDraft(BaseModel):
-    grade: Literal["fully_compliant", "partially_compliant", "non_compliant"]
-    non_compliance_reason: Literal["explicitly_excluded", "not_addressed"] | None = None
-    rationale_summary: str = Field(max_length=400)
-    rationale: str = Field(max_length=2400)
-    missing_elements: list[str] = Field(default_factory=list, max_length=8)
-    citations: list[GradeCitation] = Field(default_factory=list, max_length=4)
-    certainty: Literal["high", "medium", "low"] = "medium"
+class CriterionCheck(BaseModel):
+    """The model's verdict on one acceptance criterion, with the evidence it relied on."""
+
+    criterion_no: int = Field(ge=1, le=50)
+    result: CriterionResult
+    # "N/A" for No Evidence; otherwise copied word for word from the excerpt the tag names.
+    evidence_quote: str = Field(max_length=400)
+    tag: str = Field(default="", max_length=16)
+
+
+class RequirementGrade(BaseModel):
+    req_id: str = Field(max_length=64)
+    criteria_checks: list[CriterionCheck] = Field(max_length=50)
+    confidence: Literal["High", "Medium", "Low"]
+    justification: str = Field(max_length=900)
+
+
+class BatchGrade(BaseModel):
+    """Several requirements of one proposal graded in one call (AI 4.2)."""
+
+    evaluations: list[RequirementGrade] = Field(max_length=16)
 
 
 class QueryPlan(BaseModel):

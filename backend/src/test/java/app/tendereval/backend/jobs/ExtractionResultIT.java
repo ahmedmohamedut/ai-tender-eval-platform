@@ -252,4 +252,29 @@ class ExtractionResultIT extends AbstractApiIT {
             TestUsers.scalar("SELECT count(*) FROM requirements WHERE tender_id = ?", s.tender()))
         .isEqualTo(2L); // batches already stored stay (UX-JOB-05)
   }
+
+  @Test
+  void aFailureForUnusableModelAnswersIsStoredWithItsOwnCode() {
+    Setup s = setup();
+    jobs.applyStatus(status(s, 1, "running", run())).block();
+    jobs.applyStatus(
+            status(
+                s,
+                2,
+                "failed",
+                Map.of(
+                    "failure",
+                    Map.of(
+                        "code",
+                        "model_output_unusable",
+                        "message",
+                        "cut off",
+                        "retryable",
+                        false))))
+        .block();
+    assertThat(TestUsers.scalar("SELECT failure_code FROM jobs WHERE id = ?", s.job()))
+        .isEqualTo("model_output_unusable");
+    assertThat(TestUsers.scalar("SELECT status FROM jobs WHERE id = ?", s.job()))
+        .isEqualTo("failed");
+  }
 }

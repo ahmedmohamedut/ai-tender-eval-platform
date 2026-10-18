@@ -166,7 +166,7 @@ The numbers in the drawing are the steps used below. A manifest for the same sou
 | Topic | Rule |
 | --- | --- |
 | Formats | PDF and DOCX only, as decided by the backend from the file signature. Nothing is read from images, so there is no OCR, and no other format is converted. |
-| DOCX | Converted once to PDF with LibreOffice, with outline export on so that headings become bookmarks. The converted PDF is the document: its pages are the ones citations use and the viewer shows. The image carries metric-compatible substitutes for the common Office fonts, so pagination does not change between releases. A different conversion would be a new document version. |
+| DOCX | Converted once to PDF with LibreOffice, with outline export on so that headings become bookmarks. The converted PDF is the document: its pages are the ones citations use and the viewer shows. The image carries metric-compatible substitutes for the common Office fonts, so pagination does not change between releases. A different conversion would be a new document version. | A DOCX is also read a second time with python-docx into markdown blocks (3.3), for the model only: the true heading hierarchy, table rows with their column labels, list items. The blocks never replace the passages; a citation always points at a passage. |
 | Reading order | Words and their rectangles are read page by page with pdfplumber, and page size, rotation and the encryption flag with pypdf. Lines are read top to bottom. A page where most lines share a wide vertical gap is read column by column. |
 | Tables | Found with pdfplumber's table finder. Each row becomes one passage, and the header row travels with it as context for embedding (3.4). |
 | Outline | PDF bookmarks, or the heading bookmarks of a converted DOCX. With neither, headings are inferred from numbering and larger bold text, but only when at least three consistent headings are found. Otherwise the document has no sections and extraction is selected by page range (data model). |
@@ -195,7 +195,11 @@ The numbers in the drawing are the steps used below. A manifest for the same sou
 | `parsed/{tender_id}/{document_version_id}/pages.jsonl` | One line per page: `page_no`, `width`, `height`, `text`, `textless` |
 | `parsed/{tender_id}/{document_version_id}/sections.jsonl` | One line per section: `section_id`, `parent_section_id`, `title`, `level`, `sort_order`, `start_page`, `end_page` |
 | `parsed/{tender_id}/{document_version_id}/passages.jsonl` | One line per passage, with the fields in 3.2 and `table_header` for table rows |
-| `parsed/{tender_id}/{document_version_id}/manifest.json` | Written last: `source_sha256`, `worker_version`, `parser_versions`, `page_count`, `section_count`, `passage_count`, `warnings`, `steps_done` |
+| `parsed/{tender_id}/{document_version_id}/blocks.jsonl` | DOCX only. One line per markdown block in document order: `block_id` (`B1`…), `heading_path`, `kind` (`heading`, `paragraph`, `list_item`, `table_row`), `text` (as a passage would hold it; table cells joined with ` \| `), `label` (table rows: the same cells with their column labels), `level`, `passage_ids` (the passages that hold the block's text, found by exact containment after the normalisation of 5.1; empty when none does) |
+| `parsed/{tender_id}/{document_version_id}/document.md` | DOCX only. The blocks as markdown, for people and for diagnosis |
+| `parsed/{tender_id}/{document_version_id}/manifest.json` | Written last: `source_sha256`, `worker_version`, `parser_versions`, `page_count`, `section_count`, `passage_count`, for a DOCX `block_count` and `blocks_unaligned`, `warnings`, `steps_done` |
+
+The blocks and `document.md` are written before the manifest and are an addition: the passages, their ids and the index are as they were (rule 13). A version ingested without them (a PDF, or a DOCX processed before they existed) is read by the agent from its passages instead, rendered the same way (heading path from the section path, table rows with the header row's labels). A block with no passage can be read by the model but never cited. A DOCX whose blocks cannot be read still processes; the warning `blocks_unaligned` counts blocks that matched no passage.
 
 These files are the hand-over to the backend (`result.document_processing`, kind `parsed`, PI 5.6) and the source from which the index can be rebuilt. Only the manifest marks a complete parse. A retry that finds files without one overwrites them. A retry that finds one never parses again, even if a newer release would chunk differently, because passage ids and the citations that point at them must stay valid. Chunking differently means a new document version.
 
@@ -286,15 +290,15 @@ A row takes one pass through Retrieve, Grade and Validate. The two dashed loops 
 | Node | What it does | Model | If it fails |
 | --- | --- | --- | --- |
 | Load and plan | Reads `input.json` from `tender-jobs` and checks its SHA-256 against `input_ref`. Sends the first status with the step names and the run record. Reads the parts that an earlier delivery sealed and takes their requirements off the work list. | No | `source_unavailable` if the input cannot be read or its hash differs |
-| Retrieve | Two queries per requirement: its text and its acceptance criteria. Each is a hybrid search over the proposal's document versions only, `RETRIEVAL_TOP_K` (8) hits. The two lists are merged by rank fusion, and one passage on each side of the three best hits is added (`RETRIEVAL_CONTEXT_NEIGHBORS`). The context is cut to `GRADE_CONTEXT_MAX_CHARS` (12,000). | Embedding call only | `index_unavailable` after retries |
-| Grade | One call. The model receives the requirement, its criteria and importance, and the numbered passages, and returns a `GradeDraft` (4.6). | Yes | The row is failed with `model_error` |
-| Verify absence | Runs only when the draft says `not_addressed` or cites nothing. The model gets the two tools of 4.5 and at most `VERIFY_ABSENCE_MAX_SEARCHES` (3) searches, and is asked to look for other wording: synonyms, abbreviations, related sections. New passages join the context and Grade runs once more, never a second time. | Yes | The first draft stands |
-| Validate | The checks of 5.1, made in code | No | The row goes to Repair |
-| Repair | One more Grade call that lists the exact violations found (`GROUNDING_MAX_REPAIR_ATTEMPTS`, 1), then Validate again | Yes | The row is recorded as failed |
+| Retrieve | Per requirement: a hybrid search over the proposal's document versions only for its text (weight 2) and for each acceptance criterion (up to 5, weight 1), `RETRIEVAL_TOP_K` (8) hits each, merged by weighted rank fusion; one passage on each side of the three best hits is added; the lowest ranked are dropped first when the text exceeds `GRADE_CONTEXT_MAX_CHARS` (9,000). Every passage is shown as an excerpt with a tag (`P1`, `P2`, … in document order), its section path, page and, for a table row, its columns. No rerank model is used yet. | No |
+| Grade | One call for `EVAL_BATCH_SIZE` (4) requirements of the proposal. The stable instructions come first, then each requirement with its numbered acceptance criteria and its own excerpts. The model returns a `BatchGrade` (4.6): per criterion a result (Met, Partially Met, Not Met, No Evidence), a short quote and the excerpt tag; per requirement a confidence and a justification. | Yes | Every row of the batch goes to Repair, one at a time |
+| Verify absence | Runs only for a row whose criteria all have no evidence. The model proposes other wording (synonyms, abbreviations, related sections), code runs at most `VERIFY_ABSENCE_MAX_SEARCHES` (3) searches, and the row is graded again alone if new passages were found. If nothing new was found, or the second answer fails the checks, the first answer stands. | Yes | The first answer stands |
+| Check | The checks of 5.1, made in code for every criterion, then the grade rolled up by code: all Met is fully compliant; all No Evidence is non-compliant, not addressed; no Met and no Partially Met is non-compliant, explicitly excluded; anything else is partially compliant. The model does not choose the grade. | No | The row goes to Repair |
+| Repair | One more call for that row alone, listing the exact violations (a requirement left out of the batch answer, a criterion not answered, a quote not in its excerpt), then Check again (`GROUNDING_MAX_REPAIR_ATTEMPTS`, 1) | Yes | The row is recorded as failed |
 | Record the row | Builds the item: a graded item whose citations come from the passages, or a failed item with a `failure_code` (`ungrounded`, `invalid_output` or `model_error`) | No |  |
 | Seal a part and report | Collects finished rows. At 50 rows, at the end, or on cancel, it seals a part, publishes it and sends a status. When every requirement has a row it sends the terminal status. | No |  |
 
-Rows of one job run in parallel, up to `LLM_MAX_CONCURRENCY`, and parts are sealed in the order rows finish. Reviewers therefore see the first rows while the job still runs (UX-EVA-18). A re-run for outdated or failed rows is a new job whose input lists only those requirements.
+Batches of one job run in parallel, up to `LLM_MAX_CONCURRENCY`, and parts are sealed in the order rows finish. Reviewers therefore see the first rows while the job still runs (UX-EVA-18). A re-run for outdated or failed rows is a new job whose input lists only those requirements.
 
 A job ends `completed` when every row is graded, `completed_with_warnings` when some rows are failed (the warning `row_failed` carries the count), and `failed` with `llm_unavailable` when the model endpoint stays down past `LLM_OUTAGE_GIVE_UP_SECONDS` (7.1). Sealed parts are kept in every case.
 
@@ -303,12 +307,12 @@ A job ends `completed` when every row is graded, `completed_with_warnings` when 
 | Node | What it does | Model |
 | --- | --- | --- |
 | Load scope | Reads the scope of the command. Scrolls Qdrant for the passages of the chosen document versions, matching any chosen section in `section_path_ids` or the page range, in `ordinal` order. If no passage matches, the job ends `failed` with `no_content_in_scope`. | No |
-| Plan windows | Groups consecutive passages of one section into windows of about `EXTRACTION_WINDOW_CHARS` (8,000). The last `EXTRACTION_WINDOW_OVERLAP_PASSAGES` (2) passages of a window open the next, so a sentence cut at a boundary is seen whole. | No |
-| Extract | One call per window, in parallel. It returns candidate requirements (4.6) with the passage id and a verbatim quote for every source. | Yes |
-| Ground | The quote checks of 5.1. A candidate with an unmatched quote gets one repair call. If it still fails, it is not emitted and is counted in the warning `ungrounded_candidate`. | Repair only |
-| Merge | Joins candidates from overlapping windows that cite the same passage and are near-identical (cosine at or above `DEDUP_SIMILARITY_THRESHOLD`, 0.85). The sources are united. | Embeddings only |
+| Plan windows | Turns the scope into tagged markdown blocks (`B1`, `B2`, …: heading path, table rows as `Column: value \| …`, list items) and cuts them into chunks of at most `EXTRACTION_CHUNK_CHARS` (3,000) characters and `EXTRACTION_CHUNK_LINES` (25) lines, on block boundaries and never inside a table row. A section is read from its stored DOCX blocks when the version has them, otherwise from its passages; the scope is chosen by code from the passages in either case. Later chunks of a section carry its opening line (a lead-in such as "The vendor shall support:") as context. | No |
+| Extract | One call per chunk, in parallel. It returns requirements (4.6), quote first, each with the tag of the block it was copied from. | Yes |
+| Ground | The checks of 5.1: the tag was shown, the quote occurs in that block and in a passage the block was aligned to; the stored source is that passage and its own excerpt. A wrong tag with a quote that occurs in exactly one shown block is accepted (counted as `tag_recovered`). A candidate that fails gets one repair call; if it still fails it is not emitted and is counted in the warning `ungrounded_candidate`. Per chunk, obligation wording (modal verbs, table rows) left without a requirement is counted in the warning `under_extraction`. | Repair only |
+| Merge | Joins candidates from different chunks that cite the same passage and are near-identical (cosine at or above `DEDUP_SIMILARITY_THRESHOLD`, 0.85) **and** hold the same numbers and the same polarity ("99.9%" and "99.5%", or "shall" and "shall not", stay apart). The sources and acceptance criteria are united. | Embeddings only |
 | Compare | Embeds the candidates and compares them with each other and with the tender's existing requirements (`existing_requirements` in the input). Each pair at or above the threshold goes to one call that answers same, conflicts or unrelated. | Yes, per pair |
-| Flag | Same becomes the flag `possible_duplicate`, conflicts becomes `conflict`, and a candidate marked as holding several obligations becomes `compound`. A flagged candidate is still emitted and never dropped (UX-EXT-06). The backend adds `low_confidence` from `confidence` and the setting. | No |
+| Flag | Same becomes the flag `possible_duplicate`, conflicts becomes `conflict`, The prompt asks for one gradable obligation per requirement, so there is no `compound` flag. A flagged candidate is still emitted and never dropped (UX-EXT-06). The backend adds `low_confidence` from `confidence` and the setting. | No |
 | Seal and report | As for evaluation, once, at the end | No |
 
 The Extract prompt applies these rules:
@@ -320,7 +324,7 @@ The Extract prompt applies these rules:
 | Importance | Shall, must and required mean mandatory. Should, may, desirable and preferably mean optional. A plain statement of what the solution provides means mandatory: calling a requirement optional hides a failure, while a wrongly mandatory one is seen and corrected by a reviewer. |
 | Acceptance criteria | The RFP's own conditions where it gives them. Otherwise the smallest checks that would show the requirement is met. |
 | Category | One from the tender's list, or none |
-| Sources | The passage id and a verbatim quote for each |
+| Sources | One: a verbatim quote of the line it comes from (the cell values of a table row, without labels) and that line's tag |
 
 ### 4.4 The pre-check graph
 
@@ -350,8 +354,8 @@ No tool takes a tender, a vendor or a document version from the model.
 
 | Schema | Fields | Becomes |
 | --- | --- | --- |
-| `GradeDraft` | `grade`, `non_compliance_reason`, `rationale_summary` (up to 200 characters), `rationale` (up to 1,200), `missing_elements` (up to 8 items of up to 160), `citations` (up to 4, each a `passage_id` and a `quote` of up to 300 characters), `certainty` (high, medium or low) | A `grades` item (PI 5.6). Page, document version and the stored excerpt come from the passage, never from the model. |
-| `RequirementCandidate` | `text`, `importance`, `acceptance_criteria` (a list), `category_id` or null, `sources` (each a `passage_id` and a verbatim `quote`), `several_obligations`, `certainty` | A `requirements` item |
+| `BatchGrade` | `evaluations`: per requirement `req_id`, `criteria_checks` (each `criterion_no`, `result`, `evidence_quote` of up to 400 characters or `N/A`, `tag`), `confidence` (High, Medium, Low), `justification` (up to 900 characters) | An `ai_grades` item: the grade and reason from the roll-up, `missing_elements` = the criteria not Met, citations = the verified quotes (up to 4), the justification and the criteria results as the rationale |
+| `RequirementExtraction` | `requirements`: per item `source_quote`, `tag`, `title`, `description`, `category_id` or null, `is_mandatory`, `acceptance_criteria` (up to 8). The quote comes first so that the rest of the answer is anchored to the text | A `requirements` item: `description` becomes the text, with one verified source. Confidence is not stated by the model: 0.85, 0.65 after a repair, 0.4 when the passage looks like an instruction |
 | `PairJudgement` | `relation` (same, conflicts or unrelated) and `reason` (one sentence) | A flag |
 | `ExpectedSections` | A list of `name`, `description` and `source_passage_id` | The rows of the pre-check |
 | `SectionMatch` | `found`, `matched_title`, `passage_ids` | `found` and the note of a pre-check item |
@@ -388,11 +392,11 @@ Code runs these checks on every item, in Validate for evaluation and in Ground f
 
 | # | Check | How | If it fails |
 | --- | --- | --- | --- |
-| 1 | The cited passage was shown | Every `passage_id` must be one of the passages given to the model for this row, including those its tools returned | Repair, then a failed row (`ungrounded`) |
+| 1 | The cited excerpt was shown | The tag must name a block (extraction) or an excerpt (evaluation) that was given to the model for this chunk or row, and that block or excerpt must map to a stored passage. A wrong tag is accepted only when the quote occurs in exactly one shown block or excerpt | Repair, then a failed row (`ungrounded`) |
 | 2 | The passage is in scope | Evaluation: a passage of the proposal's document versions. Extraction and pre-check: a passage of the document versions in the job's scope. | The same |
-| 3 | The quote is in the passage | Quote and passage are normalised (Unicode NFKC, collapsed whitespace, soft hyphens removed, curly quotes and dashes made plain, case kept), and the quote must occur in the passage. A quote under 10 characters is refused as too short to be evidence. The stored excerpt is the matching slice of the passage itself, never the model's string. | The same |
-| 4 | The grade is complete | `fully_compliant` needs one citation or more. `partially_compliant` needs non-empty `missing_elements`. `non_compliant` needs a reason: `explicitly_excluded` needs a citation and `not_addressed` has none. Other grades carry no reason. | Repair, then a failed row (`invalid_output`) |
-| 5 | The rationale names only cited pages | A page number in the rationale, such as page 12, must be a page of a cited passage | The same |
+| 3 | The quote is in the block and in its passage | Quote and passage are normalised (Unicode NFKC, collapsed whitespace, soft hyphens removed, curly quotes and dashes made plain, case kept), and the quote must occur in the text of the block or excerpt the tag names **and** in one of the passages it maps to (a quote that crosses two passages is refused: a citation points at one). A quote under 10 characters is refused as too short to be evidence. The stored excerpt is the matching slice of the passage itself, never the model's string. | The same |
+| 4 | The grade is complete | Evaluation: every criterion of the requirement has an answer, and every result except No Evidence has a verified quote. The roll-up then decides the grade, so a `fully_compliant`, `partially_compliant` or `explicitly_excluded` row always has a citation, and a `partially_compliant` row always has `missing_elements`. | Repair, then a failed row (`invalid_output`) |
+| 5 | The justification names only cited pages | A page number in the justification, such as page 12, must be a page of a cited excerpt | The same |
 | 6 | The text fits | Every field is within the limits of 4.6 and no required field is empty | The same |
 | 7 | Every requirement has a source | A candidate needs at least one source with a verified quote (data model: sources are required for AI requirements) | Repair, then not emitted (warning `ungrounded_candidate`) |
 
@@ -472,7 +476,8 @@ The backend starts the trace when a person acts and puts its `traceparent` on th
 | --- | --- | --- | --- |
 | 1 | `job.{job_type}` | chain | `tender.job_id`, `tender.tender_id`, `tender.target_id`, `tender.worker_version`, `tender.prompt_version`, `tender.delivery` (which delivery of the message this is), and at the end the outcome and counts |
 | 2 | `step.{name}` | chain | The step name and the items done |
-| 3 | `row` | chain | One per requirement (evaluation), per window (extraction) or per expected section (pre-check). It carries `tender.requirement_id` where there is one, `tender.row_outcome` (graded or failed) and `tender.failure_code`. |
+| 3 | `batch` | chain | Evaluation only: one per model call of `EVAL_BATCH_SIZE` requirements, with the counts graded, failed and repaired. |
+| 3 | `row` | chain | One per requirement (evaluation, under its batch), per chunk (extraction) or per expected section (pre-check). It carries `tender.requirement_id` where there is one, `tender.row_outcome` (graded or failed) and `tender.failure_code`. |
 | 4 | `retrieve` | retriever | The number of hits, and the passage ids with their scores. The query text is a hash unless content capture is on. |
 | 5 | `llm.grade`, `llm.repair`, `llm.verify`, `llm.extract`, `llm.compare` | llm | The model name the endpoint returned, prompt and completion token counts, latency, retry count and finish reason |
 | 6 | `tool.search_passages`, `tool.get_passage_context` | tool | The length of the arguments and the ids returned |
@@ -535,7 +540,7 @@ PI 5.8 sets the rules between the workers and the backend. This table sets what 
 
 ### 7.2 The circuit breaker
 
-The breaker guards the model endpoint. It opens when 5 calls in a row fail after their own retries. While it is open no new call starts and running rows wait. Heartbeats and statuses continue, so the backend's silence timer stays quiet, and the gauge `tender_breaker_open_seconds` rises. Every 30 seconds one probe call is let through, and a success closes the breaker. If it stays open for `LLM_OUTAGE_GIVE_UP_SECONDS` (600), the job seals what it has and ends `failed` with `llm_unavailable`, which is retryable. Without the breaker, an outage of a few minutes would fail every row in turn and leave the committee a sheet of Not evaluated rows.
+The breaker guards the model endpoint. It opens when 5 calls in a row fail after their own retries. While it is open no new call starts and running rows wait. Heartbeats and statuses continue, so the backend's silence timer stays quiet, and the gauge `tender_breaker_open_seconds` rises. Every 30 seconds one probe call is let through, and a success closes the breaker. This holds after the breaker has given up as well: a call waits for the next probe slot (at most 30 seconds) and then probes, so a recovered endpoint closes the breaker again without a restart of the worker, and a retry started just after the recovery is not refused. The job still ends: after its tries the call raises, and a breaker that has been open past the give-up time fails the job. A reply that arrives but is cut off at the token limit or refused proves the endpoint is alive and also closes it. If it stays open for `LLM_OUTAGE_GIVE_UP_SECONDS` (600), the job seals what it has and ends `failed` with `llm_unavailable`, which is retryable. When the endpoint answers but every answer is cut off or unreadable after the retries, the extraction and pre-check jobs end `failed` with `model_output_unusable`, which is not retryable: the same settings give the same answer, so an administrator checks the model settings (for a reasoning model, switch reasoning off or raise `LLM_MAX_OUTPUT_TOKENS`). Without the breaker, an outage of a few minutes would fail every row in turn and leave the committee a sheet of Not evaluated rows.
 
 ### 7.3 Sizing
 
@@ -547,9 +552,9 @@ The figures use the data model's volumes: a 300-page RFP, 8 proposals of 150 pag
 | Parse time | About 25 CPU-minutes | Assumed 1 second per page, tables included |
 | Passages to embed | 22,500, in about 350 calls | Batches of 64 |
 | Embedding tokens | About 1.4 million | Assumed 60 tokens per passage |
-| Extraction calls | Up to about 150 for a whole RFP | 4,500 RFP passages of about 200 characters, in windows of 8,000 characters, plus repairs and pair comparisons |
+| Extraction calls | Up to about 400 for a whole RFP | 4,500 RFP passages of about 200 characters, in chunks of 3,000 characters, plus repairs and pair comparisons. A user usually picks a few sections, which is a handful of calls |
 | Pre-check calls | About 15 per vendor | One to list, one per expected section |
-| Evaluation calls, first run | About 5,400 | 4,000 grades, plus 1,200 calls for the 15 percent of rows that go through Verify absence (assumed), plus 200 for the 5 percent that need a repair (assumed) |
+| Evaluation calls, first run | About 3,200 | 1,000 calls for 4,000 grades in batches of 4, plus 1,200 calls for the 15 percent of rows that go through Verify absence (assumed), plus 200 for the 5 percent that need a repair (assumed), plus the regrades of Verify absence |
 | Evaluation tokens | About 11 million in and 2.7 million out | Assumed 2,000 in and 500 out per call |
 | Evaluation time | About 1.9 hours on one agent replica, 56 minutes on two, 28 minutes on four. One vendor's 675 calls take about 14 minutes alone. | Assumed 10 seconds per call, 8 calls in flight per replica |
 | Qdrant memory, per year | About 4.5 GB of dense vectors, plus about 0.3 GB of payload and the sparse vectors, for 1.1 million passages. Scalar int8 quantisation brings the vectors in memory to about 1.1 GB. | Assumed 1,024 dimensions of 4 bytes |

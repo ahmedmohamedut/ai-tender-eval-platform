@@ -27,6 +27,6 @@ The documents refer to each other by their original titles. Use the table above 
 - The browser talks only to the backend API. The backend streams uploads to RustFS and persists every result.
 - The worker and the agent have no database connection. They read from NATS, RustFS and Qdrant, and publish to NATS and RustFS.
 - NATS streams: `DOCUMENTS`, `ANALYSIS_EVENTS`, `UI_EVENTS`, `DLQ`. Key-value bucket: `JOB_CONTROL`.
-- Job failure codes: `password_protected`, `no_selectable_text`, `unsupported_format`, `source_unavailable`, `index_unavailable`, `llm_unavailable`, `no_content_in_scope`, `timeout`, `other`. Row-level codes: `ungrounded`, `invalid_output`, `model_error`.
+- Job failure codes: `password_protected`, `no_selectable_text`, `unsupported_format`, `source_unavailable`, `index_unavailable`, `llm_unavailable`, `model_output_unusable`, `no_content_in_scope`, `timeout`, `other`. Row-level codes: `ungrounded`, `invalid_output`, `model_error`.
 - Keycloak realm name: `tender-eval`.
 - Language: English only. Documents: PDF and DOCX only, no OCR.

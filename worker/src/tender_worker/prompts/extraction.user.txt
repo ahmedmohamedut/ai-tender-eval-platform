@@ -1,7 +1,11 @@
 Categories (id: name):
 {categories}
 
-Passages:
-{passages}
+Heading path: {heading}
+
+Section text:
+---
+{text}
+---
 
 Extract the requirements.

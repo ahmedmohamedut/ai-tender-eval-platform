@@ -22,7 +22,7 @@ from tender_worker.agent.grounding import verify_quote
 from tender_worker.agent.llm import LlmUnavailable
 from tender_worker.agent.retrieval import PassageRef
 from tender_worker.agent.runtime import AgentDeps, BadInput, run_evaluation
-from tender_worker.agent.schemas import GradeDraft, QueryPlan
+from tender_worker.agent.schemas import BatchGrade, QueryPlan
 from tender_worker.agent.search import Hit
 from tender_worker.messages import Command, WorkerInfo
 
@@ -93,7 +93,13 @@ class _GaveUp:
 class RuleLlm:
     """The stub's grading rules, called in process; counts what it is asked."""
 
-    def __init__(self, bad_quote: bool = False, unavailable_after: int | None = None) -> None:
+    def __init__(
+        self,
+        bad_quote: bool = False,
+        unavailable_after: int | None = None,
+        drop_first: bool = False,
+    ) -> None:
+        self.drop_first = drop_first
         self.calls: list[str] = []
         self.users: list[str] = []
         self.bad_quote = bad_quote
@@ -107,15 +113,15 @@ class RuleLlm:
         self.users.append(user)
         if schema is QueryPlan:
             return QueryPlan(**stub_llm.query_plan(user))
-        d = stub_llm.grade_draft(user)
-        if self.bad_quote and d["citations"]:
-            d["citations"] = [
-                {
-                    "passage_id": d["citations"][0]["passage_id"],
-                    "quote": "text that is not there at all",
-                }
-            ]
-        return GradeDraft(**d)
+        d = stub_llm.grade_batch(user)
+        if self.bad_quote:
+            for e in d["evaluations"]:
+                for c in e["criteria_checks"]:
+                    if c["result"] != "No Evidence":
+                        c["evidence_quote"] = "text that is not there at all"
+        if self.drop_first and len(self.calls) == 1 and len(d["evaluations"]) > 1:
+            d["evaluations"] = d["evaluations"][1:]  # the model forgets the first requirement
+        return BatchGrade(**d)
 
 
 def req(n: int, text: str, criteria: str = "") -> Requirement:
@@ -164,8 +170,26 @@ async def test_a_requirement_nobody_addresses_gets_one_second_look_and_no_citati
     item = row.item
     assert item["grade"] == "non_compliant" and item["non_compliance_reason"] == "not_addressed"
     assert item["citations"] == []
-    assert llm.calls == ["GradeDraft", "QueryPlan", "GradeDraft"]  # verify absence, once
+    # one second look; nothing new was found, so the first answer stands without a third call
+    assert llm.calls == ["BatchGrade", "QueryPlan"]
     assert len(search.queries) > 1
+
+
+async def test_the_second_look_grades_again_when_it_finds_a_passage():
+    late = p(8, "The platform holds an ISO 27001 certificate of conformity issued in 2023.", 4)
+
+    class LateSearch(Search):
+        async def hybrid(self, tender_id, version_ids, dense, text, limit):
+            await super().hybrid(tender_id, version_ids, dense, text, limit)
+            return [] if len(self.queries) == 1 else [Hit(late, 1.0)]
+
+    llm = RuleLlm()
+    row = await graph(llm, LateSearch(PASSAGES)).grade_requirement(
+        req(2, "The platform shall hold an ISO 27001 certificate of conformity.")
+    )
+    assert llm.calls == ["BatchGrade", "QueryPlan", "BatchGrade"]
+    assert row.item["grade"] == "fully_compliant"
+    assert row.item["citations"][0]["page_no"] == 4
 
 
 async def test_an_explicit_exclusion_is_cited():
@@ -184,7 +208,7 @@ async def test_a_quote_that_is_not_in_the_passage_is_repaired_once_then_stored_a
     item = row.item
     assert item["outcome"] == "failed" and item["failure_code"] == "ungrounded"
     assert "grade" not in item and "citations" not in item
-    assert llm.calls == ["GradeDraft", "GradeDraft"]  # the answer and one repair
+    assert llm.calls == ["BatchGrade", "BatchGrade"]  # the answer and one repair
     assert row.repaired
 
 
@@ -198,6 +222,88 @@ async def test_instruction_like_text_caps_the_confidence_and_changes_no_grade():
     )
     assert plain.item["grade"] == attacked.item["grade"]
     assert attacked.injection and attacked.item["confidence"] <= 0.4
+
+
+async def test_several_requirements_are_graded_in_one_call_and_come_back_in_order():
+    llm = RuleLlm()
+    reqs = [
+        req(1, "The supplier shall encrypt all customer data at rest."),
+        req(3, "The platform shall support on-premise installation."),
+        req(4, "Customer support is available during weekdays between nine and five."),
+    ]
+    rows = await graph(llm, Search(PASSAGES)).grade_batch(reqs)
+    assert llm.calls == ["BatchGrade"]  # one call, three requirements
+    assert [r.item["requirement_id"] for r in rows] == [r.id for r in reqs]
+    assert [r.item["grade"] for r in rows] == [
+        "fully_compliant",
+        "non_compliant",
+        "fully_compliant",
+    ]
+    assert llm.users[0].count("REQUIREMENT\nID: ") == 3
+    # each requirement is shown only the excerpts found for it, tagged from P1
+    assert all("[P1] " in b for b in llm.users[0].split("---"))
+
+
+async def test_criteria_are_judged_one_by_one_and_rolled_up_by_code():
+    llm = RuleLlm()
+    limited = p(
+        7, "Customer data at rest is encrypted with AES-256, but key rotation is not yet.", 8
+    )
+    row = await graph(llm, Search([*PASSAGES, limited])).grade_requirement(
+        req(
+            1,
+            "Customer data at rest is encrypted and the keys are rotated.",
+            "• Data at rest is encrypted\n• Keys are rotated every year",
+        )
+    )
+    item = row.item
+    assert item["grade"] == "partially_compliant"
+    assert "Criteria: 1: Met; 2: Partially Met" in item["rationale"]
+    assert item["missing_elements"] == ["Keys are rotated every year"]
+    assert item["citations"] and all(c["page_no"] == 8 for c in item["citations"])
+    assert "\n1. Data at rest is encrypted" in llm.users[0]
+    assert "\n2. Keys are rotated every year" in llm.users[0]
+
+
+async def test_a_requirement_the_model_skipped_is_asked_again_alone_once():
+    llm = RuleLlm(drop_first=True)
+    reqs = [
+        req(1, "The supplier shall encrypt all customer data at rest."),
+        req(3, "The platform shall support on-premise installation."),
+    ]
+    rows = await graph(llm, Search(PASSAGES)).grade_batch(reqs)
+    assert llm.calls == ["BatchGrade", "BatchGrade"]  # the batch, then the one that was skipped
+    assert [r.item["outcome"] for r in rows] == ["graded", "graded"]
+    assert rows[0].repaired and not rows[1].repaired
+
+
+async def test_a_wrong_tag_with_a_real_quote_is_found_but_a_missing_criterion_is_a_failure():
+    class WrongTag(RuleLlm):
+        async def generate(self, system, user, schema, *, model=None):
+            out = await super().generate(system, user, schema, model=model)
+            if schema is BatchGrade:
+                for e in out.evaluations:
+                    for c in e.criteria_checks:
+                        if c.tag:
+                            c.tag = "P99"
+            return out
+
+    row = await graph(WrongTag(), Search(PASSAGES)).grade_requirement(
+        req(1, "The supplier shall encrypt all customer data at rest.")
+    )
+    assert row.item["outcome"] == "graded" and not row.repaired
+
+    class Silent(RuleLlm):
+        async def generate(self, system, user, schema, *, model=None):
+            out = await super().generate(system, user, schema, model=model)
+            if schema is BatchGrade:
+                for e in out.evaluations:
+                    e.criteria_checks = e.criteria_checks[:1]
+            return out
+
+    two = req(1, "The supplier shall encrypt all customer data at rest.", "• one\n• two")
+    row2 = await graph(Silent(), Search(PASSAGES)).grade_requirement(two)
+    assert row2.item["outcome"] == "failed" and row2.item["failure_code"] == "invalid_output"
 
 
 # ---- the job -------------------------------------------------------------------------------------
@@ -285,7 +391,7 @@ async def test_a_restart_republishes_sealed_parts_and_grades_only_the_rest():
     kv = Kv()
     llm = RuleLlm()
     # the first run dies after the model goes away; parts sealed so far stay in the key-value store
-    dying = RuleLlm(unavailable_after=70 * 3)
+    dying = RuleLlm(unavailable_after=45)
     await run_evaluation(deps(dying, Search(PASSAGES), first, kv), command(120), 1, TP, never)
     sealed_before = [k for k in kv.data if k.startswith(f"part.{JOB}.")]
     assert sealed_before, "some rows were sealed before the outage"
@@ -303,8 +409,8 @@ async def test_a_restart_republishes_sealed_parts_and_grades_only_the_rest():
     }
     assert sealed_numbers
     asked = "\n".join(llm.users)
-    assert not any(f"Requirement {n} " in asked for n in sealed_numbers)
-    assert llm.calls.count("GradeDraft") >= 120 - n_sealed
+    assert not any(f"ID: {n}\n" in asked for n in sealed_numbers)
+    assert llm.calls.count("BatchGrade") >= (120 - n_sealed) // 4
     assert second.statuses()[-1].counts == {"grades": 120}
     published = [i["requirement_id"] for r in second.results() for i in r.items]
     assert len(published) == 120 and len(set(published)) == 120

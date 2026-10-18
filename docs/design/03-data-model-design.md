@@ -216,6 +216,7 @@ Phase 2 added six operational columns to jobs for the message loop (PI 5.5 to 5.
 | Table | Key columns | Rules and notes |
 | --- | --- | --- |
 | **jobs** | tender_id, job_type, target_type, target_id, status, started_by, current_step, progress_percent, queued_at, started_at, finished_at, failure_code, failure_message, retry_of_job_id, cancelled_by, scope_hash, last_status_seq, last_status_at, command_published_at, result_parts, counts, warnings | job_type is document_processing, requirement_extraction, evaluation or screening_precheck. status is queued, running, completed, completed_with_warnings, failed or cancelled. started_by is empty when the system starts the job, for example processing after an upload or evaluation after a screening decision. Only the starter or the Chair can cancel. scope_hash lets the service find an overlapping job on the same scope. Jobs belong to the tender, so every committee member can read them. |
+| **job_events** | job_id, at, level, step, message, dedup_key | The activity log shown in the job details: one line per fact (job started, step started, finished with counts, failed with the plain text of its code). Written by the backend from status messages and its own timers, once per job and `dedup_key`. Messages come from a fixed vocabulary; never document text or names. Readable by committee members of the tender (as job_steps). |
 | **job_steps** | job_id, step_no, name, status, started_at, finished_at | The named steps shown in the job center, such as Reading document. status is pending, running, completed or failed. |
 | **job_scope_items** | job_id, document_version_id, section_id, page_from, page_to | What the job was asked to read. A completed extraction job's items are what mark a section Extracted by name and date, and what the banner for other members reads. |
 | **ai_runs** | job_id, run_type, model_name, model_version, prompt_version, input_scope, started_at, finished_at, outcome, warning_count | One row each time the AI is run. A retry or an outdated-rows re-run is a new job, so it gets its own run. input_scope records the documents, pages and baseline version used. outcome is succeeded, partial or failed. Immutable once finished. |
@@ -284,7 +285,7 @@ Every enumeration is stored as lower-case snake_case text with a check constrain
 | scoring_models.mandatory_rule | flag_only |
 | jobs.job_type | document_processing, requirement_extraction, evaluation, screening_precheck |
 | jobs.status | queued, running, completed, completed_with_warnings, failed, cancelled |
-| jobs.failure_code | password_protected, no_selectable_text, unsupported_format, source_unavailable, index_unavailable, llm_unavailable, no_content_in_scope, timeout, other |
+| jobs.failure_code | password_protected, no_selectable_text, unsupported_format, source_unavailable, index_unavailable, llm_unavailable, model_output_unusable, no_content_in_scope, timeout, other |
 | job_steps.status | pending, running, completed, failed |
 | ai_runs.outcome | succeeded, partial, failed |
 | ai_grades.outcome | graded, failed |

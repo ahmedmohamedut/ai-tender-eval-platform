@@ -1,17 +1,13 @@
-Requirement {number} ({importance}, category: {category}):
-{text}
+Your answer for this requirement was rejected because the checks below failed. Grade it again,
+using only the excerpts shown. Every quote must be copied word for word from the excerpt its tag
+names, and every criterion number must be answered.
 
-Acceptance criteria:
-{criteria}
-
-Passages of the proposal:
-{passages}
-
-Your earlier answer was rejected for these reasons:
+Problems:
 {problems}
 
-Your earlier answer:
+{requirement}
+
+Your previous answer:
 {previous}
 
-Grade the requirement again. Correct only what was rejected, quote word for word from the passages,
-and cite only passage ids you were given.
+Give the corrected answer as JSON in the same schema, with one entry in "evaluations".

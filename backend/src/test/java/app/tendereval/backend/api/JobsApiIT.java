@@ -85,6 +85,24 @@ class JobsApiIT extends AbstractApiIT {
         .jsonPath("$.can_retry")
         .isEqualTo(false);
 
+    TestUsers.sql(
+        "INSERT INTO job_events (job_id, level, message, dedup_key) VALUES (?, 'info', 'The job started', 'state:running')",
+        s.job());
+    get("/jobs/" + s.job(), member)
+        .exchange()
+        .expectBody()
+        .jsonPath("$.events[0].message")
+        .isEqualTo("The job started")
+        .jsonPath("$.events[0].level")
+        .isEqualTo("info")
+        .jsonPath("$.updated_at")
+        .isNotEmpty();
+    get("/jobs?tender_id=" + tender + "&active=true", member)
+        .exchange()
+        .expectBody()
+        .jsonPath("$.items[0].events")
+        .isEmpty();
+
     get("/jobs?tender_id=" + tender + "&active=true", member)
         .exchange()
         .expectStatus()

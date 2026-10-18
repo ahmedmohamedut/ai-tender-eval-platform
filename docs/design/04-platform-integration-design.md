@@ -207,7 +207,7 @@ The lifecycle rules are the only deletions the platform allows itself. They appl
 | `tender-documents` | `originals/{tender_id}/{document_id}/{document_version_id}.{ext}` | `document_versions.storage_key` |
 | `tender-derived` | `rendered/{tender_id}/{document_version_id}/document.pdf`: the PDF the viewer shows. For a PDF original it is a copy; for DOCX it is the conversion. | `document_pages.render_key`, the same value on every page of the version |
 | `tender-derived` | `parsed/{tender_id}/{document_version_id}/pages.jsonl`, `sections.jsonl`, `passages.jsonl` | named in the worker's result message |
-| `tender-derived` | `parsed/{tender_id}/{document_version_id}/manifest.json`: counts, source SHA-256, worker version, steps done. Written last, so its presence means the parse is complete. | read by the worker to stay idempotent |
+| `tender-derived` | `parsed/{tender_id}/{document_version_id}/manifest.json`: counts, source SHA-256, worker version, steps done. Written last, so its presence means the parse is complete. For a DOCX, `blocks.jsonl` and `document.md` (markdown blocks for the model, AI 3.3) are written before it. | read by the worker to stay idempotent |
 | `tender-jobs` | `jobs/{job_id}/input.json` | named in the command's `input_ref` |
 | `tender-exports` | `exports/{tender_id}/{export_id}.xlsx`, `.pdf` or `.csv` | `exports.storage_key` |
 
@@ -337,6 +337,7 @@ Subject `documents.analysis.status.{job_type}`. The first message of a run also 
 | `job_id`, `job_type`, `tender_id`, `target`, `seq` | `job_id` is null only for a document processing run started by an upload event; the backend then finds the one open job for that `target`. `seq` rises by 1 within one delivery of the command. After a redelivery it restarts at 1,000 times the deliveries so far, plus 1, so a number is never reused. |
 | `state` | `running`, `completed`, `completed_with_warnings`, `failed` or `cancelled`. |
 | `step`, `progress_percent`, `estimated_remaining_seconds` | The named step now running and overall progress, written to `jobs` and `job_steps`. |
+| (backend) activity log | The backend writes `job_events` lines from these messages (job started, step started, finished with counts, failed) and from the watchdog. `GET /jobs/{id}` returns them as `events` with `updated_at`; lists leave `events` empty. No worker log text is stored (rule 10). |
 | `steps` | First message only: the ordered step names, so the backend creates `job_steps` at once. |
 | `run` | First message of an AI job only: `model_name`, `model_version`, `prompt_version`, `input_scope`. |
 | `result_parts`, `counts` | Final message only: how many result batches were sent and how many items they hold. |
@@ -352,6 +353,7 @@ Failure codes. Four are the document failure reasons already in the data model (
 | `source_unavailable` | An object in RustFS cannot be read | Retry |
 | `index_unavailable` | Qdrant did not answer after retries | Retry |
 | `llm_unavailable` | The model endpoint failed after retries | Retry |
+| `model_output_unusable` | The endpoint answered, but every answer was cut off at the token limit, refused or unreadable | Contact administrator |
 | `no_content_in_scope` | The chosen pages hold no text | Change selection |
 | `timeout` | The job ran past its maximum duration | Retry |
 | `other` | Anything else | Contact admin |
@@ -619,16 +621,17 @@ One image, two deployments: `WORKER_ROLE` chooses the code path. Numeric default
 | `LLM_API_KEY` | agent | secret | OpenBao `worker-agent/llm` | Its key. |
 | `LLM_MODEL_EXTRACTION`, `LLM_MODEL_EVALUATION`, `LLM_MODEL_PRECHECK` | agent | config | required | Model per job type. |
 | `LLM_MODEL_VERSION` | agent | config | none | Label stored in `ai_runs.model_version`, since an endpoint may not report one. |
-| `LLM_TEMPERATURE`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_TIMEOUT_SECONDS` | agent | config | `0`, `1500`, `120` | Call settings. |
+| `LLM_TEMPERATURE`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_TIMEOUT_SECONDS` | agent | config | `0`, `8192`, `120` | Call settings. A reasoning model spends part of the output budget on its reasoning: a budget too small ends in `LengthFinishReasonError`. |
 | `LLM_MAX_CONCURRENCY`, `LLM_REQUESTS_PER_MINUTE` | agent | config | `8`, `0` (no limit) | Simultaneous calls per replica, and a client-side rate limit for providers with a quota. |
 | `LLM_STRUCTURED_OUTPUT` | agent | config | `function_calling` | `function_calling` or `json_schema`: how the answer schema is enforced. |
 | `LLM_OUTAGE_GIVE_UP_SECONDS` | agent | config | `600` | How long the model endpoint may stay down before the job seals its finished rows and fails with `llm_unavailable`. |
 | `AGENT_CONCURRENCY_EVALUATION`, `_EXTRACTION`, `_PRECHECK` | agent | config | `2`, `1`, `1` | Jobs at once per replica, matching the consumers in 5.3. |
 | `RETRIEVAL_TOP_K`, `RETRIEVAL_MIN_SCORE` | agent | config | `8`, none | Passages per search, and an optional floor on the dense cosine score of a hit. |
-| `RETRIEVAL_CONTEXT_NEIGHBORS`, `GRADE_CONTEXT_MAX_CHARS` | agent | config | `1`, `12000` | Passages added on each side of the best hits, and the cap on the evidence shown for one grade. |
+| `RETRIEVAL_CONTEXT_NEIGHBORS`, `GRADE_CONTEXT_MAX_CHARS` | agent | config | `1`, `9000` | Passages added on each side of the best hits, and the cap on the evidence shown for one requirement. |
 | `VERIFY_ABSENCE_MAX_SEARCHES` | agent | config | `3` | Further searches allowed when nothing was found for a requirement. |
 | `GROUNDING_MAX_REPAIR_ATTEMPTS` | agent | config | `1` | Repairs allowed after a failed citation check. |
-| `EXTRACTION_WINDOW_CHARS`, `EXTRACTION_WINDOW_OVERLAP_PASSAGES` | agent | config | `8000`, `2` | Size of one extraction window, and the passages that open the next one. |
+| `EXTRACTION_CHUNK_CHARS`, `EXTRACTION_CHUNK_LINES` | agent | config | `3000`, `25` | Size of one extraction chunk of the chosen section: characters and lines, cut on block boundaries (AI 4.3). |
+| `EVAL_BATCH_SIZE` | agent | config | `4` | Requirements of one proposal graded in one model call (AI 4.2). |
 | `DEDUP_SIMILARITY_THRESHOLD` | agent | config | `0.85` | Cosine similarity at or above which two requirement candidates are compared as a possible duplicate. |
 | `RESULT_BATCH_MAX_ITEMS`, `RESULT_BATCH_MAX_BYTES` | agent | config | `50`, `262144` | Result batch limits (5.6). |
 | `CANCEL_CHECK_SECONDS` | agent | config | `10` | Longest gap between looks at `JOB_CONTROL` (5.9). |

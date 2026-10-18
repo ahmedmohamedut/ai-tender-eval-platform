@@ -11,7 +11,7 @@
 # Phase 3 (requirement extraction, stub model endpoint, synthetic RFP):
 #   7. the agent is killed mid-run: the redelivery finishes it, same result as an undisturbed run
 #   8. the model endpoint is down: the breaker opens and the job fails llm_unavailable, retryable;
-#      after the endpoint returns, a retry completes
+#      after the endpoint returns, a retry completes without restarting the worker
 #   9. a result part is delivered again: no requirement is stored twice
 #  10. cancel during a run: the job is cancelled and nothing is stored
 # Phase 4 (evaluation of a proposal against a confirmed baseline, DRILL_EVAL_ROWS requirements,
@@ -24,6 +24,9 @@
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 set -a; . ./.env; set +a
+# The drills stop and restart the model endpoint and run on synthetic documents: they always use the
+# rule-based stub, never a real model endpoint configured in .env (rule 15).
+export LLM_BASE_URL= LLM_MODEL_EXTRACTION= LLM_MODEL_VERSION=
 GW="http://localhost:${GATEWAY_PORT:-18080}/api/v1"
 PROJECT="${COMPOSE_PROJECT_NAME:-tender-eval}"
 NET="${PROJECT}_default"
@@ -217,11 +220,12 @@ rt=$(curl -s -H "$(mauth)" "$GW/jobs/$jo" | jq -r '[.failure.code, .can_retry] |
 [ "$rt" = "llm_unavailable true" ] && ok "the failure is retryable ($rt)" || bad "retry not offered ($rt)"
 docker start "${PROJECT}-llm-stub-1" >/dev/null
 for _ in $(seq 1 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' "${PROJECT}-llm-stub-1")" = healthy ] && break; sleep 1; done
-restore_agent
+# the worker is NOT restarted: its breaker gave up, and it must probe again and close by itself
 jr=$(curl -s -H "$(mauth)" -H "Idempotency-Key: drill-retry-$RANDOM" -X POST "$GW/jobs/$jo/retry" | jq -r .id)
 if [ -n "$jr" ] && [ "$jr" != null ] && s=$(wait_job "$jr" completed 240); then
-  [ "$(sql "select retry_of_job_id from jobs where id='$jr'")" = "$jo" ] && ok "retry after the outage: a new job pointing back completed ($(req_count "$to") requirements)" || bad "retry does not point back to the failed job"
+  [ "$(sql "select retry_of_job_id from jobs where id='$jr'")" = "$jo" ] && ok "retry after the outage, worker not restarted: a new job pointing back completed ($(req_count "$to") requirements)" || bad "retry does not point back to the failed job"
 else bad "retry after the outage: job '$jr' is '$s'"; fi
+restore_agent
 
 # 9. a result part is delivered again ----------------------------------------------------------------------------
 last=$(nats_ stream info ANALYSIS_EVENTS --json 2>/dev/null | jq -r .state.last_seq)
@@ -341,11 +345,12 @@ evaluation_drills() {
   [ "$rt" = "llm_unavailable true" ] && ok "the failure is retryable" || bad "retry not offered ($rt)"
   docker start "${PROJECT}-llm-stub-1" >/dev/null
   for _ in $(seq 1 60); do [ "$(docker inspect -f '{{.State.Health.Status}}' "${PROJECT}-llm-stub-1")" = healthy ] && break; sleep 1; done
-  restore_agent
+  # the worker is NOT restarted: its breaker gave up, and it must probe again and close by itself
   jr=$(curl -s -H "$(mauth)" -H "Idempotency-Key: drill-retry-$RANDOM" -X POST "$GW/jobs/$jo/retry" | jq -r .id)
   if [ -n "$jr" ] && [ "$jr" != null ] && s=$(wait_job "$jr" completed 300); then
     [ "$(grades_of "$po")" -ge 30 ] && ok "retry after the outage completed ($(grades_of "$po") grades)" || bad "retry: $(grades_of "$po") grades"
   else bad "retry after the outage: job '$jr' is '$s'"; fi
+  restore_agent
 
   # 14. cancel during a run
   stub_control '{"delay_ms":1500}'

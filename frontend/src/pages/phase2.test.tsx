@@ -175,7 +175,16 @@ describe("PG-17 Job center", () => {
     const { container } = renderPage(<Jobs />, { api, me: makeMe("member") });
     expect((await screen.findAllByText("Reading a document", { selector: "th" })).length).toBe(2);
     expect(screen.getByText("Running")).toBeInTheDocument();
-    expect(screen.getByText(/took longer than allowed/)).toBeInTheDocument();
+    expect(screen.queryByText(/took longer than allowed/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "Work",
+      "On",
+      "Status",
+      "Started",
+      "Last updated",
+      "Actions",
+    ]);
+    expect(screen.getAllByRole("button", { name: "View job details" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "Cancel" })).toHaveLength(1);
     expect(await accessibilityViolations(container)).toEqual([]);
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -184,6 +193,46 @@ describe("PG-17 Job center", () => {
         "/jobs/{jobId}/cancel",
         expect.objectContaining({ params: { path: { jobId: "j1" } } }),
       ),
+    );
+  });
+
+  it("opens the details of a job with its steps and activity", async () => {
+    const failed = job({
+      id: "j2",
+      status: "failed",
+      can_cancel: false,
+      updated_at: "2026-10-01T10:05:00Z",
+      started_at: "2026-10-01T10:00:30Z",
+      failure: {
+        code: "llm_unavailable",
+        message: "The language model did not answer. Try again in a few minutes.",
+        suggested_actions: ["retry"],
+      },
+      steps: [
+        { step_no: 1, name: "fetch", status: "completed", started_at: "2026-10-01T10:00:30Z" },
+        { step_no: 2, name: "parse", status: "failed", started_at: "2026-10-01T10:00:31Z" },
+      ],
+      events: [
+        { at: "2026-10-01T10:00:30Z", level: "info", message: "The job started" },
+        { at: "2026-10-01T10:05:00Z", level: "error", step: "parse", message: "The job failed: x" },
+      ],
+    });
+    const api = fakeApi((call) =>
+      call === "GET /jobs"
+        ? { items: [failed], total: 1 }
+        : call === "GET /jobs/{jobId}"
+          ? failed
+          : undefined,
+    );
+    renderPage(<Jobs />, { api, me: makeMe("member") });
+    await userEvent.click(await screen.findByRole("button", { name: "View job details" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("The job started")).toBeInTheDocument();
+    expect(within(dialog).getByText("Parse")).toBeInTheDocument();
+    expect(within(dialog).getByText(/did not answer/)).toBeInTheDocument();
+    expect(api.GET).toHaveBeenCalledWith(
+      "/jobs/{jobId}",
+      expect.objectContaining({ params: { path: { jobId: "j2" } } }),
     );
   });
 

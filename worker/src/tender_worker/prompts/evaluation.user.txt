@@ -1,10 +1,3 @@
-Requirement {number} ({importance}, category: {category}):
-{text}
+Grade the {count} requirement(s) below against the proposal excerpts given with each.
 
-Acceptance criteria:
-{criteria}
-
-Passages of the proposal:
-{passages}
-
-Grade the requirement.
+{batch}

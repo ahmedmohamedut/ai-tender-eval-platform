@@ -1,8 +1,13 @@
 """The requirement extraction graph (AI 4.3), a fixed LangGraph StateGraph.
 
-load scope -> plan windows -> extract (one call per window, in parallel, each grounded and
-repaired once) -> merge -> compare -> flag. Plain code decides what is read, whether an answer is
-accepted and when a loop ends; the model answers one narrow question at a time.
+load scope -> plan windows -> extract (one call per chunk of the section text, in parallel, each
+grounded and repaired once) -> merge -> compare -> flag. Plain code decides what is read, whether
+an answer is accepted and when a loop ends; the model answers one narrow question at a time.
+
+The model reads the user's scope as tagged markdown blocks (`agent/markdown.py`): the heading
+path, table rows with their column labels, list items as bullets. It answers quote first, then
+the block's tag. Code checks the quote against that block and against the passage the block was
+aligned to, which is what the stored citation points at (rule 6).
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ import hashlib
 import logging
 import math
 import operator
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -22,20 +28,34 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
 from tender_worker import metrics, tracing
-from tender_worker.agent.grounding import (
-    sanitise_passage,
-    suspected_injection,
-    verify_quote,
-)
+from tender_worker.agent.grounding import sanitise_passage, suspected_injection
 from tender_worker.agent.llm import StructuredLlm
-from tender_worker.agent.retrieval import PassageRef, PassageSource, ScopeItem
-from tender_worker.agent.schemas import Candidate, Candidates, PairJudgement
+from tender_worker.agent.markdown import (
+    Chunk,
+    MarkdownSource,
+    MdBlock,
+    candidate_obligations,
+    chunk_blocks,
+    locate_quote,
+)
+from tender_worker.agent.retrieval import PassageRef, ScopeItem
+from tender_worker.agent.schemas import (
+    PairJudgement,
+    RequirementCandidate,
+    RequirementExtraction,
+)
 from tender_worker.prompts import load
 
 log = logging.getLogger(__name__)
 
 ITEM_NAMESPACE = uuid.UUID("c47f2a1e-3b9d-4f0a-8d6e-5a1b7c9e2f40")
-CERTAINTY = {"high": 0.9, "medium": 0.7, "low": 0.4}
+# A quote checked against its block and passage is as sure as the checks make it: the model no
+# longer states its own certainty. A repaired answer is trusted a little less; a suspected
+# injection is never trusted (AI 4.6).
+CONFIDENCE = 0.85
+REPAIRED_CONFIDENCE = 0.65
+INJECTION_CONFIDENCE = 0.4
+UNDER_EXTRACTION_SHARE = 0.8
 MAX_JUDGEMENTS = 200
 
 
@@ -45,8 +65,8 @@ class NoContentInScope(Exception):
 
 @dataclass(frozen=True)
 class ExtractionSettings:
-    window_chars: int = 8000
-    overlap_passages: int = 2
+    chunk_chars: int = 3000
+    chunk_lines: int = 25
     dedup_threshold: float = 0.85
     max_repairs: int = 1
     window_concurrency: int = 4
@@ -59,7 +79,6 @@ class Grounded:
     acceptance_criteria: list[str]
     category_id: str | None
     sources: list[dict]  # document_version_id, passage_id, page_no, quote
-    several_obligations: bool
     confidence: float
     window: int
     repaired: bool = False
@@ -68,41 +87,16 @@ class Grounded:
     item_id: str = ""
 
 
-@dataclass
-class Window:
-    index: int
-    passages: list[PassageRef]
-
-
 class State(TypedDict, total=False):
     scope: list[ScopeItem]
     categories: list[dict]
     existing: list[dict]
-    passages: list[PassageRef]
-    windows: list[Window]
+    blocks: list[MdBlock]
+    chunks: list[Chunk]
     candidates: Annotated[list[Grounded], operator.add]
     counters: Annotated[list[tuple[str, int]], operator.add]
     merged: list[Grounded]
     result: list[Grounded]
-
-
-def plan_windows(passages: list[PassageRef], window_chars: int, overlap: int) -> list[Window]:
-    """Consecutive passages of one document grouped to about `window_chars`, with overlap."""
-    windows: list[Window] = []
-    current: list[PassageRef] = []
-    size = 0
-    for p in passages:
-        new_doc = bool(current) and current[-1].version_id != p.version_id
-        if current and (size + len(p.text) > window_chars or new_doc):
-            windows.append(Window(len(windows), current))
-            tail = [] if new_doc else current[-overlap:] if overlap > 0 else []
-            current = list(tail)
-            size = sum(len(x.text) for x in current)
-        current.append(p)
-        size += len(p.text)
-    if current:
-        windows.append(Window(len(windows), current))
-    return windows
 
 
 def _passage_block(passages: list[PassageRef]) -> str:
@@ -131,12 +125,27 @@ def item_id(job_id: UUID, text: str, passage_ids: list[str]) -> str:
 _step = tracing.step
 
 
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+_NEGATION = re.compile(r"\b(not|no|never|without|cannot|prohibited|excluding|except)\b|n't", re.I)
+
+
+def _same_facts(a: str, b: str) -> bool:
+    """Two statements may be merged only if they hold the same numbers and the same polarity:
+    "99.9% availability" and "99.5% availability", or "shall" and "shall not", stay apart."""
+    nums = lambda t: {n.replace(",", "") for n in _NUMBER.findall(t)}  # noqa: E731
+    return nums(a) == nums(b) and bool(_NEGATION.search(a)) == bool(_NEGATION.search(b))
+
+
+def _tag(raw: str) -> str:
+    return raw.strip().strip("[]() ").upper()
+
+
 class ExtractionGraph:
     def __init__(
         self,
         *,
         llm: StructuredLlm,
-        passages: PassageSource,
+        source: MarkdownSource,
         embed: Callable[[list[str]], Awaitable[list[list[float]]]],
         tender_id: UUID,
         job_id: UUID,
@@ -145,7 +154,7 @@ class ExtractionGraph:
         cancelled: Callable[[], Awaitable[bool]] | None = None,
     ) -> None:
         self._llm = llm
-        self._source = passages
+        self._source = source
         self._embed = embed
         self._tender = tender_id
         self._job = job_id
@@ -153,7 +162,7 @@ class ExtractionGraph:
         self._progress = on_progress
         self._cancelled = cancelled
         self._gate = asyncio.Semaphore(self._cfg.window_concurrency)
-        self._windows_done = 0
+        self._chunks_done = 0
         self.graph = self._build()
 
     # ---- graph ---------------------------------------------------------------------------------
@@ -197,164 +206,180 @@ class ExtractionGraph:
     @_step("load_scope")
     async def _load_scope(self, state: State) -> dict[str, Any]:
         await self._tick("load_scope", 5)
-        passages = await self._source.load(self._tender, state["scope"])
-        if not passages:
+        blocks = await self._source.load(self._tender, state["scope"])
+        if not any(b.kind != "heading" and b.text.strip() for b in blocks):
             raise NoContentInScope()
-        return {"passages": passages}
+        return {"blocks": blocks}
 
     @_step("plan_windows")
     async def _plan(self, state: State) -> dict[str, Any]:
         await self._tick("plan_windows", 10)
         return {
-            "windows": plan_windows(
-                state["passages"], self._cfg.window_chars, self._cfg.overlap_passages
-            )
+            "chunks": chunk_blocks(state["blocks"], self._cfg.chunk_chars, self._cfg.chunk_lines)
         }
 
     def _fan_out(self, state: State):
-        windows = state.get("windows", [])
-        if not windows:
+        chunks = state.get("chunks", [])
+        if not chunks:
             return "merge"
         return [
             Send(
                 "extract",
-                {
-                    "window": w,
-                    "categories": state.get("categories", []),
-                    "scope": state["scope"],
-                    "total": len(windows),
-                },
+                {"chunk": c, "categories": state.get("categories", []), "total": len(chunks)},
             )
-            for w in windows
+            for c in chunks
         ]
 
     async def _extract(self, state: dict) -> dict[str, Any]:
-        window: Window = state["window"]
+        chunk: Chunk = state["chunk"]
         with tracing.span(
             "row",
             "CHAIN",
             {
                 "tender.step": "extract",
-                "tender.window": window.index,
-                "tender.passage_count": len(window.passages),
+                "tender.window": chunk.index,
+                "tender.passage_count": len(chunk.blocks),
             },
         ):
-            return await self._extract_window(state, window)
+            return await self._extract_chunk(state, chunk)
 
-    async def _extract_window(self, state: dict, window: Window) -> dict[str, Any]:
+    async def _extract_chunk(self, state: dict, chunk: Chunk) -> dict[str, Any]:
         categories = state.get("categories", [])
         valid_categories = {c["id"] for c in categories}
         cats = "\n".join(f"{c['id']}: {c['name']}" for c in categories) or "(none)"
-        shown = {p.id: p for p in window.passages}
+        shown = {b.tag: b for b in chunk.blocks}
+        if chunk.lead_in is not None:
+            shown.setdefault(chunk.lead_in.tag, chunk.lead_in)
         system = load("extraction.system.txt")
-        user = load("extraction.user.txt").format(
-            categories=cats, passages=_passage_block(window.passages)
-        )
+        text = chunk.render()
+        user = load("extraction.user.txt").format(categories=cats, heading=chunk.label, text=text)
         counters: list[tuple[str, int]] = []
         async with self._gate:
             if self._cancelled and await self._cancelled():
                 return {"candidates": [], "counters": []}
             with tracing.purpose("llm.extract"):
-                answer = await self._llm.generate(system, user, Candidates)
+                answer = await self._llm.generate(system, user, RequirementExtraction)
             problems: list[str] = []
             accepted: list[Grounded] = []
-            for cand in answer.items:
-                ok, issues = self._ground(cand, shown, valid_categories, window.index)
+            recovered = 0
+            for cand in answer.requirements:
+                ok, issues, by_search = self._ground(cand, shown, valid_categories, chunk.index)
+                recovered += by_search
                 if ok is not None:
                     accepted.append(ok)
                 else:
                     problems.extend(issues)
+            rejected = len(problems)
+            repaired_ok = 0
             attempts = 0
             while problems and attempts < self._cfg.max_repairs:
                 attempts += 1
                 repair = load("extraction.repair.txt").format(
                     problems="\n".join(f"- {p}" for p in problems[:20]),
-                    passages=_passage_block(window.passages),
+                    heading=chunk.label,
+                    text=text,
                     previous=answer.model_dump_json(),
                 )
                 with tracing.purpose("llm.repair"):
-                    fixed = await self._llm.generate(system, repair, Candidates)
+                    fixed = await self._llm.generate(system, repair, RequirementExtraction)
                 problems = []
                 again: list[Grounded] = []
-                for cand in fixed.items:
-                    ok, issues = self._ground(cand, shown, valid_categories, window.index)
+                for cand in fixed.requirements:
+                    ok, issues, by_search = self._ground(cand, shown, valid_categories, chunk.index)
+                    recovered += by_search
                     if ok is not None:
                         ok.repaired = True
-                        ok.confidence = max(0.0, ok.confidence - 0.1)
+                        ok.confidence = min(ok.confidence, REPAIRED_CONFIDENCE)
                         again.append(ok)
                     else:
                         problems.extend(issues)
                 # what the repair gives replaces the rejected candidates; what was accepted stays
                 known = {a.text for a in accepted}
-                accepted.extend(a for a in again if a.text not in known)
-            if problems:
-                counters.append(("ungrounded_candidate", max(1, len(problems))))
+                fresh = [a for a in again if a.text not in known]
+                accepted.extend(fresh)
+                repaired_ok += len(fresh)
+            # a candidate the repair did not bring back is dropped, and counted either way
+            if rejected > repaired_ok:
+                counters.append(("ungrounded_candidate", rejected - repaired_ok))
+            if recovered:
+                counters.append(("tag_recovered", recovered))
+            # the reference's recall proxy: obligation wording the model left without a requirement
+            wanted = len(candidate_obligations(chunk))
+            if wanted and len(accepted) < UNDER_EXTRACTION_SHARE * wanted:
+                counters.append(("under_extraction", 1))
             # counts only: the problem texts quote the candidate (rule 10)
             tracing.set_attributes(
                 {
                     "tender.accepted": len(accepted),
                     "tender.rejected": len(problems),
+                    "tender.candidate_obligations": wanted,
                     "tender.repair_attempts": attempts,
                     "tender.row_outcome": "failed" if problems and not accepted else "done",
                 }
             )
         counters.append(("windows_done", 1))
-        self._windows_done += 1
-        percent = 10 + int(60 * self._windows_done / max(1, state.get("total", 1)))
+        self._chunks_done += 1
+        percent = 10 + int(60 * self._chunks_done / max(1, state.get("total", 1)))
         await self._tick("extract", min(70, percent))
         return {"candidates": accepted, "counters": counters}
 
     def _ground(
         self,
-        cand: Candidate,
-        shown: dict[str, PassageRef],
+        cand: RequirementCandidate,
+        shown: dict[str, MdBlock],
         categories: set[str],
-        window: int,
-    ) -> tuple[Grounded | None, list[str]]:
-        issues: list[str] = []
-        sources: list[dict] = []
-        injected = False
-        if not cand.sources:
-            issues.append(f'"{cand.text[:60]}": needs at least one source')
-        for s in cand.sources:
-            passage = shown.get(s.passage_id)
-            if passage is None:
-                issues.append(f'"{cand.text[:60]}": passage {s.passage_id} was not shown')
-                continue
-            verified = verify_quote(s.quote, passage.text)
-            if verified is None:
-                issues.append(
-                    f'"{cand.text[:60]}": the quote is not in passage {s.passage_id}'
-                    " (copy at least ten characters word for word)"
-                )
-                continue
-            injected = injected or suspected_injection(passage.text)
-            sources.append(
-                {
-                    "document_version_id": passage.version_id,
-                    "passage_id": passage.id,
-                    "page_no": passage.page_no,
-                    "quote": verified.excerpt,  # the stored excerpt is the passage's own text
-                }
+        chunk: int,
+    ) -> tuple[Grounded | None, list[str], int]:
+        """The candidate with its checked source, or the problems; 1 if the tag was recovered."""
+        head = f'"{cand.description[:60]}"'
+        block = shown.get(_tag(cand.tag))
+        located = locate_quote(block, cand.source_quote) if block is not None else None
+        recovered = 0
+        if located is None:
+            # A wrong or missing tag is not a wrong quote: the quote may occur in exactly one
+            # block of what was shown. The checks are the same; only the tag is looked up.
+            hits = [
+                found
+                for b in shown.values()
+                if (found := locate_quote(b, cand.source_quote)) is not None
+            ]
+            if len(hits) == 1:
+                located, recovered = hits[0], 1
+        if located is None:
+            if block is None:
+                return None, [f"{head}: tag {cand.tag.strip()[:16]} was not shown"], 0
+            if not block.citable:
+                return None, [f"{head}: the text of {block.tag} cannot be cited; pick another"], 0
+            return (
+                None,
+                [
+                    f"{head}: the quote is not in {block.tag} (copy at least ten characters word"
+                    " for word from that line, without the tag or a column label)"
+                ],
+                0,
             )
-        if not sources:
-            return None, issues or [f'"{cand.text[:60]}": no verified source']
-        confidence = CERTAINTY[cand.certainty]
-        if injected:
-            confidence = min(confidence, 0.4)
+        injected = suspected_injection(located.passage.text)
+        confidence = INJECTION_CONFIDENCE if injected else CONFIDENCE
         return (
             Grounded(
-                text=" ".join(cand.text.split()),
-                importance=cand.importance,
+                text=" ".join(cand.description.split()),
+                importance="mandatory" if cand.is_mandatory else "optional",
                 acceptance_criteria=[c.strip() for c in cand.acceptance_criteria if c.strip()],
                 category_id=cand.category_id if cand.category_id in categories else None,
-                sources=sources,
-                several_obligations=cand.several_obligations,
+                sources=[
+                    {
+                        "document_version_id": located.passage.version_id,
+                        "passage_id": located.passage.id,
+                        "page_no": located.passage.page_no,
+                        "quote": located.excerpt,  # the passage's own text
+                    }
+                ],
                 confidence=confidence,
-                window=window,
+                window=chunk,
                 injection=injected,
             ),
             [],
+            recovered,
         )
 
     @_step("merge")
@@ -365,25 +390,33 @@ class ExtractionGraph:
             return {"merged": cands}
         vectors = await self._embed([c.text for c in cands])
         keep: list[int] = []
-        merged_into: dict[int, int] = {}
         for i, c in enumerate(cands):
             target = None
             for j in keep:
                 same_passage = {s["passage_id"] for s in c.sources} & {
                     s["passage_id"] for s in cands[j].sources
                 }
-                if same_passage and _cosine(vectors[i], vectors[j]) >= self._cfg.dedup_threshold:
+                if (
+                    same_passage
+                    and _cosine(vectors[i], vectors[j]) >= self._cfg.dedup_threshold
+                    and _same_facts(c.text, cands[j].text)
+                ):
                     target = j
                     break
             if target is None:
                 keep.append(i)
             else:
-                merged_into[i] = target
                 base = cands[target]
                 seen = {s["passage_id"] + s["quote"] for s in base.sources}
                 base.sources.extend(
                     s for s in c.sources if s["passage_id"] + s["quote"] not in seen
                 )
+                known = {x.casefold() for x in base.acceptance_criteria}
+                base.acceptance_criteria.extend(
+                    x for x in c.acceptance_criteria if x.casefold() not in known
+                )
+                if c.importance == "mandatory":
+                    base.importance = "mandatory"
                 base.confidence = max(base.confidence, c.confidence)
         return {"merged": [cands[i] for i in keep]}
 
@@ -431,13 +464,7 @@ class ExtractionGraph:
     @_step("flag")
     async def _flag(self, state: State) -> dict[str, Any]:
         await self._tick("flag", 90)
-        out = state.get("merged", [])
-        for c in out:
-            if c.several_obligations:
-                c.flags.append(
-                    {"flag_type": "compound", "detail": "States more than one obligation"}
-                )
-        return {"result": out}
+        return {"result": state.get("merged", [])}
 
 
 def to_item(c: Grounded) -> dict[str, Any]:

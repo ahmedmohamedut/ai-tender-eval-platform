@@ -366,6 +366,8 @@ services:
       dockerfile: worker/Dockerfile
     image: tender-eval/worker:dev
     <<: *restart
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       provision-nats: { condition: service_completed_successfully }
       provision-rustfs: { condition: service_completed_successfully }
@@ -388,6 +390,7 @@ services:
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS}
       EMBEDDING_DOCUMENT_PREFIX: ${EMBEDDING_DOCUMENT_PREFIX:-}
       EMBEDDING_QUERY_PREFIX: ${EMBEDDING_QUERY_PREFIX:-}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-passages}
       LOG_LEVEL: ${LOG_LEVEL}
     healthcheck: &worker-health
       test:
@@ -421,6 +424,14 @@ services:
       LLM_MODEL_VERSION: ${LLM_MODEL_VERSION:-stub-1}
       LLM_STRUCTURED_OUTPUT: ${LLM_STRUCTURED_OUTPUT:-json_schema}
       LLM_OUTAGE_GIVE_UP_SECONDS: ${LLM_OUTAGE_GIVE_UP_SECONDS:-600}
+      LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-8192}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-120}
+      LLM_MAX_CONCURRENCY: ${LLM_MAX_CONCURRENCY:-8}
+      EXTRACTION_CHUNK_CHARS: ${EXTRACTION_CHUNK_CHARS:-3000}
+      EXTRACTION_CHUNK_LINES: ${EXTRACTION_CHUNK_LINES:-25}
+      EVAL_BATCH_SIZE: ${EVAL_BATCH_SIZE:-4}
+      GRADE_CONTEXT_MAX_CHARS: ${GRADE_CONTEXT_MAX_CHARS:-9000}
+      RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-8}
       PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
       PHOENIX_PROJECT_NAME: ${PHOENIX_PROJECT_NAME:-tender-eval}
       TRACE_CAPTURE_CONTENT: ${TRACE_CAPTURE_CONTENT:-false}
@@ -435,6 +446,7 @@ services:
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS}
       EMBEDDING_DOCUMENT_PREFIX: ${EMBEDDING_DOCUMENT_PREFIX:-}
       EMBEDDING_QUERY_PREFIX: ${EMBEDDING_QUERY_PREFIX:-}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-passages}
       LOG_LEVEL: ${LOG_LEVEL}
     healthcheck: *worker-health
     read_only: true

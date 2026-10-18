@@ -7,26 +7,27 @@ from tender_worker import stub_llm
 from tender_worker.agent.grounding import verify_quote
 
 PASSAGES = (
-    "Categories (id: name):\n0193a7a0-0000-7000-8000-0000000000aa: Encryption\n\nPassages:\n"
-    '<passage id="p1" page="1">\nThe supplier shall encrypt all data at rest. '
-    "Background text that carries no obligation at all here.\n</passage>\n"
-    '<passage id="p2" page="2">\nSupport hours should cover the working week.\n</passage>'
+    "Categories (id: name):\n0193a7a0-0000-7000-8000-0000000000aa: Encryption\n\n"
+    "Heading path: Security\n\nSection text:\n---\n"
+    "[B1] The supplier shall encrypt all data at rest. "
+    "Background text that carries no obligation at all here.\n"
+    "[B2] Support hours should cover the working week.\n"
+    "[B3] [Table row] Ref: C-1 | Control: Encrypt backups with AES-256 using a key vault\n---"
 )
 
 
 def test_extract_proposes_obligation_sentences_with_verbatim_quotes():
     out = stub_llm.extract(PASSAGES)
-    texts = [i["text"] for i in out["items"]]
+    texts = [i["description"] for i in out["requirements"]]
     assert texts == [
         "The supplier shall encrypt all data at rest.",
         "Support hours should cover the working week.",
     ]
-    first, second = out["items"]
-    assert first["importance"] == "mandatory" and second["importance"] == "optional"
+    first, second = out["requirements"]
+    assert first["tag"] == "B1" and second["tag"] == "B2"
+    assert first["is_mandatory"] is True and second["is_mandatory"] is False
     assert first["category_id"] == "0193a7a0-0000-7000-8000-0000000000aa"
-    assert verify_quote(
-        first["sources"][0]["quote"], "The supplier shall encrypt all data at rest."
-    )
+    assert verify_quote(first["source_quote"], "The supplier shall encrypt all data at rest.")
 
 
 def test_judge_by_overlap_and_numbers():
@@ -56,7 +57,7 @@ async def client():
 async def test_chat_modes_and_faults(client):
     body = {"model": "m", "messages": [{"role": "user", "content": PASSAGES}]}
     ok = await (await client.post("/v1/chat/completions", json=body)).json()
-    assert "items" in ok["choices"][0]["message"]["content"]
+    assert "requirements" in ok["choices"][0]["message"]["content"]
 
     await client.post("/control", json={"mode": "bad_quote"})
     bad = await (await client.post("/v1/chat/completions", json=body)).json()
@@ -67,6 +68,8 @@ async def test_chat_modes_and_faults(client):
     assert r.status == 429
 
     await client.post("/control", json={"mode": "ok"})
-    tools = dict(body, tools=[{"type": "function", "function": {"name": "Candidates"}}])
+    tools = dict(body, tools=[{"type": "function", "function": {"name": "RequirementExtraction"}}])
     t = await (await client.post("/v1/chat/completions", json=tools)).json()
-    assert t["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "Candidates"
+    assert (
+        t["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "RequirementExtraction"
+    )

@@ -9,18 +9,22 @@ from tender_worker.agent.evaluation import Requirement
 from tender_worker.prompts import load
 
 ALLOWED = {
-    "number",
+    "req_id",
     "importance",
     "category",
     "text",
     "criteria",
-    "passages",
+    "excerpts",
+    "count",
+    "batch",
+    "requirement",
     "problems",
     "previous",
 }
 FILES = [
     "evaluation.system.txt",
     "evaluation.user.txt",
+    "evaluation.requirement.txt",
     "evaluation.repair.txt",
     "evaluation.absence.system.txt",
     "evaluation.absence.user.txt",

@@ -2,8 +2,10 @@
 
 It talks to an OpenAI-compatible endpoint through langchain-openai. A call is bounded by a timeout,
 retried with backoff on 429, 5xx, timeouts and unreadable output, limited by one semaphore for the
-whole process, and stopped by a circuit breaker after consecutive failures (the breaker closes
-again on one successful probe). Prompts and answers are never logged (rule 10).
+whole process, and stopped by a circuit breaker after consecutive failures. The breaker closes
+again on one answer; after it has given up, one probe per interval is still let through and a
+call waits for that slot. Prompts
+and answers are never logged (rule 10).
 """
 
 from __future__ import annotations
@@ -26,6 +28,14 @@ T = TypeVar("T", bound=BaseModel)
 
 class LlmUnavailable(Exception):
     """The endpoint did not answer after retries, or the breaker has been open too long."""
+
+
+class LlmOutputUnusable(LlmUnavailable):
+    """The endpoint answered, but every answer was cut off, refused or unreadable.
+
+    A subclass so callers that treat any model failure alike keep working; the job-level handlers
+    catch it first and report `model_output_unusable`, not an outage.
+    """
 
 
 class StructuredLlm(Protocol):
@@ -143,12 +153,14 @@ class OpenAiCompatible:
         self, system: str, user: str, schema: type[T], *, model: str | None = None
     ) -> T:
         last: BaseException | None = None
+        unusable = False
         for attempt in range(self._retries):
-            if self.breaker.gave_up():
-                raise LlmUnavailable("the model endpoint has been unavailable for too long")
+            # While the breaker is open a call waits for the next probe slot (at most
+            # `probe_seconds`), also after it gave up: a recovered endpoint then closes it again
+            # without a restart, and a retry started just after the recovery is not refused. A job
+            # still ends: after its tries the call raises, and `gave_up()` tells the caller the
+            # outage has lasted too long.
             while not self.breaker.allow():
-                if self.breaker.gave_up():
-                    raise LlmUnavailable("the model endpoint has been unavailable for too long")
                 await self._sleep(1.0)
             try:
                 async with self._limit:
@@ -159,20 +171,30 @@ class OpenAiCompatible:
                 return result
             except (ValidationError, ValueError, json.JSONDecodeError) as exc:
                 # unreadable output: counts against the call, not against the endpoint
-                last = exc
+                last, unusable = exc, True
             except Exception as exc:  # noqa: BLE001 - 429, 5xx, timeouts and connection errors
                 last = exc
                 if type(exc).__name__ in (
                     "LengthFinishReasonError",
                     "ContentFilterFinishReasonError",
                 ):
-                    pass  # the endpoint answered; the answer was cut or refused: not an outage
+                    # the endpoint answered; the answer was cut or refused: not an outage
+                    self.breaker.success()
+                    unusable = True
                 else:
+                    unusable = False
                     self.breaker.failure()
+            if not unusable and self.breaker.gave_up():
+                # The outage has lasted too long and this probe failed too: no more tries. Many
+                # calls queue for the one probe slot per interval, so retrying here would make a
+                # job with many calls take minutes to fail.
+                break
             if attempt + 1 < self._retries:
                 delay = min(self._cap, self._base * (2**attempt)) * (0.8 + 0.4 * random.random())
                 await self._sleep(delay)
         log.warning("model call gave up", extra={"error": type(last).__name__})
+        if unusable:
+            raise LlmOutputUnusable("the model endpoint gave no usable answer") from last
         raise LlmUnavailable("the model endpoint did not give a usable answer") from last
 
     async def _traced_call(

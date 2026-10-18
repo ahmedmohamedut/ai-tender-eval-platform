@@ -285,7 +285,7 @@ Nodes: Load and plan, Retrieve, Grade, Verify absence, Validate, Repair, Record 
 
 ### 8.3 Extraction and pre-check graphs
 
-Extraction: Load scope, Plan windows (about `EXTRACTION_WINDOW_CHARS` 8,000 with the last 2 passages overlapping), Extract (one call per window, in parallel, verbatim quote for every source), Ground, Merge (cosine at or above `DEDUP_SIMILARITY_THRESHOLD` 0.85), Compare, Flag. A flagged candidate is still emitted, never dropped. Extraction and pre-check seal **all** parts first, then write `part.{job_id}.final` with the part count; a restart without that key starts again. See AI 4.3 and 4.4.
+Extraction: Load scope, Plan windows (tagged markdown blocks cut into chunks of about `EXTRACTION_CHUNK_CHARS` 3,000), Extract (one call per chunk, quote first, tag of the block it was copied from), Ground (the quote is checked against the block and its passage), Merge (cosine at or above `DEDUP_SIMILARITY_THRESHOLD` 0.85 and equal numbers and polarity), Compare, Flag. A flagged candidate is still emitted, never dropped. Evaluation grades `EVAL_BATCH_SIZE` 4 requirements per call, judges every acceptance criterion with a quote, and code rolls the criteria up to the grade. Extraction and pre-check seal **all** parts first, then write `part.{job_id}.final` with the part count; a restart without that key starts again. See AI 4.3 and 4.4.
 
 ### 8.4 Prompts
 

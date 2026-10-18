@@ -1,0 +1,11 @@
+REQUIREMENT
+ID: {req_id}
+Importance: {importance}
+Category: {category}
+Description: {text}
+
+ACCEPTANCE CRITERIA
+{criteria}
+
+PROPOSAL EXCERPTS
+{excerpts}

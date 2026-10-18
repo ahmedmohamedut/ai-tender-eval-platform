@@ -74,6 +74,7 @@ class Failure(_Message):
         "source_unavailable",
         "index_unavailable",
         "llm_unavailable",
+        "model_output_unusable",
         "no_content_in_scope",
         "timeout",
         "other",

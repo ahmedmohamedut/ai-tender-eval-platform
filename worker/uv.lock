@@ -1314,13 +1314,13 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pypdf" },
+    { name = "python-docx" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "python-docx" },
     { name = "reportlab" },
     { name = "ruff" },
     { name = "testcontainers" },
@@ -1341,13 +1341,13 @@ requires-dist = [
     { name = "pydantic", specifier = "==2.14.1" },
     { name = "pydantic-settings", specifier = "==2.15.0" },
     { name = "pypdf", specifier = ">=6.20.1" },
+    { name = "python-docx", specifier = ">=1.2.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = "==9.1.1" },
     { name = "pytest-asyncio", specifier = "==1.4.0" },
-    { name = "python-docx", specifier = ">=1.2.0" },
     { name = "reportlab", specifier = ">=5.0.1" },
     { name = "ruff", specifier = "==0.17.0" },
     { name = "testcontainers", specifier = "==4.15.0" },

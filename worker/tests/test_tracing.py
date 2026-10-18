@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from tender_worker import stub_embedding, stub_llm, tracing
 from tender_worker.agent.extraction import ExtractionGraph, ExtractionSettings
 from tender_worker.agent.llm import OpenAiCompatible
+from tender_worker.agent.markdown import MarkdownSource
 from tender_worker.agent.retrieval import PassageRef, ScopeItem
 
 TENDER = uuid.UUID("0193a7a0-0000-7000-8000-000000000002")
@@ -76,6 +77,10 @@ async def llm():
     await server.close()
 
 
+async def no_blocks(_tender, _version):
+    return None
+
+
 async def run_extraction(llm) -> None:
     p = PassageRef(
         id=str(uuid.UUID(int=1)),
@@ -87,11 +92,11 @@ async def run_extraction(llm) -> None:
     )
     graph = ExtractionGraph(
         llm=llm,
-        passages=Source([p]),
+        source=MarkdownSource(Source([p]), no_blocks),
         embed=embed,
         tender_id=TENDER,
         job_id=JOB,
-        settings=ExtractionSettings(window_chars=400, overlap_passages=1),
+        settings=ExtractionSettings(chunk_chars=400),
     )
     with tracing.span(
         "job.requirement_extraction",

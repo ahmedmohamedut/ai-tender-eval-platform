@@ -1,7 +1,7 @@
 """A local OpenAI-compatible chat endpoint for tests, CI and development (AGENTS rule 15).
 
-It is a rule-based extractor, not a model: it reads the passages in the prompt and proposes every
-sentence that carries an obligation word, quoting the sentence verbatim. It answers pair
+It is a rule-based extractor, not a model: it reads the tagged lines in the prompt and proposes
+every sentence that carries an obligation word, quoting the sentence verbatim. It answers pair
 comparisons by word overlap. A control endpoint switches in faults so the repair, retry and
 breaker paths can be driven: `POST /control {"mode": "ok" | "bad_quote" | "fail", "status": 503}`.
 Run with `python -m tender_worker.stub_llm`.
@@ -30,11 +30,19 @@ def _words(text: str) -> set[str]:
     return set(_WORD.findall(text.lower()))
 
 
+_LINE = re.compile(r"^(?:\(Section intro\) )?\[(B\d+)\] (.*)$", re.M)
+
+
 def extract(user: str, bad_quote: bool = False) -> dict:
+    """Requirements from the tagged lines of a section: every sentence with obligation wording."""
     categories = [(m.group(1), m.group(2).lower()) for m in _CATEGORY.finditer(user)]
     items: list[dict] = []
     seen: set[str] = set()
-    for pid, text in _PASSAGE.findall(user):
+    for tag, text in _LINE.findall(user):
+        text = text.removeprefix("[Table row] ").removeprefix("- ")
+        if " | " in text and ": " in text:
+            # a labelled table row: the values are the quote, the labels are not text
+            text = " | ".join(c.split(": ", 1)[-1] for c in text.split(" | "))
         for sentence in _SENTENCE.split(" ".join(text.split())):
             sentence = sentence.strip()
             if len(sentence) < 15 or not _OBLIGATION.search(sentence) or sentence in seen:
@@ -51,17 +59,16 @@ def extract(user: str, bad_quote: bool = False) -> dict:
                 quote = "this sentence does not appear anywhere in the document"
             items.append(
                 {
-                    "text": sentence,
-                    "importance": "mandatory" if _MANDATORY.search(sentence) else "optional",
-                    "acceptance_criteria": [],
+                    "source_quote": quote,
+                    "tag": tag,
+                    "title": sentence[:60],
+                    "description": sentence,
                     "category_id": category,
-                    "sources": [{"passage_id": pid, "quote": quote}],
-                    "several_obligations": len(re.findall(r"\band\b", sentence)) >= 2
-                    and len(_OBLIGATION.findall(sentence)) >= 2,
-                    "certainty": "high" if _MANDATORY.search(sentence) else "medium",
+                    "is_mandatory": bool(_MANDATORY.search(sentence)),
+                    "acceptance_criteria": [sentence],
                 }
             )
-    return {"items": items}
+    return {"requirements": items}
 
 
 def judge(user: str) -> dict:
@@ -117,9 +124,12 @@ def section_match(user: str) -> dict:
     return {"found": True, "matched_title": best[2], "passage_ids": [best[1]]}
 
 
-_REQ = re.compile(r"Requirement [^\n]*:\n(.*?)\n\nAcceptance criteria:", re.S)
-_EXCLUDE = re.compile(
-    r"\b(not (?:offer|provide|support)|do(?:es)? not|cannot|will not|excluded)\b", re.I
+_EXC = re.compile(r"^\[(P\d+)\] [^\n]*\n(.*?)(?=^\[P\d+\] |\Z)", re.S | re.M)
+_BLOCK = re.compile(
+    r"REQUIREMENT\nID: (?P<id>[^\n]*)\n.*?Description: (?P<text>.*?)\n\n"
+    r"ACCEPTANCE CRITERIA\n(?P<criteria>.*?)\n\nPROPOSAL EXCERPTS\n(?P<excerpts>.*?)"
+    r"(?=\n\n---\n\n|\Z)",
+    re.S,
 )
 
 
@@ -132,78 +142,71 @@ _NEGATION = re.compile(r"\b(not|no|cannot|never|without)\b", re.I)
 _PARTIAL = re.compile(r";|\bbut\b|\bonly\b|\bnot yet\b|\bhas not been tested\b", re.I)
 
 
-def grade_draft(user: str) -> dict:
-    """A rule-based grade from word overlap between the requirement and the best passage sentence.
+def _verdict(text: str, excerpts: list[tuple[str, str]]) -> tuple[str, str, str, str]:
+    """(kind, tag, quote, certainty): a rule-based reading of one requirement.
 
     A sentence that mostly matches and says it is not provided is an exclusion; one that matches
     but holds a limit ("only", "not yet", a second clause) is partial; a table row that matches is
     taken as fully met; a claim without the requirement's words is not evidence."""
-    m = _REQ.search(user)
-    req = m.group(1).strip() if m else ""
-    wanted = _stems(req) - _FILLER
+    wanted = _stems(text) - _FILLER
     best: tuple[float, str, str] | None = None
-    for pid, text in _PASSAGE.findall(user):
-        for sentence in _SENTENCE.split(" ".join(text.split())):
+    for tag, body in excerpts:
+        for sentence in _SENTENCE.split(" ".join(body.split())):
             sentence = sentence.strip()
             if len(sentence) < 8:
                 continue
             overlap = len(wanted & _stems(sentence)) / max(1, len(wanted))
             if best is None or overlap > best[0]:
-                best = (overlap, pid, sentence)
+                best = (overlap, tag, sentence)
     if best is None or best[0] < 0.34:
-        return {
-            "grade": "non_compliant",
-            "non_compliance_reason": "not_addressed",
-            "rationale_summary": "The proposal does not address this requirement.",
-            "rationale": "No passage of the proposal covers the requirement.",
-            "missing_elements": [],
-            "citations": [],
-            "certainty": "medium",
-        }
-    overlap, pid, sentence = best
+        return "none", "", "N/A", "medium"
+    overlap, tag, sentence = best
     quote = sentence if len(sentence) <= 160 else sentence[:160]
-    cite = [{"passage_id": pid, "quote": quote}]
     negated = bool(_NEGATION.search(sentence))
     limited = bool(_PARTIAL.search(sentence))
     if negated and not limited:
-        return {
-            "grade": "non_compliant",
-            "non_compliance_reason": "explicitly_excluded",
-            "rationale_summary": "The proposal states it does not meet this requirement.",
-            "rationale": "A passage says the vendor does not provide it.",
-            "missing_elements": [],
-            "citations": cite,
-            "certainty": "high",
-        }
+        return "excluded", tag, quote, "high"
     if "|" in sentence and not negated:
-        return {
-            "grade": "fully_compliant",
-            "non_compliance_reason": None,
-            "rationale_summary": "The capability table lists it as supported.",
-            "rationale": "A table row states the capability and that it is supported.",
-            "missing_elements": [],
-            "citations": cite,
-            "certainty": "medium",
-        }
+        return "full", tag, quote, "medium"
     if limited or overlap < 0.6:
-        return {
-            "grade": "partially_compliant",
-            "non_compliance_reason": None,
-            "rationale_summary": "The proposal covers part of the requirement.",
-            "rationale": "A passage covers some of the requirement but not all of it.",
-            "missing_elements": ["Details of the remaining part of the requirement"],
-            "citations": cite,
-            "certainty": "medium",
-        }
-    return {
-        "grade": "fully_compliant",
-        "non_compliance_reason": None,
-        "rationale_summary": "The proposal describes how the requirement is met.",
-        "rationale": "A passage covers the requirement in detail.",
-        "missing_elements": [],
-        "citations": cite,
-        "certainty": "high" if overlap >= 0.8 else "medium",
-    }
+        return "partial", tag, quote, "medium"
+    return "full", tag, quote, "high" if overlap >= 0.8 else "medium"
+
+
+def grade_batch(user: str) -> dict:
+    """Per-criterion results for every requirement block of the prompt."""
+    user = user.split("\n\nYour previous answer:")[0]
+    evaluations = []
+    for m in _BLOCK.finditer(user):
+        excerpts = [(t, b.strip()) for t, b in _EXC.findall(m.group("excerpts"))]
+        criteria = [c for c in m.group("criteria").splitlines() if c.strip()] or ["x"]
+        kind, tag, quote, certainty = _verdict(m.group("text"), excerpts)
+        checks = []
+        for n in range(1, len(criteria) + 1):
+            if kind == "none":
+                result, t, q = "No Evidence", "", "N/A"
+            else:
+                t, q = tag, quote
+                result = {
+                    "excluded": "Not Met",
+                    "full": "Met",
+                    "partial": "Met" if n == 1 and len(criteria) > 1 else "Partially Met",
+                }[kind]
+            checks.append({"criterion_no": n, "result": result, "evidence_quote": q, "tag": t})
+        evaluations.append(
+            {
+                "req_id": m.group("id").strip(),
+                "criteria_checks": checks,
+                "confidence": "High" if certainty == "high" else "Medium",
+                "justification": {
+                    "none": "The excerpts do not address this requirement.",
+                    "excluded": "An excerpt states that the vendor does not provide it.",
+                    "partial": "An excerpt covers some of the requirement but not all of it.",
+                    "full": "An excerpt covers the requirement in detail.",
+                }[kind],
+            }
+        )
+    return {"evaluations": evaluations}
 
 
 def query_plan(user: str) -> dict:
@@ -246,8 +249,8 @@ def app() -> web.Application:
             or schema_name == "PairJudgement"
             or any(t.get("function", {}).get("name") == "PairJudgement" for t in tools)
         )
-        if "GradeDraft" in wants:
-            payload = grade_draft(user)
+        if "BatchGrade" in wants:
+            payload = grade_batch(user)
         elif "QueryPlan" in wants:
             payload = query_plan(user)
         elif "ExpectedSections" in wants:

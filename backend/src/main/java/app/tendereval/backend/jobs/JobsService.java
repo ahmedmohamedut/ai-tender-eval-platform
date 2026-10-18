@@ -1,6 +1,7 @@
 package app.tendereval.backend.jobs;
 
 import app.tendereval.backend.api.model.Job;
+import app.tendereval.backend.api.model.JobEvent;
 import app.tendereval.backend.api.model.JobFailure;
 import app.tendereval.backend.api.model.JobPage;
 import app.tendereval.backend.api.model.JobStatus;
@@ -36,7 +37,7 @@ public class JobsService {
   private static final String SELECT =
       "SELECT j.id, j.tender_id, j.job_type, j.target_type, j.target_id, j.status, j.started_by,"
           + " u.display_name AS starter, j.current_step, j.progress_percent, j.queued_at,"
-          + " j.started_at, j.finished_at, j.failure_code, j.failure_message, j.retry_of_job_id,"
+          + " j.started_at, j.finished_at, greatest(j.updated_at, j.last_status_at) AS last_update, j.failure_code, j.failure_message, j.retry_of_job_id,"
           + " (j.started_by = app_user_id() OR app_is_chair_of(j.tender_id)) AS own_or_chair,"
           + " (app_role() = 'admin') AS is_admin,"
           + " (SELECT d.title || ' (version ' || v.version_no || ')' FROM document_versions v"
@@ -59,7 +60,27 @@ public class JobsService {
         .map((r, m) -> row(r))
         .one()
         .switchIfEmpty(Mono.error(ApiException.notFound("job")))
-        .flatMap(j -> withSteps(db, List.of(j)).map(l -> l.get(0)));
+        .flatMap(j -> withSteps(db, List.of(j)).map(l -> l.get(0)))
+        .flatMap(
+            j ->
+                db.sql(
+                        "SELECT at, level, step, message FROM job_events WHERE job_id = :id"
+                            + " ORDER BY at, id")
+                    .bind("id", id)
+                    .map(
+                        (r, m) ->
+                            new JobEvent()
+                                .at(r.get("at", OffsetDateTime.class))
+                                .level(JobEvent.LevelEnum.fromValue(r.get("level", String.class)))
+                                .step(r.get("step", String.class))
+                                .message(r.get("message", String.class)))
+                    .all()
+                    .collectList()
+                    .map(
+                        ev -> {
+                          j.setEvents(ev);
+                          return j;
+                        }));
   }
 
   public Mono<JobPage> list(
@@ -195,6 +216,7 @@ public class JobsService {
             .queuedAt(r.get("queued_at", OffsetDateTime.class))
             .startedAt(started)
             .finishedAt(finished)
+            .updatedAt(r.get("last_update", OffsetDateTime.class))
             .retryOfJobId(r.get("retry_of_job_id", UUID.class))
             .canCancel(open && ownOrChair && !admin)
             // Document processing is retried by an administrator from the document, others by the
@@ -232,6 +254,8 @@ public class JobsService {
       case "source_unavailable" -> "The stored file could not be read. Try again in a few minutes.";
       case "index_unavailable" -> "The search index did not answer. Try again in a few minutes.";
       case "llm_unavailable" -> "The language model did not answer. Try again in a few minutes.";
+      case "model_output_unusable" ->
+          "The language model's answers were cut off or unreadable. Ask an administrator to check the model settings.";
       case "no_content_in_scope" -> "The chosen pages hold no text. Change the selection.";
       case "timeout" -> "The job took longer than allowed. Try again.";
       default -> "The job failed for a reason the platform could not name. Ask an administrator.";
@@ -243,7 +267,8 @@ public class JobsService {
       case "source_unavailable", "index_unavailable", "llm_unavailable", "timeout" ->
           List.of(JobFailure.SuggestedActionsEnum.RETRY);
       case "no_content_in_scope" -> List.of(JobFailure.SuggestedActionsEnum.CHANGE_SELECTION);
-      case "other" -> List.of(JobFailure.SuggestedActionsEnum.CONTACT_ADMIN);
+      case "other", "model_output_unusable" ->
+          List.of(JobFailure.SuggestedActionsEnum.CONTACT_ADMIN);
       default -> List.of();
     };
   }

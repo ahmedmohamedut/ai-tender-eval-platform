@@ -29,7 +29,8 @@ from tender_worker.agent.extraction import (
     NoContentInScope,
     to_item,
 )
-from tender_worker.agent.llm import LlmUnavailable, StructuredLlm
+from tender_worker.agent.llm import LlmOutputUnusable, LlmUnavailable, StructuredLlm
+from tender_worker.agent.markdown import MarkdownSource, blocks_key
 from tender_worker.agent.precheck import PrecheckGraph
 from tender_worker.agent.retrieval import PassageSource, ScopeItem
 from tender_worker.agent.search import Searcher
@@ -92,6 +93,7 @@ class AgentDeps:
     embed_query: Callable[[list[str]], Awaitable[list[list[float]]]] | None = None
     evaluation_settings: EvaluationSettings = field(default_factory=EvaluationSettings)
     concurrency: int = 8
+    bucket_derived: str = "tender-derived"
 
 
 class BadInput(Exception):
@@ -203,6 +205,18 @@ def _parts(items: list[dict], max_items: int) -> list[list[dict]]:
     return parts
 
 
+def _markdown_source(deps: AgentDeps) -> MarkdownSource:
+    """The scope as markdown blocks. A version without stored blocks is read from its passages."""
+
+    async def read_blocks(tender_id: UUID, version_id: str) -> bytes | None:
+        try:
+            return await deps.blobs.get(deps.bucket_derived, blocks_key(tender_id, version_id))
+        except Exception:  # noqa: BLE001 - absent for PDFs and for versions that predate blocks
+            return None
+
+    return MarkdownSource(deps.source, read_blocks)
+
+
 def _warnings(counters: dict[str, int], items: list[Any]) -> list[StatusWarning]:
     out: list[StatusWarning] = []
     if counters.get("ungrounded_candidate"):
@@ -211,6 +225,14 @@ def _warnings(counters: dict[str, int], items: list[Any]) -> list[StatusWarning]
                 code="ungrounded_candidate",
                 message="Candidates without a verifiable source were dropped",
                 count=counters["ungrounded_candidate"],
+            )
+        )
+    if counters.get("under_extraction"):
+        out.append(
+            StatusWarning(
+                code="under_extraction",
+                message="Some sections hold more obligation wording than requirements were found",
+                count=counters["under_extraction"],
             )
         )
     injected = sum(1 for i in items if getattr(i, "injection", False))
@@ -276,7 +298,8 @@ async def _run_extraction(
         input_scope={
             "document_versions": sorted({s.version_id for s in scope}),
             "existing_requirements": len(data.get("existing_requirements", [])),
-            "window_chars": deps.settings.window_chars,
+            "chunk_chars": deps.settings.chunk_chars,
+            "chunk_lines": deps.settings.chunk_lines,
             "dedup_threshold": deps.settings.dedup_threshold,
         },
     )
@@ -290,7 +313,7 @@ async def _run_extraction(
 
     graph = ExtractionGraph(
         llm=deps.llm,
-        passages=deps.source,
+        source=_markdown_source(deps),
         embed=deps.embed,
         tender_id=command.tender_id,
         job_id=job,
@@ -312,6 +335,17 @@ async def _run_extraction(
             ),
         )
         metrics.inc("extraction_jobs_total", outcome="no_content_in_scope")
+        return
+    except LlmOutputUnusable:
+        await emitter.status(
+            "failed",
+            failure=Failure(
+                code="model_output_unusable",
+                message="The model's answers were cut off or unreadable",
+                retryable=False,
+            ),
+        )
+        metrics.inc("extraction_jobs_total", outcome="model_output_unusable")
         return
     except LlmUnavailable:
         await emitter.status(
@@ -461,6 +495,17 @@ async def _run_precheck(
             ),
         )
         metrics.inc("precheck_jobs_total", outcome="no_content_in_scope")
+        return
+    except LlmOutputUnusable:
+        await emitter.status(
+            "failed",
+            failure=Failure(
+                code="model_output_unusable",
+                message="The model's answers were cut off or unreadable",
+                retryable=False,
+            ),
+        )
+        metrics.inc("precheck_jobs_total", outcome="model_output_unusable")
         return
     except LlmUnavailable:
         await emitter.status(
@@ -626,7 +671,7 @@ async def _run_evaluation(
         await deps.kv.put(f"part.{job}.{part_no}", json.dumps(part).encode())
         await emitter.batch(part_no, False, part, "grades")
 
-    async def one(req: Requirement) -> None:
+    async def one(batch: list[Requirement]) -> None:
         nonlocal injected
         async with gate:
             if stop.is_set():
@@ -637,19 +682,22 @@ async def _run_evaluation(
                 if await cancelled(job):
                     stop.set()
                     return
-            row = await graph.grade_requirement(req)
+            rows = await graph.grade_batch(batch)
         async with lock:
-            buffer.append(row.item)
-            all_items.append(row.item)
-            if row.injection and row.item.get("outcome") == "graded":
-                injected += 1
-            if len(buffer) >= deps.batch_max_items:
-                await seal()
+            for row in rows:
+                buffer.append(row.item)
+                all_items.append(row.item)
+                if row.injection and row.item.get("outcome") == "graded":
+                    injected += 1
+                if len(buffer) >= deps.batch_max_items:
+                    await seal()
             percent = 5 + int(90 * len(all_items) / max(1, total))
             await emitter.status("running", step="grade", progress_percent=min(95, percent))
 
+    size = max(1, deps.evaluation_settings.batch_size)
+    batches = [todo[i : i + size] for i in range(0, len(todo), size)]
     try:
-        await asyncio.gather(*(one(r) for r in todo))
+        await asyncio.gather(*(one(b) for b in batches))
     except LlmUnavailable:
         stop.set()
         async with lock:

@@ -25,6 +25,12 @@ from uuid import UUID
 
 from tender_worker import metrics
 from tender_worker.ingest.convert import docx_to_pdf, has_tracked_changes
+from tender_worker.ingest.docx_markdown import (
+    align_blocks,
+    blocks_to_jsonl,
+    parse_docx_blocks,
+    render_markdown,
+)
 from tender_worker.ingest.model import IngestFailure, ParseResult, Warning_
 from tender_worker.ingest.pdf import parse_pdf
 from tender_worker.messages import (
@@ -92,6 +98,14 @@ class DocumentRef:
     @property
     def rendered_key(self) -> str:
         return f"rendered/{self.tender_id}/{self.version_id}/document.pdf"
+
+    @property
+    def blocks_key(self) -> str:
+        return f"{self.parsed_prefix}/blocks.jsonl"
+
+    @property
+    def markdown_key(self) -> str:
+        return f"{self.parsed_prefix}/document.md"
 
     @property
     def manifest_key(self) -> str:
@@ -341,6 +355,34 @@ class IngestPipeline:
             await emitter.failed(failure)
             metrics.inc("ingest_documents_total", outcome=failure.code)
 
+    async def _write_markdown(
+        self, ref: DocumentRef, original: bytes, result: ParseResult
+    ) -> dict[str, int]:
+        """The markdown blocks of a DOCX, written before the manifest (AI 3.3).
+
+        A document whose blocks cannot be read still processes: the agent then reads its
+        passages instead, so a failure here is a warning and not a failed document.
+        """
+        passages = [asdict(p) for p in result.passages]
+        loop = asyncio.get_running_loop()
+        try:
+            blocks, markdown, count, unaligned = await asyncio.wait_for(
+                loop.run_in_executor(self.executor, _markdown_job, original, passages),
+                self.parse_timeout,
+            )
+        except Exception:  # noqa: BLE001 - the passages stay the reading of last resort
+            log.warning("markdown skipped", extra={"version": str(ref.version_id)})
+            return {}
+        for key, body, kind in (
+            (ref.blocks_key, blocks, "application/x-ndjson"),
+            (ref.markdown_key, markdown, "text/markdown"),
+        ):
+            await with_retries(
+                lambda k=key, b=body, t=kind: self.blobs.put(self.bucket_derived, k, b, t),
+                sleep=self.sleep,
+            )
+        return {"block_count": count, "blocks_unaligned": unaligned}
+
     async def _read_manifest(self, ref: DocumentRef) -> dict | None:
         if not await with_retries(
             lambda: self.blobs.exists(self.bucket_derived, ref.manifest_key), sleep=self.sleep
@@ -411,6 +453,17 @@ class IngestPipeline:
                 ),
                 sleep=self.sleep,
             )
+        block_stats: dict[str, int] = {}
+        if ref.file_format == "docx":
+            block_stats = await self._write_markdown(ref, original, result)
+            if block_stats.get("blocks_unaligned"):
+                extra.append(
+                    Warning_(
+                        "blocks_unaligned",
+                        "Some text of the document could not be matched to the converted pages",
+                        block_stats["blocks_unaligned"],
+                    )
+                )
         warnings = extra + result.warnings
         manifest = {
             "source_sha256": sha,
@@ -419,6 +472,7 @@ class IngestPipeline:
             "page_count": len(result.pages),
             "section_count": len(result.sections),
             "passage_count": len(result.passages),
+            **block_stats,
             "warnings": [asdict(w) for w in warnings],
             "steps_done": ["fetch", "parse", "write"],
         }
@@ -433,6 +487,13 @@ class IngestPipeline:
             sleep=self.sleep,
         )
         return warnings
+
+
+def _markdown_job(docx: bytes, passages: list[dict]) -> tuple[bytes, bytes, int, int]:
+    """Runs in the process pool: blocks, markdown, block count and unaligned count."""
+    blocks = parse_docx_blocks(docx)
+    unaligned = align_blocks(blocks, passages)
+    return blocks_to_jsonl(blocks), render_markdown(blocks).encode(), len(blocks), unaligned
 
 
 def _parse_job(pdf: bytes, version_id: str, page_min_chars: int, max_share: float) -> ParseResult:

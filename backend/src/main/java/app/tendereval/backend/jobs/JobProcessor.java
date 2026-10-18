@@ -44,6 +44,7 @@ public class JobProcessor {
           "source_unavailable",
           "index_unavailable",
           "llm_unavailable",
+          "model_output_unusable",
           "no_content_in_scope",
           "timeout",
           "other");
@@ -213,6 +214,15 @@ public class JobProcessor {
         .then(updateProgress(c, job.id(), m))
         .then(
             "queued".equals(job.status())
+                ? event(c, job.id(), "info", null, "The job started", "state:running")
+                : Mono.empty())
+        .then(
+            m.step() != null
+                ? event(
+                    c, job.id(), "info", m.step(), "Started step " + m.step(), "step:" + m.step())
+                : Mono.empty())
+        .then(
+            "queued".equals(job.status())
                 ? audit
                     .recordSystem(
                         c,
@@ -355,6 +365,14 @@ public class JobProcessor {
               .then(markSteps(c, job.id(), null, true))
               .then(finishJob(c, job.id(), m.state(), null, null, m))
               .then(
+                  event(
+                      c,
+                      job.id(),
+                      "completed_with_warnings".equals(m.state()) ? "warning" : "info",
+                      null,
+                      finishedText(m),
+                      "state:" + m.state()))
+              .then(
                   "document_processing".equals(job.jobType()) ? versionReady(c, job) : Mono.empty())
               .then(
                   "evaluation".equals(job.jobType()) ? syncMemberEvaluations(c, job) : Mono.empty())
@@ -489,6 +507,7 @@ public class JobProcessor {
   Mono<Void> failOpenJob(
       DatabaseClient c, JobRow job, String code, String message, StatusMessage m) {
     return toRunning(c, job)
+        .then(failedEvent(c, job.id(), code))
         .then(markFailedStep(c, job.id()))
         .then(finishRun(c, job.id(), "failed", 0))
         .then(finishJob(c, job.id(), "failed", code, message, m))
@@ -512,6 +531,54 @@ public class JobProcessor {
                         Map.of("status", job.status()),
                         new LinkedHashMap<>(Map.of("status", "failed", "failure_code", code)))
                     .build()));
+  }
+
+  /** One line of the job's activity log; the same fact is stored once (delivery is repeated). */
+  private Mono<Void> event(
+      DatabaseClient c, UUID jobId, String level, String step, String message, String dedupKey) {
+    DatabaseClient.GenericExecuteSpec spec =
+        c.sql(
+                "INSERT INTO job_events (job_id, level, step, message, dedup_key)"
+                    + " VALUES (:j, :l, :s, :m, :k) ON CONFLICT (job_id, dedup_key) DO NOTHING")
+            .bind("j", jobId)
+            .bind("l", level)
+            .bind("m", message)
+            .bind("k", dedupKey);
+    spec = nullable(spec, "s", step, String.class);
+    return spec.fetch().rowsUpdated().then();
+  }
+
+  /** The failure line names the step that was running, and uses the plain text of the code. */
+  private Mono<Void> failedEvent(DatabaseClient c, UUID jobId, String code) {
+    return c.sql(
+            "INSERT INTO job_events (job_id, level, step, message, dedup_key)"
+                + " VALUES (:j, 'error', (SELECT name FROM job_steps WHERE job_id = :j"
+                + " AND status = 'running' ORDER BY step_no LIMIT 1), :m, 'state:failed')"
+                + " ON CONFLICT (job_id, dedup_key) DO NOTHING")
+        .bind("j", jobId)
+        .bind("m", "The job failed: " + JobsService.message(code, null))
+        .fetch()
+        .rowsUpdated()
+        .then();
+  }
+
+  /** Counts have fixed names and are numbers; nothing from a document goes in. */
+  private static String finishedText(StatusMessage m) {
+    int warnings = warningCount(m);
+    StringBuilder t =
+        new StringBuilder(
+            warnings > 0
+                ? "The job finished with " + warnings + (warnings == 1 ? " warning" : " warnings")
+                : "The job finished");
+    if (m.counts() != null && !m.counts().isEmpty()) {
+      t.append(". Result: ");
+      t.append(
+          new java.util.TreeMap<>(m.counts())
+              .entrySet().stream()
+                  .map(e -> e.getKey() + " " + e.getValue())
+                  .collect(java.util.stream.Collectors.joining(", ")));
+    }
+    return t.toString();
   }
 
   private Mono<Void> markFailedStep(DatabaseClient c, UUID jobId) {

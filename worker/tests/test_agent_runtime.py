@@ -10,7 +10,7 @@ import pytest
 from test_agent_extraction import CATEGORIES, Llm, Source, cand, embed, passage
 
 from tender_worker.agent.extraction import ExtractionSettings
-from tender_worker.agent.llm import LlmUnavailable
+from tender_worker.agent.llm import LlmOutputUnusable, LlmUnavailable
 from tender_worker.agent.runtime import AgentDeps, BadInput, run_extraction
 from tender_worker.messages import Command, ResultBatch, Status, WorkerInfo
 
@@ -63,6 +63,11 @@ class FailingLlm:
         raise LlmUnavailable("down")
 
 
+class UnusableLlm:
+    async def generate(self, *a, **k):
+        raise LlmOutputUnusable("cut off")
+
+
 def command(**over) -> Command:
     base = {
         "job_id": JOB,
@@ -92,7 +97,7 @@ def deps(llm, passages, bus, kv, blobs=None, batch=50) -> AgentDeps:
         bucket_jobs="tender-jobs",
         model_name="gemma-test",
         model_version="1",
-        settings=ExtractionSettings(window_chars=300, overlap_passages=0),
+        settings=ExtractionSettings(chunk_chars=300),
         batch_max_items=batch,
     )
 
@@ -107,10 +112,14 @@ def many(n: int):
         for i in range(1, n + 1)
     ]
     answers = {
-        p.id: [
-            cand(p.id, f"capability number {i}", text=f"The supplier shall provide capability {i}.")
+        f"B{i}": [
+            cand(
+                f"B{i}",
+                f"capability number {i}",
+                description=f"The supplier shall provide capability {i}.",
+            )
         ]
-        for i, p in enumerate(ps, start=1)
+        for i, _ in enumerate(ps, start=1)
     }
     return ps, answers
 
@@ -123,7 +132,7 @@ async def test_a_run_announces_the_run_seals_every_part_then_publishes_and_compl
     statuses = bus.statuses()
     first = statuses[0]
     assert first.state == "running" and first.steps and first.run
-    assert first.run.model_name == "gemma-test" and first.run.prompt_version == "extraction-1.0.0"
+    assert first.run.model_name == "gemma-test" and first.run.prompt_version == "extraction-2.0.0"
     assert [s.seq for s in statuses] == list(range(1, len(statuses) + 1))
     last = statuses[-1]
     assert last.state == "completed" and last.result_parts == 3
@@ -186,12 +195,21 @@ async def test_a_model_outage_fails_retryable_without_storing_anything():
     assert last.failure.retryable is True and kv.data == {} and bus.results() == []
 
 
+async def test_unusable_model_answers_fail_with_their_own_code_and_no_retry():
+    ps, _ = many(2)
+    bus, kv = Bus(), Kv()
+    await run_extraction(deps(UnusableLlm(), ps, bus, kv), command(), 1, TP, never)
+    last = bus.statuses()[-1]
+    assert last.state == "failed" and last.failure.code == "model_output_unusable"
+    assert last.failure.retryable is False and kv.data == {} and bus.results() == []
+
+
 async def test_a_dropped_candidate_completes_with_warnings():
     p = passage(1, "The supplier shall encrypt all data at rest.")
     llm = Llm(
         {
-            p.id: [cand(p.id, "the supplier must store data in Iceland")],
-            "repair": [cand(p.id, "the supplier must store data in Iceland")],
+            "B1": [cand("B1", "the supplier must store data in Iceland")],
+            "repair": [cand("B1", "the supplier must store data in Iceland")],
         }
     )
     bus = Bus()
