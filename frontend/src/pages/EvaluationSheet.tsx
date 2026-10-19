@@ -2,10 +2,9 @@ import {
   Alert,
   Button as AntButton,
   Card,
-  Col,
   Flex,
   Input,
-  Row,
+  Modal,
   Select,
   Space,
   Table,
@@ -75,6 +74,7 @@ export function EvaluationSheet() {
     "",
   );
   const [selected, setSelected] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | undefined>();
   const [overriding, setOverriding] = useState(false);
@@ -234,7 +234,9 @@ export function EvaluationSheet() {
 
   return (
     <>
-      {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
+      {tender.state.status === "ready" && (
+        <TenderHeader tender={tender.state.data} nextStep={false} />
+      )}
       <Typography.Paragraph>
         <Link to={`/tenders/${tenderId}/evaluation`}>Back to your evaluations</Link>
       </Typography.Paragraph>
@@ -394,333 +396,333 @@ export function EvaluationSheet() {
         </EmptyState>
       )}
       {list.length > 0 && (
-        <Row gutter={24}>
-          <Col xs={24} xl={12}>
-            <Table<Row>
-              rowKey={(r) => r.requirement.id}
-              components={rowHeaderComponents}
-              dataSource={list}
-              pagination={false}
-              scroll={{ x: "max-content" }}
-              onRow={(r) => ({ "aria-selected": current?.requirement.id === r.requirement.id })}
-              columns={[
-                {
-                  title: "Requirement",
-                  onCell: rowHeader,
-                  render: (_, r) => (
-                    <>
-                      <AntButton
-                        type="link"
-                        style={{ padding: 0 }}
-                        onClick={() => {
-                          setSelected(r.requirement.id);
-                          setShown(null);
-                        }}
-                      >
-                        {r.requirement.display_no}
-                      </AntButton>{" "}
-                      {r.requirement.text.length > 90
-                        ? r.requirement.text.slice(0, 90) + "…"
-                        : r.requirement.text}
-                    </>
-                  ),
-                },
-                {
-                  title: "AI",
-                  render: (_, r) =>
-                    r.ai ? (
-                      <GradeChip grade={r.ai.grade} />
-                    ) : (
-                      <Typography.Text type="secondary">Waiting</Typography.Text>
-                    ),
-                },
-                {
-                  title: "Mine",
-                  render: (_, r) =>
-                    r.member.grade ? (
-                      <GradeChip grade={r.member.grade} />
-                    ) : (
-                      <Typography.Text type="secondary">
-                        {memberStateLabel[r.member.review_state]}
-                      </Typography.Text>
-                    ),
-                },
-                {
-                  title: "Notes",
-                  render: (_, r) => (
-                    <Space size={4} wrap>
-                      {r.flags.map((f) => (
-                        <StatusChip
-                          key={f}
-                          label={rowFlagText[f] ?? f}
-                          tone={
-                            f === "outdated" || f === "needs_clarification" ? "warning" : "neutral"
-                          }
-                        />
-                      ))}
-                    </Space>
-                  ),
-                },
-              ]}
-            />
-          </Col>
-          <Col xs={24} xl={12}>
-            {current && (
-              <aside aria-label={`Detail of ${current.requirement.display_no}`}>
-                <Card>
-                  <Typography.Title level={3} style={{ fontSize: 16, marginTop: 0 }}>
-                    {current.requirement.display_no}{" "}
-                    <StatusChip
-                      label={
-                        importanceLabel[current.requirement.importance] ??
-                        current.requirement.importance
-                      }
-                      tone="neutral"
-                    />
-                  </Typography.Title>
-                  <Typography.Paragraph>{current.requirement.text}</Typography.Paragraph>
-                  {current.requirement.acceptance_criteria && (
-                    <Typography.Paragraph type="secondary">
-                      Acceptance criteria: {current.requirement.acceptance_criteria}
-                    </Typography.Paragraph>
-                  )}
-                  <Typography.Title level={4} style={{ fontSize: 14 }}>
-                    AI assessment
-                  </Typography.Title>
-                  {!current.ai ? (
-                    <Typography.Paragraph type="secondary">
-                      The AI has not graded this requirement yet.
-                    </Typography.Paragraph>
-                  ) : current.ai.outcome === "failed" ? (
-                    <Typography.Paragraph>
-                      Not evaluated: the AI could not give a grade with evidence. Grade it yourself.
-                    </Typography.Paragraph>
+        <>
+          <Table<Row>
+            rowKey={(r) => r.requirement.id}
+            components={rowHeaderComponents}
+            dataSource={list}
+            pagination={false}
+            tableLayout="fixed"
+            onRow={(r) => ({ "aria-selected": current?.requirement.id === r.requirement.id })}
+            columns={[
+              {
+                title: "Requirement",
+                width: "52%",
+                onCell: () => ({
+                  ...rowHeader(),
+                  style: { whiteSpace: "normal", wordBreak: "break-word" },
+                }),
+                render: (_, r) => (
+                  <>
+                    <AntButton
+                      type="link"
+                      style={{ padding: 0 }}
+                      onClick={() => {
+                        setSelected(r.requirement.id);
+                        setDetailOpen(true);
+                        setShown(null);
+                      }}
+                    >
+                      {r.requirement.display_no}
+                    </AntButton>{" "}
+                    {r.requirement.text}
+                  </>
+                ),
+              },
+              {
+                title: "AI",
+                render: (_, r) =>
+                  r.ai ? (
+                    <GradeChip grade={r.ai.grade} />
                   ) : (
-                    <>
-                      <p>
-                        <GradeChip grade={current.ai.grade} />{" "}
-                        {current.ai.non_compliance_reason &&
-                          nonComplianceLabel[current.ai.non_compliance_reason]}
-                        {current.ai.confidence != null &&
-                          ` · confidence ${Math.round(Number(current.ai.confidence) * 100)} %`}
-                      </p>
-                      <p>{current.ai.rationale}</p>
-                      {(current.ai.missing_elements?.length ?? 0) > 0 && (
-                        <ul>
-                          {(current.ai.missing_elements ?? []).map((m) => (
-                            <li key={m}>Missing: {m}</li>
-                          ))}
-                        </ul>
-                      )}
-                      {current.ai.citations.length === 0 ? (
-                        <Typography.Paragraph type="secondary">
-                          No evidence found.
-                        </Typography.Paragraph>
-                      ) : (
-                        <ul>
-                          {current.ai.citations.map((c) => (
-                            <li key={c.citation_no}>
-                              &ldquo;{c.excerpt}&rdquo; (page {c.page_no}){" "}
-                              <AntButton
-                                type="link"
-                                style={{ padding: 0 }}
-                                onClick={() => void showPassage(c.passage_id)}
-                              >
-                                Show in context
-                              </AntButton>{" "}
-                              <AntButton
-                                type="link"
-                                style={{ padding: 0 }}
-                                onClick={() => viewer.open(c.document_version_id, c.passage_id)}
-                              >
-                                Open page {c.page_no}
-                              </AntButton>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </>
-                  )}
-                  {shown && (
-                    <blockquote aria-label="The passage in context">
-                      <Typography.Paragraph type="secondary">
-                        Page {shown.page}
-                      </Typography.Paragraph>
-                      {shown.text}
-                    </blockquote>
-                  )}
+                    <Typography.Text type="secondary">Waiting</Typography.Text>
+                  ),
+              },
+              {
+                title: "Mine",
+                render: (_, r) =>
+                  r.member.grade ? (
+                    <GradeChip grade={r.member.grade} />
+                  ) : (
+                    <Typography.Text type="secondary">
+                      {memberStateLabel[r.member.review_state]}
+                    </Typography.Text>
+                  ),
+              },
+              {
+                title: "Notes",
+                render: (_, r) => (
+                  <Space size={4} wrap>
+                    {r.flags.map((f) => (
+                      <StatusChip
+                        key={f}
+                        label={rowFlagText[f] ?? f}
+                        tone={
+                          f === "outdated" || f === "needs_clarification" ? "warning" : "neutral"
+                        }
+                      />
+                    ))}
+                  </Space>
+                ),
+              },
+            ]}
+          />
 
-                  <Typography.Title level={4} style={{ fontSize: 14 }}>
-                    Your decision
-                  </Typography.Title>
-                  <p>
-                    <StatusChip
-                      label={memberStateLabel[current.member.review_state]}
-                      tone="neutral"
-                    />{" "}
-                    {current.member.grade && <GradeChip grade={current.member.grade} />}
-                  </p>
-                  {current.member.note && <p>Your note: {current.member.note}</p>}
-                  <Space wrap style={{ marginBottom: 12 }}>
+          {current && (
+            <Modal
+              open={detailOpen}
+              width={820}
+              footer={null}
+              onCancel={() => setDetailOpen(false)}
+              destroyOnHidden
+              title={`Detail of ${current.requirement.display_no}`}
+              styles={{ body: { maxHeight: "72vh", overflowY: "auto" } }}
+            >
+              <div>
+                <Typography.Title level={3} style={{ fontSize: 16, marginTop: 0 }}>
+                  {current.requirement.display_no}{" "}
+                  <StatusChip
+                    label={
+                      importanceLabel[current.requirement.importance] ??
+                      current.requirement.importance
+                    }
+                    tone="neutral"
+                  />
+                </Typography.Title>
+                <Typography.Paragraph>{current.requirement.text}</Typography.Paragraph>
+                {current.requirement.acceptance_criteria && (
+                  <Typography.Paragraph type="secondary">
+                    Acceptance criteria: {current.requirement.acceptance_criteria}
+                  </Typography.Paragraph>
+                )}
+                <Typography.Title level={4} style={{ fontSize: 14 }}>
+                  AI assessment
+                </Typography.Title>
+                {!current.ai ? (
+                  <Typography.Paragraph type="secondary">
+                    The AI has not graded this requirement yet.
+                  </Typography.Paragraph>
+                ) : current.ai.outcome === "failed" ? (
+                  <Typography.Paragraph>
+                    Not evaluated: the AI could not give a grade with evidence. Grade it yourself.
+                  </Typography.Paragraph>
+                ) : (
+                  <>
+                    <p>
+                      <GradeChip grade={current.ai.grade} />{" "}
+                      {current.ai.non_compliance_reason &&
+                        nonComplianceLabel[current.ai.non_compliance_reason]}
+                      {current.ai.confidence != null &&
+                        ` · confidence ${Math.round(Number(current.ai.confidence) * 100)} %`}
+                    </p>
+                    <p>{current.ai.rationale}</p>
+                    {(current.ai.missing_elements?.length ?? 0) > 0 && (
+                      <ul>
+                        {(current.ai.missing_elements ?? []).map((m) => (
+                          <li key={m}>Missing: {m}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {current.ai.citations.length === 0 ? (
+                      <Typography.Paragraph type="secondary">
+                        No evidence found.
+                      </Typography.Paragraph>
+                    ) : (
+                      <ul>
+                        {current.ai.citations.map((c) => (
+                          <li key={c.citation_no}>
+                            &ldquo;{c.excerpt}&rdquo; (page {c.page_no}){" "}
+                            <AntButton
+                              type="link"
+                              style={{ padding: 0 }}
+                              onClick={() => void showPassage(c.passage_id)}
+                            >
+                              Show in context
+                            </AntButton>{" "}
+                            <AntButton
+                              type="link"
+                              style={{ padding: 0 }}
+                              onClick={() => viewer.open(c.document_version_id, c.passage_id)}
+                            >
+                              Open page {c.page_no}
+                            </AntButton>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+                {shown && (
+                  <blockquote aria-label="The passage in context">
+                    <Typography.Paragraph type="secondary">Page {shown.page}</Typography.Paragraph>
+                    {shown.text}
+                  </blockquote>
+                )}
+
+                <Typography.Title level={4} style={{ fontSize: 14 }}>
+                  Your decision
+                </Typography.Title>
+                <p>
+                  <StatusChip
+                    label={memberStateLabel[current.member.review_state]}
+                    tone="neutral"
+                  />{" "}
+                  {current.member.grade && <GradeChip grade={current.member.grade} />}
+                </p>
+                {current.member.note && <p>Your note: {current.member.note}</p>}
+                <Space wrap style={{ marginBottom: 12 }}>
+                  <Button
+                    onClick={() =>
+                      void patch(current, { action: "agree" }, "Agreed with the AI grade")
+                    }
+                    disabled={busy || !decide || !current.ai || current.ai.outcome === "failed"}
+                    disabledReason={decide ? undefined : (actions.decide_rows?.reason ?? undefined)}
+                  >
+                    Agree with AI
+                  </Button>
+                  <Button onClick={() => setOverriding(true)} disabled={busy || !decide}>
+                    Override
+                  </Button>
+                  {current.member.needs_clarification ? (
                     <Button
                       onClick={() =>
-                        void patch(current, { action: "agree" }, "Agreed with the AI grade")
+                        void patch(current, { action: "clear_clarification" }, "Flag cleared")
                       }
-                      disabled={busy || !decide || !current.ai || current.ai.outcome === "failed"}
-                      disabledReason={
-                        decide ? undefined : (actions.decide_rows?.reason ?? undefined)
+                      disabled={busy || !decide}
+                    >
+                      Clear flag
+                    </Button>
+                  ) : (
+                    <Button onClick={() => setFlagging(true)} disabled={busy || !decide}>
+                      Needs clarification
+                    </Button>
+                  )}
+                </Space>
+                {current.ai && current.ai.outcome === "graded" && (
+                  <Typography.Paragraph type="secondary">
+                    Was the AI grade useful?{" "}
+                    <AntButton
+                      type="link"
+                      style={{ padding: 0 }}
+                      onClick={() =>
+                        void run("Thanks for the feedback", () =>
+                          unwrap(
+                            api.POST(
+                              "/tender-vendors/{tenderVendorId}/evaluation/rows/{requirementId}/feedback",
+                              {
+                                params: {
+                                  path: {
+                                    tenderVendorId: tenderVendorId!,
+                                    requirementId: current.requirement.id,
+                                  },
+                                },
+                                body: { is_useful: true },
+                              },
+                            ),
+                          ),
+                        )
                       }
                     >
-                      Agree with AI
+                      Yes
+                    </AntButton>{" "}
+                    <AntButton
+                      type="link"
+                      style={{ padding: 0 }}
+                      onClick={() =>
+                        void run("Thanks for the feedback", () =>
+                          unwrap(
+                            api.POST(
+                              "/tender-vendors/{tenderVendorId}/evaluation/rows/{requirementId}/feedback",
+                              {
+                                params: {
+                                  path: {
+                                    tenderVendorId: tenderVendorId!,
+                                    requirementId: current.requirement.id,
+                                  },
+                                },
+                                body: { is_useful: false },
+                              },
+                            ),
+                          ),
+                        )
+                      }
+                    >
+                      No
+                    </AntButton>
+                  </Typography.Paragraph>
+                )}
+                <p>
+                  <Link to={`/tenders/${tenderId}/requirements/${current.requirement.id}/compare`}>
+                    Compare this requirement across vendors
+                  </Link>
+                </p>
+                {ev.first_submitted_at && (
+                  <div>
+                    <Button
+                      onClick={() =>
+                        void (async () => {
+                          try {
+                            const p = await unwrap(
+                              api.GET("/tender-vendors/{tenderVendorId}/evaluation/peers", {
+                                params: {
+                                  path: { tenderVendorId: tenderVendorId! },
+                                  query: { requirement_id: current.requirement.id },
+                                },
+                              }),
+                            );
+                            setPeers(p.items);
+                          } catch (e) {
+                            setError(e instanceof Error ? e : new Error("Not available"));
+                          }
+                        })()
+                      }
+                    >
+                      Show other members&rsquo; decisions
                     </Button>
-                    <Button onClick={() => setOverriding(true)} disabled={busy || !decide}>
-                      Override
-                    </Button>
-                    {current.member.needs_clarification ? (
-                      <Button
-                        onClick={() =>
-                          void patch(current, { action: "clear_clarification" }, "Flag cleared")
-                        }
-                        disabled={busy || !decide}
-                      >
-                        Clear flag
-                      </Button>
-                    ) : (
-                      <Button onClick={() => setFlagging(true)} disabled={busy || !decide}>
-                        Needs clarification
-                      </Button>
+                    {peers && (
+                      <ul aria-label="Other members' decisions">
+                        {peers.length === 0 && (
+                          <li>
+                            <Typography.Text type="secondary">
+                              No other member has submitted this vendor yet.
+                            </Typography.Text>
+                          </li>
+                        )}
+                        {peers.map((p) => (
+                          <li key={`${p.member.id}`}>
+                            {p.member.display_name}:{" "}
+                            {p.grade
+                              ? (gradeLabel[p.grade] ?? p.grade)
+                              : memberStateLabel[p.review_state]}
+                            {p.note ? ` (${p.note})` : ""}
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  </Space>
-                  {current.ai && current.ai.outcome === "graded" && (
-                    <Typography.Paragraph type="secondary">
-                      Was the AI grade useful?{" "}
-                      <AntButton
-                        type="link"
-                        style={{ padding: 0 }}
-                        onClick={() =>
-                          void run("Thanks for the feedback", () =>
-                            unwrap(
-                              api.POST(
-                                "/tender-vendors/{tenderVendorId}/evaluation/rows/{requirementId}/feedback",
-                                {
-                                  params: {
-                                    path: {
-                                      tenderVendorId: tenderVendorId!,
-                                      requirementId: current.requirement.id,
-                                    },
-                                  },
-                                  body: { is_useful: true },
-                                },
-                              ),
-                            ),
-                          )
-                        }
-                      >
-                        Yes
-                      </AntButton>{" "}
-                      <AntButton
-                        type="link"
-                        style={{ padding: 0 }}
-                        onClick={() =>
-                          void run("Thanks for the feedback", () =>
-                            unwrap(
-                              api.POST(
-                                "/tender-vendors/{tenderVendorId}/evaluation/rows/{requirementId}/feedback",
-                                {
-                                  params: {
-                                    path: {
-                                      tenderVendorId: tenderVendorId!,
-                                      requirementId: current.requirement.id,
-                                    },
-                                  },
-                                  body: { is_useful: false },
-                                },
-                              ),
-                            ),
-                          )
-                        }
-                      >
-                        No
-                      </AntButton>
-                    </Typography.Paragraph>
-                  )}
-                  <p>
-                    <Link
-                      to={`/tenders/${tenderId}/requirements/${current.requirement.id}/compare`}
-                    >
-                      Compare this requirement across vendors
-                    </Link>
-                  </p>
-                  {ev.first_submitted_at && (
-                    <div>
-                      <Button
-                        onClick={() =>
-                          void (async () => {
-                            try {
-                              const p = await unwrap(
-                                api.GET("/tender-vendors/{tenderVendorId}/evaluation/peers", {
-                                  params: {
-                                    path: { tenderVendorId: tenderVendorId! },
-                                    query: { requirement_id: current.requirement.id },
-                                  },
-                                }),
-                              );
-                              setPeers(p.items);
-                            } catch (e) {
-                              setError(e instanceof Error ? e : new Error("Not available"));
-                            }
-                          })()
-                        }
-                      >
-                        Show other members&rsquo; decisions
-                      </Button>
-                      {peers && (
-                        <ul aria-label="Other members' decisions">
-                          {peers.length === 0 && (
-                            <li>
-                              <Typography.Text type="secondary">
-                                No other member has submitted this vendor yet.
-                              </Typography.Text>
-                            </li>
-                          )}
-                          {peers.map((p) => (
-                            <li key={`${p.member.id}`}>
-                              {p.member.display_name}:{" "}
-                              {p.grade
-                                ? (gradeLabel[p.grade] ?? p.grade)
-                                : memberStateLabel[p.review_state]}
-                              {p.note ? ` (${p.note})` : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                  {history.state.status === "ready" && history.state.data && (
-                    <details>
-                      <summary>Your history of this row</summary>
-                      {history.state.data.events.length === 0 ? (
-                        <Typography.Paragraph type="secondary">
-                          No decision yet.
-                        </Typography.Paragraph>
-                      ) : (
-                        <ul>
-                          {history.state.data.events.map((e) => (
-                            <li key={e.id}>
-                              {new Date(e.occurred_at).toLocaleString()}:{" "}
-                              {e.action.replace(/_/g, " ")}
-                              {e.note ? ` (${e.note})` : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </details>
-                  )}
-                </Card>
-              </aside>
-            )}
-          </Col>
-        </Row>
+                  </div>
+                )}
+                {history.state.status === "ready" && history.state.data && (
+                  <details>
+                    <summary>Your history of this row</summary>
+                    {history.state.data.events.length === 0 ? (
+                      <Typography.Paragraph type="secondary">No decision yet.</Typography.Paragraph>
+                    ) : (
+                      <ul>
+                        {history.state.data.events.map((e) => (
+                          <li key={e.id}>
+                            {new Date(e.occurred_at).toLocaleString()}:{" "}
+                            {e.action.replace(/_/g, " ")}
+                            {e.note ? ` (${e.note})` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </details>
+                )}
+              </div>
+            </Modal>
+          )}
+        </>
       )}
 
       <ConfirmDialog

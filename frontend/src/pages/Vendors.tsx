@@ -57,7 +57,7 @@ export function Vendors() {
     return <ErrorNotice error={tender.state.error} onRetry={tender.reload} />;
   return (
     <>
-      <TenderHeader tender={tender.state.data} />
+      <TenderHeader tender={tender.state.data} nextStep={false} />
       <Flex justify="space-between" align="center" wrap gap={12}>
         <Typography.Title level={2} style={{ fontSize: 20 }}>
           Vendors
@@ -298,7 +298,6 @@ export function VendorsPanel({
           pagination={false}
           scroll={{ x: "max-content" }}
           expandable={{
-            defaultExpandAllRows: true,
             columnTitle: <span className="visually-hidden">Proposal</span>,
             expandedRowRender: (tv) => (
               <VendorCard

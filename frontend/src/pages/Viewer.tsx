@@ -61,22 +61,25 @@ export function Viewer({
     const d = await unwrap(
       api.GET("/documents/{documentId}", { params: { path: { documentId: v.document_id } } }),
     );
-    return { tenderId: d.tender_id, title: d.title };
+    return { tenderId: d.tender_id, title: d.title, docType: d.doc_type };
   }, [api, versionId]);
   const { me } = useSession();
   const announce = useAnnounce();
   const isMember = me.user.role === "member";
+  // requirements come from the request for proposal; a proposal is only read
+  const canExtract =
+    isMember && origin.state.status === "ready" && origin.state.data.docType !== "proposal";
   const tenderId = origin.state.status === "ready" ? origin.state.data.tenderId : null;
   const coverage = useAsync(
     () =>
-      tenderId && isMember
+      tenderId && canExtract
         ? unwrap(
             api.GET("/tenders/{tenderId}/extractions/coverage", {
               params: { path: { tenderId }, query: { document_version_id: versionId } },
             }),
           )
         : Promise.resolve(null),
-    [api, tenderId, versionId, isMember],
+    [api, tenderId, versionId, canExtract],
   );
   usePush(tenderId ?? undefined, coverage.reload, ["job.updated", "requirements.changed"]);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -247,7 +250,7 @@ export function Viewer({
             ))}
           </ol>
         )}
-        {isMember && (
+        {canExtract && (
           <section aria-label="Extract requirements">
             <Card
               size="small"
@@ -328,7 +331,7 @@ export function Viewer({
                     : undefined;
                 return (
                   <li key={s.id} style={{ paddingLeft: (s.level - 1) * 12 }}>
-                    {isMember && (
+                    {canExtract && (
                       <Checkbox
                         aria-label={`Extract from ${s.title}`}
                         checked={picked.has(s.id)}

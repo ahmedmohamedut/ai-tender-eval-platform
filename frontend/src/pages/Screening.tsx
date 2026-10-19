@@ -1,4 +1,4 @@
-import { Checkbox, Radio, Space, Table, Typography, Input } from "antd";
+import { Alert, Checkbox, Radio, Space, Table, Typography, Input } from "antd";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import {
@@ -32,6 +32,21 @@ import type { components } from "../api/generated/schema";
 
 type State = components["schemas"]["ScreeningState"];
 type Recommendation = components["schemas"]["Recommendation"];
+
+function precheckHeadline(run: NonNullable<State["precheck_run"]>, found: number): string {
+  const at = run.finished_at ? ` on ${new Date(run.finished_at).toLocaleString()}` : "";
+  switch (run.status) {
+    case "queued":
+    case "running":
+      return "The AI check is running";
+    case "failed":
+      return `The last AI check failed${at}`;
+    case "cancelled":
+      return `The last AI check was cancelled${at}`;
+    default:
+      return `The last AI check finished${at} with ${found} ${found === 1 ? "finding" : "findings"}`;
+  }
+}
 
 /** PG-14 Proposal screening (T4 review table with a side panel): UX-SCR-01..07. */
 export function Screening() {
@@ -192,7 +207,9 @@ export function Screening() {
 
   return (
     <>
-      {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
+      {tender.state.status === "ready" && (
+        <TenderHeader tender={tender.state.data} nextStep={false} />
+      )}
       <Typography.Paragraph>
         <Link to={`/tenders/${tenderId}/screening`}>Back to screening</Link>
       </Typography.Paragraph>
@@ -292,9 +309,38 @@ export function Screening() {
           Compares the proposal with the sections the request for proposal asks for. It only
           suggests; nobody decides from it.
         </Typography.Paragraph>
+        {s.precheck_run && (
+          <Alert
+            style={{ marginBottom: 16 }}
+            showIcon
+            type={
+              s.precheck_run.status === "failed"
+                ? "error"
+                : s.precheck_run.status === "completed"
+                  ? "success"
+                  : s.precheck_run.status === "completed_with_warnings"
+                    ? "warning"
+                    : "info"
+            }
+            title={precheckHeadline(s.precheck_run, s.prechecks.length)}
+            description={
+              <>
+                {s.precheck_run.status === "failed" && s.precheck_run.failure_message && (
+                  <div>{s.precheck_run.failure_message}</div>
+                )}
+                {s.precheck_run.warnings.map((w) => (
+                  <div key={w}>{w}</div>
+                ))}
+                <Link to="/jobs">Open the job center</Link>
+              </>
+            }
+          />
+        )}
         {s.prechecks.length === 0 ? (
           <Typography.Paragraph type="secondary">
-            No AI check has run for this version.
+            {s.precheck_run
+              ? "No findings were stored for this version."
+              : "No AI check has run for this version."}
           </Typography.Paragraph>
         ) : (
           <Table<State["prechecks"][number]>
@@ -462,7 +508,7 @@ export function ScreeningList() {
   const items = list.state.data.items;
   return (
     <>
-      <TenderHeader tender={tender.state.data} />
+      <TenderHeader tender={tender.state.data} nextStep={false} />
       <Typography.Title level={2} style={{ fontSize: 20, marginBottom: 4 }}>
         Screening
       </Typography.Title>

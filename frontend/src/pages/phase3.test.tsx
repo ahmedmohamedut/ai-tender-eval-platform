@@ -153,7 +153,7 @@ describe("PG-11 Requirements", () => {
     await userEvent.clear(text);
     await userEvent.type(text, "The supplier shall encrypt everything at rest.");
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await dialogTitled("Save changes to REQ-001");
     // the note is required before the save is possible
     expect(within(dialog).getByRole("button", { name: "Save" })).toHaveAttribute(
       "aria-disabled",

@@ -171,7 +171,7 @@ export function Documents() {
 
   return (
     <>
-      <TenderHeader tender={tender.state.data} />
+      <TenderHeader tender={tender.state.data} nextStep={false} />
       <Flex justify="space-between" align="flex-start" wrap gap={12} style={{ marginBottom: 16 }}>
         <div>
           <Typography.Title level={2} style={{ fontSize: 20, marginBottom: 4 }}>

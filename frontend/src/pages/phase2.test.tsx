@@ -290,6 +290,10 @@ describe("PG-05 Vendors", () => {
       api,
       route: `/tenders/${TENDER_ID}/vendors`,
     });
+    // the proposals start collapsed
+    const expand = await screen.findByRole("button", { name: "Expand row" });
+    expect(screen.queryByText(/technical.pdf/)).not.toBeInTheDocument();
+    await userEvent.click(expand);
     expect(await screen.findByText(/technical.pdf \(main file\)/)).toBeInTheDocument();
     expect(screen.getByText(/pricing.pdf \(annex\)/)).toBeInTheDocument();
     expect(screen.getByText(/password protected/i)).toBeInTheDocument();
@@ -309,6 +313,7 @@ describe("PG-05 Vendors", () => {
       api,
       route: `/tenders/${TENDER_ID}/vendors`,
     });
+    await userEvent.click(await screen.findByRole("button", { name: "Expand row" }));
     expect(await screen.findByText(/Main file \(main file\)/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open Main file" })).toBeInTheDocument();
     expect(screen.queryByText(/failed|processing|uploading/i)).not.toBeInTheDocument();

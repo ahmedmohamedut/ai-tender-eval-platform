@@ -393,6 +393,18 @@ class ScreeningApiIT extends AbstractApiIT {
         .jsonPath("$.id")
         .isEqualTo(job);
     verify(js, org.mockito.Mockito.never()).publish(any(Message.class), any(PublishOptions.class));
+    // the screening state names the latest run, even before any finding is stored
+    call("GET", "/tender-vendors/" + w.tv() + "/screening", w.member())
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.precheck_run.job_id")
+        .isEqualTo(job)
+        .jsonPath("$.precheck_run.status")
+        .isEqualTo("queued")
+        .jsonPath("$.precheck_run.warnings.length()")
+        .isEqualTo(0);
     // a failed pre-check is retried as a new job that points back
     TestUsers.sql("UPDATE jobs SET status = 'running', started_at = now() WHERE id = ?::uuid", job);
     TestUsers.sql(

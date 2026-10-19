@@ -6,6 +6,7 @@ import {
   Col,
   Flex,
   Input,
+  Modal,
   Row,
   Select,
   Space,
@@ -326,7 +327,7 @@ export function Requirements() {
         </Card>
       )}
       <Row gutter={24}>
-        <Col xs={24} xl={open ? 14 : 24}>
+        <Col span={24}>
           {items.length === 0 ? (
             <EmptyState title="No requirements yet">
               Select sections in the RFP to extract them.{" "}
@@ -338,7 +339,7 @@ export function Requirements() {
               components={rowHeaderComponents}
               dataSource={items}
               pagination={false}
-              scroll={{ x: "max-content" }}
+              tableLayout="auto"
               title={() => <Typography.Text strong>Requirements of this tender</Typography.Text>}
               onRow={(r) => ({ "aria-selected": r.id === openId })}
               columns={[
@@ -374,6 +375,7 @@ export function Requirements() {
                 },
                 {
                   title: "Requirement",
+                  onCell: () => ({ style: { whiteSpace: "normal", wordBreak: "break-word" } }),
                   render: (_, r) => (
                     <>
                       {r.text}
@@ -409,20 +411,18 @@ export function Requirements() {
             />
           )}
         </Col>
-        {open && (
-          <Col xs={24} xl={10}>
-            <RequirementPanel
-              key={open.id + ":" + open.row_version}
-              req={open}
-              categories={cats}
-              others={items.filter((r) => r.id !== open.id && !r.deleted)}
-              minNote={minNote}
-              onChanged={refresh}
-              onClose={() => setOpenId(null)}
-            />
-          </Col>
-        )}
       </Row>
+      {open && (
+        <RequirementPanel
+          key={open.id + ":" + open.row_version}
+          req={open}
+          categories={cats}
+          others={items.filter((r) => r.id !== open.id && !r.deleted)}
+          minNote={minNote}
+          onChanged={refresh}
+          onClose={() => setOpenId(null)}
+        />
+      )}
 
       <AddDialog
         open={adding}
@@ -614,19 +614,24 @@ function RequirementPanel({
   }
 
   return (
-    <aside aria-label={`Details of ${req.display_no}`}>
-      <Card
-        title={
-          <Typography.Title level={3} style={{ fontSize: 16, margin: 0 }}>
-            {req.display_no}{" "}
-            <StatusChip
-              label={originLabel[req.origin]}
-              tone={req.origin === "ai" ? "ai" : "neutral"}
-            />
-          </Typography.Title>
-        }
-        extra={<Button onClick={onClose}>Close panel</Button>}
-      >
+    <Modal
+      open
+      width={760}
+      title={
+        <>
+          {req.display_no}{" "}
+          <StatusChip
+            label={originLabel[req.origin]}
+            tone={req.origin === "ai" ? "ai" : "neutral"}
+          />
+        </>
+      }
+      footer={null}
+      onCancel={onClose}
+      destroyOnHidden
+      styles={{ body: { maxHeight: "70vh", overflowY: "auto" } }}
+    >
+      <div aria-label={`Details of ${req.display_no}`} role="group">
         <Field label="Requirement text">
           {({ id }) => (
             <Input.TextArea
@@ -875,8 +880,8 @@ function RequirementPanel({
             </div>
           )}
         </ConfirmDialog>
-      </Card>
-    </aside>
+      </div>
+    </Modal>
   );
 }
 

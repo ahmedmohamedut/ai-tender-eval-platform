@@ -32,7 +32,14 @@ import { useAsync } from "../lib/useAsync";
 import { useSession } from "../app/Session";
 
 /** The compact band on every screen inside a tender: title, status, facts and the next step. */
-export function TenderHeader({ tender }: { tender: Tender }) {
+export function TenderHeader({
+  tender,
+  nextStep = true,
+}: {
+  tender: Tender;
+  /** false on pages where the shortcut to the next step is not wanted */
+  nextStep?: boolean;
+}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const step = tender.next_step;
@@ -80,16 +87,20 @@ export function TenderHeader({ tender }: { tender: Tender }) {
             </Space>
           </div>
         </div>
-        {step && target && pathname !== target && pathname !== `/tenders/${tender.id}` && (
-          <Button
-            type="primary"
-            icon={<ArrowRightOutlined />}
-            iconPlacement="end"
-            onClick={() => void navigate(target)}
-          >
-            {step.text}
-          </Button>
-        )}
+        {nextStep &&
+          step &&
+          target &&
+          pathname !== target &&
+          pathname !== `/tenders/${tender.id}` && (
+            <Button
+              type="primary"
+              icon={<ArrowRightOutlined />}
+              iconPlacement="end"
+              onClick={() => void navigate(target)}
+            >
+              {step.text}
+            </Button>
+          )}
       </Flex>
     </header>
   );

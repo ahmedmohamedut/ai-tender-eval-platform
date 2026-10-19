@@ -7,7 +7,9 @@ import app.tendereval.backend.api.model.ChecklistUpdateItemsInner;
 import app.tendereval.backend.api.model.ChecksInput;
 import app.tendereval.backend.api.model.ChecksInputChecksInner;
 import app.tendereval.backend.api.model.Job;
+import app.tendereval.backend.api.model.JobStatus;
 import app.tendereval.backend.api.model.PrecheckFinding;
+import app.tendereval.backend.api.model.PrecheckRun;
 import app.tendereval.backend.api.model.Recommendation;
 import app.tendereval.backend.api.model.RecommendationInput;
 import app.tendereval.backend.api.model.RecommendationView;
@@ -231,7 +233,10 @@ public class ScreeningService {
                             .map(java.util.Optional::of)
                             .defaultIfEmpty(java.util.Optional.empty()),
                         prechecks(db, t),
-                        cleared(db, tenderVendorId))
+                        cleared(db, tenderVendorId),
+                        precheckRun(db, t)
+                            .map(java.util.Optional::of)
+                            .defaultIfEmpty(java.util.Optional.empty()))
                     .map(
                         z ->
                             new ScreeningState()
@@ -241,7 +246,29 @@ public class ScreeningService {
                                 .recommendations(z.getT3())
                                 .decision(z.getT4().orElse(null))
                                 .prechecks(z.getT5())
+                                .precheckRun(z.getT7().orElse(null))
                                 .actions(actions(t, z.getT6()))));
+  }
+
+  private Mono<PrecheckRun> precheckRun(DatabaseClient db, Target t) {
+    return db.sql(
+            "SELECT j.id, j.status, j.finished_at, j.failure_message,"
+                + " ARRAY(SELECT w->>'message' FROM jsonb_array_elements(coalesce(j.warnings,"
+                + " '[]'::jsonb)) w) AS msgs"
+                + " FROM jobs j WHERE j.job_type = 'screening_precheck'"
+                + " AND j.target_id = :pv ORDER BY j.created_at DESC, j.id DESC LIMIT 1")
+        .bind("pv", t.versionId())
+        .map(
+            (r, m) -> {
+              String[] msgs = r.get("msgs", String[].class);
+              return new PrecheckRun()
+                  .jobId(r.get("id", UUID.class))
+                  .status(JobStatus.fromValue(r.get("status", String.class)))
+                  .finishedAt(r.get("finished_at", java.time.OffsetDateTime.class))
+                  .failureMessage(r.get("failure_message", String.class))
+                  .warnings(msgs == null ? List.of() : java.util.Arrays.asList(msgs));
+            })
+        .one();
   }
 
   private Mono<Boolean> cleared(DatabaseClient db, UUID tv) {

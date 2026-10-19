@@ -29,7 +29,9 @@ export function CrossVendor() {
   );
   return (
     <>
-      {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
+      {tender.state.status === "ready" && (
+        <TenderHeader tender={tender.state.data} nextStep={false} />
+      )}
       <Typography.Paragraph>
         <Link to={`/tenders/${tenderId}/evaluation`}>Back to your evaluations</Link>
       </Typography.Paragraph>

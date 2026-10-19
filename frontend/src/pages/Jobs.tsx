@@ -135,7 +135,7 @@ function JobDetails({ id, onClose }: { id: string | null; onClose: () => void })
                       />
                     ),
                   },
-                  { title: "Started", render: (_, st) => when(st.started_at) },
+                  { title: "Started", width: "13%", render: (_, st) => when(st.started_at) },
                   { title: "Finished", render: (_, st) => when(st.finished_at) },
                 ]}
               />
@@ -232,16 +232,19 @@ export function Jobs() {
           components={rowHeaderComponents}
           dataSource={jobs}
           pagination={false}
-          scroll={{ x: "max-content" }}
+          tableLayout="fixed"
           title={() => <Typography.Text strong>Background jobs</Typography.Text>}
           columns={[
             {
               title: "Work",
+              width: "14%",
               onCell: rowHeader,
               render: (_, j) => jobTypeLabel[j.job_type] ?? j.job_type,
             },
             {
               title: "On",
+              width: "22%",
+              onCell: () => ({ style: { whiteSpace: "normal", wordBreak: "break-word" } }),
               render: (_, j) => (
                 <>
                   {j.target_label ?? "-"}{" "}
@@ -251,6 +254,7 @@ export function Jobs() {
             },
             {
               title: "Status",
+              width: "13%",
               render: (_, j) => (
                 <>
                   <StatusChip
@@ -268,7 +272,7 @@ export function Jobs() {
               ),
             },
             { title: "Started", render: (_, j) => when(j.started_at ?? j.queued_at) },
-            { title: "Last updated", render: (_, j) => when(j.updated_at) },
+            { title: "Last updated", width: "13%", render: (_, j) => when(j.updated_at) },
             {
               title: "Actions",
               render: (_, j) => (

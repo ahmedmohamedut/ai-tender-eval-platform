@@ -7514,6 +7514,33 @@ components:
       required:
       - expected_section
       - found
+    PrecheckRun:
+      type: object
+      description: The latest AI structure check of this proposal version, whatever its outcome.
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        finished_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        warnings:
+          type: array
+          description: Plain-language warnings of the run, for example that the request for proposal does not say how a proposal must be organised.
+          items:
+            type: string
+        failure_message:
+          type:
+          - string
+          - 'null'
+      required:
+      - job_id
+      - status
+      - warnings
     ScreeningState:
       type: object
       properties:
@@ -7553,6 +7580,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PrecheckFinding'
+        precheck_run:
+          oneOf:
+          - $ref: '#/components/schemas/PrecheckRun'
+          - type: 'null'
         actions:
           $ref: '#/components/schemas/Actions'
       required:

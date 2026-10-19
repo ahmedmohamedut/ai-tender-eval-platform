@@ -128,6 +128,27 @@ describe("PG-14 Screening", () => {
     expect(await accessibilityViolations(container)).toEqual([]);
   });
 
+  it("says what the last AI check did when it stored no findings", async () => {
+    const api = fakeApi(
+      handler(
+        state({
+          prechecks: [],
+          precheck_run: {
+            job_id: "j1",
+            status: "completed_with_warnings",
+            finished_at: "2026-10-18T13:45:46Z",
+            warnings: ["The request for proposal does not say how a proposal must be organised"],
+          },
+        }),
+      ),
+    );
+    renderPage(page(), { api, me: makeMe("member"), route: ROUTE });
+    expect(await screen.findByText(/The last AI check finished/)).toBeInTheDocument();
+    expect(screen.getByText(/does not say how a proposal must be organised/)).toBeInTheDocument();
+    expect(screen.queryByText("No AI check has run for this version.")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open the job center" })).toBeInTheDocument();
+  });
+
   it("saves the ticked items and a recommendation that needs a reason to reject", async () => {
     const calls: { call: string; body: unknown }[] = [];
     const api = fakeApi(

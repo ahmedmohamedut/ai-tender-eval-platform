@@ -2,7 +2,13 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
-import { accessibilityViolations, fakeApi, makeMe, renderPage } from "../test/helpers";
+import {
+  accessibilityViolations,
+  dialogTitled,
+  fakeApi,
+  makeMe,
+  renderPage,
+} from "../test/helpers";
 import { CrossVendor } from "./CrossVendor";
 import { EvaluationOverview } from "./EvaluationOverview";
 import { EvaluationSheet } from "./EvaluationSheet";
@@ -137,7 +143,8 @@ describe("PG-15 Evaluation sheet", () => {
     expect(await screen.findByRole("heading", { name: /Acme Cloud/ })).toBeInTheDocument();
     expect(screen.getByText(/Your grades and notes are private/)).toBeInTheDocument();
     expect(screen.getByText("0 of 2 reviewed")).toBeInTheDocument();
-    const detail = await screen.findByLabelText("Detail of REQ-001");
+    await userEvent.click(await screen.findByRole("button", { name: "REQ-001" }));
+    const detail = await dialogTitled("Detail of REQ-001");
     expect(within(detail).getByText(/data is encrypted at rest/)).toBeInTheDocument();
     expect(within(detail).getByText(/\(page 7\)/)).toBeInTheDocument();
     expect(within(detail).getByRole("button", { name: "Open page 7" })).toBeInTheDocument();
@@ -166,6 +173,7 @@ describe("PG-15 Evaluation sheet", () => {
       }),
     );
     renderPage(sheet(), { api, me: makeMe("member"), route: ROUTE });
+    await userEvent.click(await screen.findByRole("button", { name: "REQ-001" }));
     await userEvent.click(await screen.findByRole("button", { name: "Agree with AI" }));
     await waitFor(() => expect(patches).toHaveLength(1));
     expect(patches[0]!.header).toEqual({ "If-Match": '"3"' });
@@ -184,8 +192,9 @@ describe("PG-15 Evaluation sheet", () => {
       }),
     );
     renderPage(sheet(), { api, me: makeMe("member"), route: ROUTE });
+    await userEvent.click(await screen.findByRole("button", { name: "REQ-001" }));
     await userEvent.click(await screen.findByRole("button", { name: "Override" }));
-    const dialog = await screen.findByRole("dialog", { name: /Override the AI grade/ });
+    const dialog = await dialogTitled("Override the AI grade");
     const save = within(dialog).getByRole("button", { name: "Save override" });
     expect(save).toBeDisabled();
     await userEvent.type(

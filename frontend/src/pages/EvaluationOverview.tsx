@@ -30,7 +30,9 @@ export function EvaluationOverview() {
 
   return (
     <>
-      {tender.state.status === "ready" && <TenderHeader tender={tender.state.data} />}
+      {tender.state.status === "ready" && (
+        <TenderHeader tender={tender.state.data} nextStep={false} />
+      )}
       <Typography.Title level={2} style={{ fontSize: 20 }}>
         Your evaluations
       </Typography.Title>
