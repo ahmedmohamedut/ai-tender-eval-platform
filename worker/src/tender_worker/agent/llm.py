@@ -258,6 +258,27 @@ class OpenAiCompatible:
         return schema.model_validate_json(_json_text(content))
 
 
+async def model_server_slots(base_url: str, timeout: float = 5.0) -> int | None:
+    """How many requests the model server runs at once, when it says so (llama.cpp `/props`).
+
+    None for any other server, or when it does not answer: the check is advice, never a gate.
+    """
+    import aiohttp
+
+    root = base_url.rstrip("/").removesuffix("/v1")
+    try:
+        async with aiohttp.ClientSession() as http:
+            async with http.get(
+                f"{root}/props", timeout=aiohttp.ClientTimeout(total=timeout)
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                slots = (await resp.json(content_type=None)).get("total_slots")
+    except Exception:  # noqa: BLE001 - not llama.cpp, or down
+        return None
+    return slots if isinstance(slots, int) and slots > 0 else None
+
+
 def _reply_attrs(reply: Any) -> dict[str, Any]:
     """Token counts, the model name the endpoint returned and the finish reason, when present."""
     out: dict[str, Any] = {}

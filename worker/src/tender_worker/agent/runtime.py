@@ -519,6 +519,7 @@ async def _run_precheck(
         tender_id=command.tender_id,
         job_id=job,
         model=deps.precheck_model,
+        concurrency=max(1, deps.concurrency),
         on_progress=progress,
         cancelled=check,
     )

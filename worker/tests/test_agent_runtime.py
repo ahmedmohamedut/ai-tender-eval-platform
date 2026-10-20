@@ -7,7 +7,8 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from test_agent_extraction import CATEGORIES, Llm, Source, cand, embed, passage
+from test_agent_extraction import CATEGORIES, SCOPE, Llm, Source, cand, embed, passage
+from test_agent_extraction import graph as make_graph
 
 from tender_worker.agent.extraction import ExtractionSettings
 from tender_worker.agent.llm import LlmOutputUnusable, LlmUnavailable
@@ -263,3 +264,47 @@ async def test_a_slow_call_does_not_make_the_job_look_silent():
     sent = len(bus.sent)
     await asyncio.sleep(0.05)
     assert len(bus.sent) == sent  # stopped with the job
+
+
+async def test_extraction_runs_as_many_chunks_at_once_as_the_setting_allows():
+    import asyncio
+
+    ps, answers = many(6)
+    inflight = peak = 0
+
+    class Counting(Llm):
+        async def generate(self, *a, **k):
+            nonlocal inflight, peak
+            inflight += 1
+            peak = max(peak, inflight)
+            await asyncio.sleep(0.02)
+            try:
+                return await super().generate(*a, **k)
+            finally:
+                inflight -= 1
+
+    for width in (1, 3):
+        peak = 0
+        g = make_graph(
+            Counting(answers),
+            ps,
+            settings=ExtractionSettings(chunk_chars=80, window_concurrency=width),
+        )
+        await g.run(SCOPE, CATEGORIES, [])
+        assert peak == width
+
+
+async def test_the_slot_count_comes_from_llama_cpp_props():
+    from aiohttp import web
+    from aiohttp.test_utils import TestServer
+
+    from tender_worker.agent.llm import model_server_slots
+
+    async def props(_request):
+        return web.json_response({"total_slots": 4})
+
+    app = web.Application()
+    app.router.add_get("/props", props)
+    async with TestServer(app) as server:
+        assert await model_server_slots(f"http://{server.host}:{server.port}/v1") == 4
+    assert await model_server_slots("http://127.0.0.1:9/v1", timeout=1) is None

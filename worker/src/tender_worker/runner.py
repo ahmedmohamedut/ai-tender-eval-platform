@@ -20,6 +20,7 @@ from nats.errors import TimeoutError as NatsTimeout
 from nats.js.errors import APIError, KeyNotFoundError
 
 from tender_worker.agent.evaluation import EvaluationSettings
+from tender_worker.agent.llm import model_server_slots
 from tender_worker.agent.search import QdrantSearch
 from tender_worker.consumers import (
     AGENT_EVALUATION,
@@ -167,6 +168,15 @@ class Runner:
                 log.error("embedding setup is wrong", extra={"reason": problem})
             await nc.close()
             raise SystemExit(2)
+
+        if s.WORKER_ROLE == "agent" and s.LLM_BASE_URL:
+            slots = await model_server_slots(s.LLM_BASE_URL)
+            if slots is not None and slots < s.LLM_MAX_CONCURRENCY:
+                log.warning(
+                    "the model server has fewer slots than LLM_MAX_CONCURRENCY; calls will queue "
+                    "at the server",
+                    extra={"slots": slots, "concurrency": s.LLM_MAX_CONCURRENCY},
+                )
 
         health = HealthServer(
             s.HEALTH_PORT, {"nats": nats_ok, "rustfs": s3_ok, "qdrant": qdrant_ok}
@@ -353,6 +363,7 @@ class Runner:
                 chunk_lines=s.EXTRACTION_CHUNK_LINES,
                 dedup_threshold=s.DEDUP_SIMILARITY_THRESHOLD,
                 max_repairs=s.GROUNDING_MAX_REPAIR_ATTEMPTS,
+                window_concurrency=s.LLM_MAX_CONCURRENCY,
             ),
             batch_max_items=s.RESULT_BATCH_MAX_ITEMS,
             cancel_check_seconds=s.CANCEL_CHECK_SECONDS,
