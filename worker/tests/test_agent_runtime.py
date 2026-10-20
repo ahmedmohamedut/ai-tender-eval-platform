@@ -243,3 +243,23 @@ async def test_a_large_input_comes_from_the_claim_check_and_is_verified():
     tampered = Blobs({("tender-jobs", ref["key"]): data + b" "})
     with pytest.raises(BadInput):
         await run_extraction(deps(Llm(answers), ps, Bus(), Kv(), tampered), cmd, 1, TP, never)
+
+
+async def test_a_slow_call_does_not_make_the_job_look_silent():
+    """A slow model: the last running status is repeated, so the watchdog sees a live job."""
+    import asyncio
+
+    from tender_worker.agent.runtime import _Emitter
+
+    bus = Bus()
+    emitter = _Emitter(command(), deps(Llm({}), [], bus, None), 1, TP)
+    await emitter.status("running", step="extract", progress_percent=40)
+    async with emitter.keepalive(every=0.01):
+        await asyncio.sleep(0.08)
+    running = [s for s in bus.statuses() if s.state == "running"]
+    assert len(running) >= 3
+    assert {(s.step, s.progress_percent) for s in running} == {("extract", 40)}
+    assert len({s.seq for s in running}) == len(running)
+    sent = len(bus.sent)
+    await asyncio.sleep(0.05)
+    assert len(bus.sent) == sent  # stopped with the job

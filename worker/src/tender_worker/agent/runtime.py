@@ -8,6 +8,7 @@ the final marker republishes the sealed parts unchanged and never calls the mode
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -126,17 +127,51 @@ def _scope(data: dict[str, Any]) -> list[ScopeItem]:
     return out
 
 
+KEEPALIVE_SECONDS = 60
+
+
 class _Emitter:
     def __init__(self, command: Command, deps: AgentDeps, deliveries: int, traceparent: str):
         self._c = command
         self._d = deps
         self._tp = traceparent
         self._seq = (deliveries - 1) * 1000
+        self._last: dict[str, Any] = {}
+
+    @contextlib.asynccontextmanager
+    async def keepalive(self, every: float = KEEPALIVE_SECONDS):
+        """Repeat the last running status while the job works.
+
+        A slow model can take minutes for one call; without this the backend sees silence and its
+        watchdog fails a healthy job. The repeat carries the step and percent already reported,
+        nothing else.
+        """
+
+        async def beat() -> None:
+            while True:
+                await asyncio.sleep(every)
+                if self._last:
+                    try:
+                        await self.status("running", **self._last)
+                    except Exception:  # noqa: BLE001 - a missed beat must not stop the job
+                        log.warning("keepalive status was not published")
+
+        task = asyncio.create_task(beat())
+        try:
+            yield
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     def _headers(self, msg_id: str, schema: str) -> dict[str, str]:
         return {"Nats-Msg-Id": msg_id, "traceparent": self._tp, "Tender-Schema": schema}
 
     async def status(self, state: str, **kw: Any) -> None:
+        if state == "running":
+            self._last = {
+                k: kw[k] for k in ("step", "progress_percent") if kw.get(k) is not None
+            } or self._last
         self._seq += 1
         status = Status(
             job_id=self._c.job_id,
@@ -267,7 +302,9 @@ async def run_extraction(
         },
         traceparent=traceparent,
     ):
-        await _run_extraction(deps, command, deliveries, traceparent, cancelled)
+        emitter = _Emitter(command, deps, deliveries, traceparent)
+        async with emitter.keepalive():
+            await _run_extraction(deps, command, deliveries, traceparent, cancelled, emitter)
 
 
 async def _run_extraction(
@@ -276,8 +313,8 @@ async def _run_extraction(
     deliveries: int,
     traceparent: str,
     cancelled: Callable[[UUID], Awaitable[bool]],
+    emitter: _Emitter,
 ) -> None:
-    emitter = _Emitter(command, deps, deliveries, traceparent)
     job = command.job_id
     if await cancelled(job):
         await emitter.status("cancelled")
@@ -429,7 +466,9 @@ async def run_precheck(
     cancelled: Callable[[UUID], Awaitable[bool]],
 ) -> None:
     with _job_span(command, deps, deliveries, PRECHECK_VERSION, traceparent):
-        await _run_precheck(deps, command, deliveries, traceparent, cancelled)
+        emitter = _Emitter(command, deps, deliveries, traceparent)
+        async with emitter.keepalive():
+            await _run_precheck(deps, command, deliveries, traceparent, cancelled, emitter)
 
 
 async def _run_precheck(
@@ -438,9 +477,9 @@ async def _run_precheck(
     deliveries: int,
     traceparent: str,
     cancelled: Callable[[UUID], Awaitable[bool]],
+    emitter: _Emitter,
 ) -> None:
     """The pre-check job (AI 4.4): advisory findings, sealed and published like an extraction."""
-    emitter = _Emitter(command, deps, deliveries, traceparent)
     job = command.job_id
     if await cancelled(job):
         await emitter.status("cancelled")
@@ -580,7 +619,9 @@ async def run_evaluation(
     cancelled: Callable[[UUID], Awaitable[bool]],
 ) -> None:
     with _job_span(command, deps, deliveries, EVALUATION_VERSION, traceparent):
-        await _run_evaluation(deps, command, deliveries, traceparent, cancelled)
+        emitter = _Emitter(command, deps, deliveries, traceparent)
+        async with emitter.keepalive():
+            await _run_evaluation(deps, command, deliveries, traceparent, cancelled, emitter)
 
 
 async def _run_evaluation(
@@ -589,6 +630,7 @@ async def _run_evaluation(
     deliveries: int,
     traceparent: str,
     cancelled: Callable[[UUID], Awaitable[bool]],
+    emitter: _Emitter,
 ) -> None:
     """The evaluation job (AI 4.2, 2.5): rows are graded in parallel and sealed as they finish.
 
@@ -596,7 +638,6 @@ async def _run_evaluation(
     published, so rows reach the reviewers while the job runs. A restart republishes the sealed
     parts and grades only the requirements no sealed part holds.
     """
-    emitter = _Emitter(command, deps, deliveries, traceparent)
     job = command.job_id
     if await cancelled(job):
         await emitter.status("cancelled")

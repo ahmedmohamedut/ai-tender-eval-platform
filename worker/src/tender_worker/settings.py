@@ -70,8 +70,8 @@ class Settings(BaseSettings):
     LLM_MODEL_VERSION: str = "unknown"
     LLM_TEMPERATURE: float = Field(default=0.0, ge=0, le=2)
     LLM_MAX_OUTPUT_TOKENS: int = Field(default=8192, ge=64)
-    LLM_TIMEOUT_SECONDS: int = Field(default=120, ge=5)
-    LLM_MAX_CONCURRENCY: int = Field(default=8, ge=1)
+    LLM_TIMEOUT_SECONDS: int = Field(default=600, ge=5)
+    LLM_MAX_CONCURRENCY: int = Field(default=2, ge=1)
     LLM_STRUCTURED_OUTPUT: Literal["function_calling", "json_schema"] = "json_schema"
     LLM_OUTAGE_GIVE_UP_SECONDS: int = Field(default=600, ge=1)
     EXTRACTION_CHUNK_CHARS: int = Field(default=3000, ge=500)

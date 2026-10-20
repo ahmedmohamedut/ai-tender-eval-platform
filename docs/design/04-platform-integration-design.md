@@ -577,7 +577,7 @@ Dynamic database users live 24 hours and are renewed at two thirds of their life
 | `NATS_CREDENTIALS` | secret | OpenBao `backend/nats` | The backend's NATS user. |
 | `NATS_PROVISION_STREAMS` | config | `true` | The backend creates or updates the four streams, the key-value bucket and its own consumers at start. Workers only create their own consumers. |
 | `WATCHDOG_QUEUED_TIMEOUT_SECONDS` | config | `120` | A queued job older than this has its command published again. |
-| `WATCHDOG_SILENCE_TIMEOUT_SECONDS` | config | `300` | A running job silent for this long is failed with `timeout`. |
+| `WATCHDOG_SILENCE_TIMEOUT_SECONDS` | config | `300` | A running job silent for this long is failed with `timeout`. The agent repeats its last status every 60 s while it works, so a slow model does not look silent. |
 | `JOB_MAX_DURATION_MINUTES_DOCUMENT_PROCESSING`, `_REQUIREMENT_EXTRACTION`, `_SCREENING_PRECHECK`, `_EVALUATION` | config | `30`, `60`, `30`, `360` | Ceiling per job type. These are assumptions to tune against real runs. |
 | `RESULT_BATCH_MAX_ITEMS` | config | `50` | Largest result batch the backend accepts. |
 | `IDEMPOTENCY_TTL_HOURS` | config | `24` | How long an `Idempotency-Key` is remembered. |
@@ -621,8 +621,8 @@ One image, two deployments: `WORKER_ROLE` chooses the code path. Numeric default
 | `LLM_API_KEY` | agent | secret | OpenBao `worker-agent/llm` | Its key. |
 | `LLM_MODEL_EXTRACTION`, `LLM_MODEL_EVALUATION`, `LLM_MODEL_PRECHECK` | agent | config | required | Model per job type. |
 | `LLM_MODEL_VERSION` | agent | config | none | Label stored in `ai_runs.model_version`, since an endpoint may not report one. |
-| `LLM_TEMPERATURE`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_TIMEOUT_SECONDS` | agent | config | `0`, `8192`, `120` | Call settings. A reasoning model spends part of the output budget on its reasoning: a budget too small ends in `LengthFinishReasonError`. |
-| `LLM_MAX_CONCURRENCY`, `LLM_REQUESTS_PER_MINUTE` | agent | config | `8`, `0` (no limit) | Simultaneous calls per replica, and a client-side rate limit for providers with a quota. |
+| `LLM_TEMPERATURE`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_TIMEOUT_SECONDS` | agent | config | `0`, `8192`, `600` | Call settings. The timeout bounds one call; a slow local GPU may need more. A reasoning model spends part of the output budget on its reasoning: a budget too small ends in `LengthFinishReasonError`. |
+| `LLM_MAX_CONCURRENCY`, `LLM_REQUESTS_PER_MINUTE` | agent | config | `2`, `0` (no limit) | Simultaneous calls per replica (a local server queues more than it can run, and queued calls time out), and a client-side rate limit for providers with a quota. |
 | `LLM_STRUCTURED_OUTPUT` | agent | config | `function_calling` | `function_calling` or `json_schema`: how the answer schema is enforced. |
 | `LLM_OUTAGE_GIVE_UP_SECONDS` | agent | config | `600` | How long the model endpoint may stay down before the job seals its finished rows and fails with `llm_unavailable`. |
 | `AGENT_CONCURRENCY_EVALUATION`, `_EXTRACTION`, `_PRECHECK` | agent | config | `2`, `1`, `1` | Jobs at once per replica, matching the consumers in 5.3. |
