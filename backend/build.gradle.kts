@@ -33,7 +33,7 @@ dependencies {
     implementation("software.amazon.awssdk:s3")
     implementation("software.amazon.awssdk:netty-nio-client")
     // The report as PDF (P84). Excel and CSV are written by hand: no further dependency.
-    implementation("com.github.librepdf:openpdf:2.0.3")
+    implementation("com.github.librepdf:openpdf:3.0.5")
     implementation("org.springframework.boot:spring-boot-starter-mail")
 
     runtimeOnly("org.postgresql:r2dbc-postgresql")
