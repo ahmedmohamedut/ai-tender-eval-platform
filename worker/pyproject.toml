@@ -14,7 +14,7 @@ dependencies = [
     "python-docx>=1.2.0",
     "langgraph==1.2.15",
     "langchain-openai==1.7.1",
-    "langchain-core==1.6.10",
+    "langchain-core==1.6.12",
     "opentelemetry-api==1.41.1",
     "opentelemetry-sdk==1.41.1",
     "opentelemetry-exporter-otlp-proto-http==1.41.1",
