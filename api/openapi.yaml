@@ -6719,6 +6719,11 @@ components:
               type: string
             message:
               type: string
+            detail:
+              type:
+              - string
+              - 'null'
+              description: What the worker reported about the cause, for example the sizes that disagree. Fixed wording from the worker, never document text.
             suggested_actions:
               type: array
               items:

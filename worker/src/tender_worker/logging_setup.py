@@ -37,3 +37,6 @@ def configure_logging(level: str, role: str, worker_id: str) -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level.upper())
+    # Their debug output (one pair of lines per request) buries the worker's own lines.
+    for noisy in ("botocore", "aiobotocore", "urllib3", "s3transfer"):
+        logging.getLogger(noisy).setLevel(max(root.level, logging.INFO))

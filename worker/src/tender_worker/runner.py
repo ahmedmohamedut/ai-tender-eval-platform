@@ -41,7 +41,7 @@ from tender_worker.handlers import (
     handle_uploaded,
 )
 from tender_worker.health import HealthServer
-from tender_worker.ingest.index import EmbeddingClient, QdrantIndexer
+from tender_worker.ingest.index import EmbeddingClient, QdrantIndexer, check_embedding_setup
 from tender_worker.ingest.pipeline import IngestPipeline
 from tender_worker.messages import WorkerInfo
 from tender_worker.settings import Settings
@@ -153,6 +153,20 @@ class Runner:
                     timeout=aiohttp.ClientTimeout(total=5),
                 ) as resp:
                     return resp.status == 200
+
+        # A model, a setting and a collection that disagree fail every document the same way:
+        # stop here, with the reason in the log, rather than after the first upload.
+        problems = await check_embedding_setup(
+            EmbeddingClient.from_settings(s),
+            s.QDRANT_URL,
+            s.QDRANT_API_KEY.get_secret_value(),
+            s.QDRANT_COLLECTION,
+        )
+        if problems:
+            for problem in problems:
+                log.error("embedding setup is wrong", extra={"reason": problem})
+            await nc.close()
+            raise SystemExit(2)
 
         health = HealthServer(
             s.HEALTH_PORT, {"nats": nats_ok, "rustfs": s3_ok, "qdrant": qdrant_ok}

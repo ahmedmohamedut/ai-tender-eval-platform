@@ -2,6 +2,25 @@
   "$defs": {
     "Failure": {
       "properties": {
+        "cause": {
+          "anyOf": [
+            {
+              "enum": [
+                "embedding_dimension_mismatch",
+                "embedding_http_error",
+                "embedding_unreachable",
+                "embedding_timeout",
+                "embedding_unreadable"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cause"
+        },
         "code": {
           "enum": [
             "password_protected",
@@ -21,6 +40,21 @@
         "message": {
           "title": "Message",
           "type": "string"
+        },
+        "params": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Params"
         },
         "retryable": {
           "title": "Retryable",

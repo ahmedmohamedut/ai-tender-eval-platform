@@ -206,6 +206,8 @@ describe("PG-17 Job center", () => {
       failure: {
         code: "llm_unavailable",
         message: "The language model did not answer. Try again in a few minutes.",
+        detail:
+          "The embedding model returned vectors of 1024 values but 2560 are configured. Set EMBEDDING_DIMENSIONS to 1024 and use a new QDRANT_COLLECTION.",
         suggested_actions: ["retry"],
       },
       steps: [
@@ -230,6 +232,7 @@ describe("PG-17 Job center", () => {
     expect(await within(dialog).findByText("The job started")).toBeInTheDocument();
     expect(within(dialog).getByText("Parse")).toBeInTheDocument();
     expect(within(dialog).getByText(/did not answer/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/1024 values but 2560 are configured/)).toBeInTheDocument();
     expect(api.GET).toHaveBeenCalledWith(
       "/jobs/{jobId}",
       expect.objectContaining({ params: { path: { jobId: "j2" } } }),

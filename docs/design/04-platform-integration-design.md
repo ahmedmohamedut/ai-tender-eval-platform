@@ -342,7 +342,7 @@ Subject `documents.analysis.status.{job_type}`. The first message of a run also 
 | `run` | First message of an AI job only: `model_name`, `model_version`, `prompt_version`, `input_scope`. |
 | `result_parts`, `counts` | Final message only: how many result batches were sent and how many items they hold. |
 | `warnings` | `[{code, message, count}]`. Codes in use: `textless_pages`, `tracked_changes` and `not_english` (document processing), `ungrounded_candidate` (extraction), `row_failed` (evaluation), `suspected_injection` (any AI job) and `no_format_found` (pre-check). |
-| `failure` | `{code, message, retryable}` on `failed`. |
+| `failure` | `{code, message, retryable, cause?, params?}` on `failed`. `cause` is a closed reason (`embedding_dimension_mismatch`, `embedding_http_error`, `embedding_unreachable`, `embedding_timeout`, `embedding_unreadable`) and `params` holds whole numbers only. The backend words the cause from fixed templates and shows it as `Job.failure.detail`; the worker's `message` text is never stored or shown (rule 10). |
 | `emitted_at`, `worker` | Time, and worker id and version. |
 
 Failure codes. Four are the document failure reasons already in the data model (the three file causes and other); the rest are new and belong in a `jobs.failure_code` list.

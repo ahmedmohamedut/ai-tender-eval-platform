@@ -24,6 +24,8 @@ public record StatusMessage(
     String warningsJson,
     String failureCode,
     String failureMessage,
+    String failureCause,
+    Map<String, Integer> failureParams,
     String modelName,
     String modelVersion,
     String promptVersion,
@@ -84,12 +86,26 @@ public record StatusMessage(
         warnings == null || warnings.isNull() ? null : warnings.toString(),
         failure == null ? null : text(failure, "code"),
         failure == null ? null : text(failure, "message"),
+        failure == null ? null : text(failure, "cause"),
+        failure == null ? null : wholeNumbers(failure.get("params")),
         body.get("run") == null ? null : text(body.get("run"), "model_name"),
         body.get("run") == null ? null : text(body.get("run"), "model_version"),
         body.get("run") == null ? null : text(body.get("run"), "prompt_version"),
         body.get("run") == null || body.get("run").get("input_scope") == null
             ? null
             : body.get("run").get("input_scope").toString());
+  }
+
+  private static Map<String, Integer> wholeNumbers(JsonNode n) {
+    Map<String, Integer> out = new LinkedHashMap<>();
+    if (n != null && n.isObject()) {
+      for (var e : n.properties()) {
+        if (e.getValue().isInt()) {
+          out.put(e.getKey(), e.getValue().asInt());
+        }
+      }
+    }
+    return out;
   }
 
   private static String required(JsonNode n, String f) {

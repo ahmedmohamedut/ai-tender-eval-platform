@@ -27,16 +27,29 @@ def section_id(version_id: uuid.UUID, outline_index: int) -> str:
 class IngestFailure(Exception):
     """The document cannot be processed. `code` is a failure code of PI 5.5."""
 
-    def __init__(self, code: str, message: str, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        retryable: bool = False,
+        cause_code: str | None = None,
+        params: dict[str, int] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.retryable = retryable
+        # `cause_code` and `params` go to the backend, which words them (see messages.Failure)
+        self.cause_code = cause_code
+        self.params = params or {}
 
     def __reduce__(self):
         # The parser raises this in a pool process: it must survive pickling with its fields,
         # or the pool reports a broken result instead of the failure code.
-        return (type(self), (self.code, self.message, self.retryable))
+        return (
+            type(self),
+            (self.code, self.message, self.retryable, self.cause_code, self.params),
+        )
 
 
 @dataclass

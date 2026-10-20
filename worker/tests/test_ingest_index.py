@@ -13,6 +13,7 @@ from tender_worker import stub_embedding
 from tender_worker.ingest.index import (
     EmbeddingClient,
     QdrantIndexer,
+    check_embedding_setup,
     embedding_text,
     sparse_vector,
 )
@@ -46,7 +47,10 @@ class FakeQdrant:
 
     async def get_c(self, r):
         c = r.match_info["c"]
-        return web.json_response({}, status=200 if c in self.collections else 404)
+        if c not in self.collections:
+            return web.json_response({}, status=404)
+        vectors = self.collections[c].get("vectors", {})
+        return web.json_response({"result": {"config": {"params": {"vectors": vectors}}}})
 
     async def put_c(self, r):
         self.collections[r.match_info["c"]] = await r.json()
@@ -234,13 +238,7 @@ async def test_role_prefixes_are_added_to_documents_and_queries():
     assert seen == [["passage: a", "passage: b"], ["query: q"], ["c"]]
 
 
-async def test_a_wrong_dimension_is_refused():
-    async def handler(request):
-        body = await request.json()
-        return web.json_response(
-            {"data": [{"index": i, "embedding": [0.0] * 5} for i, _ in enumerate(body["input"])]}
-        )
-
+async def _embed_against(handler, **over):
     app = web.Application()
     app.router.add_post("/v1/embeddings", handler)
     server = TestServer(app)
@@ -250,9 +248,86 @@ async def test_a_wrong_dimension_is_refused():
             base_url=str(server.make_url("/v1")).rstrip("/"),
             model="m",
             api_key="k",
-            dimensions=8,
+            dimensions=over.pop("dimensions", 8),
+            **over,
         )
-        with pytest.raises(Exception):  # noqa: B017 - shape error, retried then surfaced
-            await client.embed(["a"])
+        await client.embed(["a"])
     finally:
         await server.close()
+
+
+async def test_a_wrong_dimension_fails_at_once_and_names_both_sizes():
+    calls = 0
+
+    async def handler(request):
+        nonlocal calls
+        calls += 1
+        body = await request.json()
+        return web.json_response(
+            {"data": [{"index": i, "embedding": [0.0] * 5} for i, _ in enumerate(body["input"])]}
+        )
+
+    with pytest.raises(IngestFailure) as caught:
+        await _embed_against(handler)
+    assert calls == 1  # a configuration error is not an outage; no retries
+    assert caught.value.code == "llm_unavailable" and not caught.value.retryable
+    assert "5 values" in caught.value.message and "8" in caught.value.message
+    assert "EMBEDDING_DIMENSIONS" in caught.value.message
+    assert caught.value.cause_code == "embedding_dimension_mismatch"
+    assert caught.value.params == {"returned": 5, "configured": 8}
+
+
+async def test_an_http_error_names_the_status():
+    async def handler(request):
+        return web.json_response({"error": "boom"}, status=503)
+
+    with pytest.raises(IngestFailure) as caught:
+        await _embed_against(handler)
+    assert caught.value.code == "llm_unavailable" and caught.value.retryable
+    assert "HTTP 503" in caught.value.message
+    assert caught.value.cause_code == "embedding_http_error"
+    assert caught.value.params == {"status": 503}
+
+
+async def test_an_unreachable_service_is_named_as_such():
+    with pytest.raises(IngestFailure) as caught:
+        client = EmbeddingClient(
+            base_url="http://127.0.0.1:9/v1", model="m", api_key="k", dimensions=8, timeout=2
+        )
+        await client.embed(["a"])
+    assert "could not be reached" in caught.value.message
+    assert caught.value.cause_code == "embedding_unreachable" and caught.value.params == {}
+
+
+async def test_the_start_up_check_is_quiet_when_model_setting_and_collection_agree(services):
+    q, qurl, eurl = services
+    ix = indexer(qurl, eurl, collection="agree", dims=256)
+    await ix.ensure_collection()
+    assert await check_embedding_setup(ix._embeddings, qurl, "key", "agree") == []
+
+
+async def test_the_start_up_check_reports_a_model_that_disagrees_with_the_setting(services):
+    _, qurl, eurl = services
+    ix = indexer(qurl, eurl, dims=512)  # the stub model answers with 256 values
+    problems = await check_embedding_setup(ix._embeddings, qurl, "key", "not-yet-created")
+    assert len(problems) == 1 and "256 values but 512 are configured" in problems[0]
+
+
+async def test_the_start_up_check_reports_a_collection_of_another_size(services):
+    q, qurl, eurl = services
+    await indexer(qurl, eurl, collection="old", dims=256).ensure_collection()
+    ix = indexer(qurl, eurl, collection="old", dims=256)
+    ix._embeddings.dimensions = 256
+    q.collections["old"]["vectors"]["dense"]["size"] = 2560
+    problems = await check_embedding_setup(ix._embeddings, qurl, "key", "old")
+    assert (
+        len(problems) == 1 and "holds vectors of 2560 values but 256 are configured" in problems[0]
+    )
+
+
+async def test_the_start_up_check_does_not_stop_on_a_model_that_is_merely_down(services):
+    _, qurl, _ = services
+    down = EmbeddingClient(
+        base_url="http://127.0.0.1:9/v1", model="m", api_key="k", dimensions=8, timeout=2
+    )
+    assert await check_embedding_setup(down, qurl, "key", "passages") == []

@@ -248,6 +248,8 @@ class JobsApiIT extends AbstractApiIT {
         .jsonPath("$.can_retry")
         .isEqualTo(false)
         .jsonPath("$.failure.message")
-        .value(m -> assertThat((String) m).contains("password protected"));
+        .value(m -> assertThat((String) m).contains("password protected"))
+        .jsonPath("$.failure.detail")
+        .isEqualTo("x");
   }
 }

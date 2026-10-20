@@ -500,14 +500,16 @@ public class JobProcessor {
   private Mono<Outcome> failed(DatabaseClient c, JobRow job, StatusMessage m) {
     String code =
         m.failureCode() != null && JOB_CODES.contains(m.failureCode()) ? m.failureCode() : "other";
-    return failOpenJob(c, job, code, m.failureMessage(), m).thenReturn(Outcome.ack("applied"));
+    // The worker's own message text is not kept: only a wording the backend writes (rule 10).
+    String detail = FailureDetail.render(m.failureCause(), m.failureParams());
+    return failOpenJob(c, job, code, detail, m).thenReturn(Outcome.ack("applied"));
   }
 
   /** Fails a queued or running job, and its document version while it is still processing. */
   Mono<Void> failOpenJob(
       DatabaseClient c, JobRow job, String code, String message, StatusMessage m) {
     return toRunning(c, job)
-        .then(failedEvent(c, job.id(), code))
+        .then(failedEvent(c, job.id(), code, message))
         .then(markFailedStep(c, job.id()))
         .then(finishRun(c, job.id(), "failed", 0))
         .then(finishJob(c, job.id(), "failed", code, message, m))
@@ -549,14 +551,18 @@ public class JobProcessor {
   }
 
   /** The failure line names the step that was running, and uses the plain text of the code. */
-  private Mono<Void> failedEvent(DatabaseClient c, UUID jobId, String code) {
+  private Mono<Void> failedEvent(DatabaseClient c, UUID jobId, String code, String detail) {
     return c.sql(
             "INSERT INTO job_events (job_id, level, step, message, dedup_key)"
                 + " VALUES (:j, 'error', (SELECT name FROM job_steps WHERE job_id = :j"
                 + " AND status = 'running' ORDER BY step_no LIMIT 1), :m, 'state:failed')"
                 + " ON CONFLICT (job_id, dedup_key) DO NOTHING")
         .bind("j", jobId)
-        .bind("m", "The job failed: " + JobsService.message(code, null))
+        .bind(
+            "m",
+            "The job failed: "
+                + JobsService.message(code, null)
+                + (detail == null || detail.isBlank() ? "" : " " + detail))
         .fetch()
         .rowsUpdated()
         .then();

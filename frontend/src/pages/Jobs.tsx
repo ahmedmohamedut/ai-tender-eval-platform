@@ -112,6 +112,7 @@ function JobDetails({ id, onClose }: { id: string | null; onClose: () => void })
             <div role="alert">
               <Typography.Text strong>Why it failed</Typography.Text>
               <div>{job.failure.message}</div>
+              {job.failure.detail && <div>{job.failure.detail}</div>}
             </div>
           )}
           <div>

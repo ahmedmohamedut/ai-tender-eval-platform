@@ -238,13 +238,19 @@ public class JobsService {
       job.failure(
           new JobFailure()
               .code(code)
-              .message(message(code, r.get("failure_message", String.class)))
+              .message(message(code, null))
+              .detail(blankToNull(r.get("failure_message", String.class)))
               .suggestedActions(actions(code)));
     }
     return job;
   }
 
-  /** Plain-language text for a failure code (the worker's message is not shown as is). */
+  /** The stored failure_message is always wording the backend wrote (see FailureDetail). */
+  private static String blankToNull(String s) {
+    return s == null || s.isBlank() ? null : s.strip();
+  }
+
+  /** Plain-language text for a failure code. */
   static String message(String code, String detail) {
     return switch (code) {
       case "password_protected" -> "The file is password protected. Upload an unprotected copy.";

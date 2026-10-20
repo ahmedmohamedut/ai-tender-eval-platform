@@ -227,6 +227,41 @@ class JobProcessingIT extends AbstractApiIT {
   }
 
   @Test
+  void aFailureCauseIsWordedByTheBackendAndShownInTheLogAndTheJob() {
+    Setup s = setup();
+    apply(status(s, 1, "running", Map.of("step", "index", "steps", List.of("parse", "index"))));
+    apply(
+        status(
+            s,
+            2,
+            "failed",
+            Map.of(
+                "failure",
+                Map.of(
+                    "code",
+                    "llm_unavailable",
+                    "message",
+                    "secret document text",
+                    "retryable",
+                    false,
+                    "cause",
+                    "embedding_dimension_mismatch",
+                    "params",
+                    Map.of("returned", 1024, "configured", 2560)))));
+    String expected =
+        "The embedding model returned vectors of 1024 values but 2560 are configured."
+            + " Set EMBEDDING_DIMENSIONS to 1024 and use a new QDRANT_COLLECTION.";
+    assertThat(TestUsers.scalar("SELECT failure_message FROM jobs WHERE id = ?", s.job()))
+        .isEqualTo(expected);
+    assertThat(
+            TestUsers.scalar(
+                "SELECT message FROM job_events WHERE job_id = ? AND level = 'error'", s.job()))
+        .isEqualTo(
+            "The job failed: The language model did not answer. Try again in a few minutes. "
+                + expected);
+  }
+
+  @Test
   void anOlderOrRepeatedStatusChangesNothing() {
     Setup s = setup();
     apply(status(s, 5, "running", Map.of("step", "parse", "progress_percent", 50)));

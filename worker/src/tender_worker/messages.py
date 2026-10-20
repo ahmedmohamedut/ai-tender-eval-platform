@@ -81,6 +81,19 @@ class Failure(_Message):
     ]
     message: str
     retryable: bool
+    # A closed reason and whole numbers only: the backend writes the sentence from fixed
+    # templates and never relays free text from a worker (rule 10).
+    cause: (
+        Literal[
+            "embedding_dimension_mismatch",
+            "embedding_http_error",
+            "embedding_unreachable",
+            "embedding_timeout",
+            "embedding_unreadable",
+        ]
+        | None
+    ) = None
+    params: dict[str, int] | None = None
 
 
 class RunInfo(_Message):

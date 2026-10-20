@@ -15,6 +15,7 @@ from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import aiohttp
 
@@ -104,19 +105,60 @@ class EmbeddingClient:
                         body = await resp.json()
                     rows = sorted(body["data"], key=lambda d: d["index"])
                     vectors = [r["embedding"] for r in rows]
-                    if len(vectors) != len(batch) or any(
-                        len(v) != self.dimensions for v in vectors
-                    ):
+                    if len(vectors) != len(batch):
                         raise ValueError("embedding response has the wrong shape")
                     return vectors
 
                 try:
-                    out.extend(await with_retries(call))
+                    vectors = await with_retries(call)
                 except IngestFailure as exc:
+                    message, cause_code, params = self._why(exc.__cause__)
+                    log.warning(
+                        "embedding call failed",
+                        extra={
+                            "endpoint": urlsplit(self.base_url).netloc,
+                            "cause_code": cause_code,
+                        },
+                    )
                     raise IngestFailure(
-                        "llm_unavailable", "The embedding service did not answer", True
+                        "llm_unavailable", message, True, cause_code, params
                     ) from exc.__cause__
+                # Not an outage: the model and the configuration disagree; a retry cannot fix it.
+                wrong = next((len(v) for v in vectors if len(v) != self.dimensions), None)
+                if wrong is not None:
+                    raise IngestFailure(
+                        "llm_unavailable",
+                        f"The embedding model returned vectors of {wrong} values but "
+                        f"{self.dimensions} are configured. Set EMBEDDING_DIMENSIONS to {wrong} "
+                        "and use a new QDRANT_COLLECTION",
+                        False,
+                        "embedding_dimension_mismatch",
+                        {"returned": wrong, "configured": self.dimensions},
+                    )
+                out.extend(vectors)
         return out
+
+    def _why(self, cause: BaseException | None) -> tuple[str, str, dict[str, int]]:
+        """(message, cause code, numbers) for a failed call; nothing from the documents."""
+        if isinstance(cause, aiohttp.ClientResponseError):
+            return (
+                f"The embedding service answered with HTTP {cause.status}",
+                "embedding_http_error",
+                {"status": cause.status},
+            )
+        if isinstance(cause, TimeoutError):
+            return (
+                f"The embedding service did not answer within {self.timeout:g} seconds",
+                "embedding_timeout",
+                {"seconds": round(self.timeout)},
+            )
+        if isinstance(cause, aiohttp.ClientConnectionError):
+            return "The embedding service could not be reached", "embedding_unreachable", {}
+        return (
+            "The embedding service sent an answer that could not be read",
+            "embedding_unreadable",
+            {},
+        )
 
 
 class QdrantIndexer:
@@ -291,3 +333,46 @@ async def _sleep(seconds: float) -> None:
     import asyncio
 
     await asyncio.sleep(seconds)
+
+
+async def check_embedding_setup(
+    embeddings: EmbeddingClient, qdrant_url: str, qdrant_api_key: str, collection: str
+) -> list[str]:
+    """What is certainly wrong with the embedding setup; empty when fine or not yet knowable.
+
+    A model that is down or a collection not yet created is not a finding: both are retried at
+    use. Only a disagreement between the model, `EMBEDDING_DIMENSIONS` and the collection is, since
+    no retry mends it and every document would fail the same way.
+    """
+    problems: list[str] = []
+    if embeddings.base_url:
+        try:
+            await embeddings.embed(["dimension check"])
+        except IngestFailure as exc:
+            if exc.cause_code == "embedding_dimension_mismatch":
+                problems.append(exc.message)
+            else:
+                log.warning(
+                    "embedding model not checked at start",
+                    extra={"reason": exc.message, "endpoint": urlsplit(embeddings.base_url).netloc},
+                )
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as http:
+            async with http.get(
+                f"{qdrant_url.rstrip('/')}/collections/{collection}",
+                headers={"api-key": qdrant_api_key},
+            ) as resp:
+                if resp.status != 200:
+                    return problems
+                body = await resp.json()
+    except (aiohttp.ClientError, TimeoutError):
+        return problems
+    vectors = (body.get("result", {}).get("config", {}).get("params", {}) or {}).get("vectors", {})
+    size = (vectors.get("dense") or {}).get("size")
+    if isinstance(size, int) and embeddings.dimensions and size != embeddings.dimensions:
+        problems.append(
+            f"The collection {collection} holds vectors of {size} values but "
+            f"{embeddings.dimensions} are configured. Use a new QDRANT_COLLECTION "
+            "or set EMBEDDING_DIMENSIONS to match"
+        )
+    return problems

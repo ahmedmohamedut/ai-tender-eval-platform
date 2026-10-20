@@ -216,6 +216,8 @@ class Emitter:
                     code=failure.code,  # type: ignore[arg-type]
                     message=failure.message,
                     retryable=failure.retryable,
+                    cause=failure.cause_code,  # type: ignore[arg-type]
+                    params=failure.params or None,
                 ),
             )
         )
@@ -350,7 +352,14 @@ class IngestPipeline:
         except IngestFailure as failure:
             log.warning(
                 "document failed",
-                extra={"version": str(ref.version_id), "code": failure.code},
+                extra={
+                    "version": str(ref.version_id),
+                    "code": failure.code,
+                    "reason": failure.message,
+                    "retryable": failure.retryable,
+                    "cause": type(failure.__cause__).__name__ if failure.__cause__ else None,
+                    "cause_code": failure.cause_code,
+                },
             )
             await emitter.failed(failure)
             metrics.inc("ingest_documents_total", outcome=failure.code)
