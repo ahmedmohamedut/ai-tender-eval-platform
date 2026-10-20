@@ -29,7 +29,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("io.nats:jnats:2.26.4")
-    implementation(platform("software.amazon.awssdk:bom:2.55.15"))
+    implementation(platform("software.amazon.awssdk:bom:2.56.0"))
     implementation("software.amazon.awssdk:s3")
     implementation("software.amazon.awssdk:netty-nio-client")
     // The report as PDF (P84). Excel and CSV are written by hand: no further dependency.
