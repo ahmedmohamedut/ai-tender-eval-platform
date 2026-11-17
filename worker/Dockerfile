@@ -1,6 +1,6 @@
 # One image, two roles: WORKER_ROLE=ingest|agent. Build context is the repository root.
 #   docker build -f worker/Dockerfile .
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 RUN pip install --no-cache-dir uv==0.12.1
 WORKDIR /src
 COPY worker/pyproject.toml worker/uv.lock ./
@@ -12,7 +12,7 @@ COPY worker/src ./src
 RUN /opt/venv/bin/pip install --no-cache-dir --no-deps --no-build-isolation . 2>/dev/null \
  || (pip install --no-cache-dir hatchling==1.27.0 && /opt/venv/bin/pip install --no-cache-dir --no-deps . )
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 # LibreOffice converts DOCX to the PDF the viewer shows (AI 3.1); metric-compatible fonts keep the
 # layout of Word documents close to the original (Carlito for Calibri, Liberation for Arial and
 # Times New Roman, Caladea for Cambria).
