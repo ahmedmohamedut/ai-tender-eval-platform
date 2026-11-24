@@ -1,6 +1,6 @@
 # Build context is the repository root (the build needs api/openapi.yaml).
 #   docker build -f backend/Dockerfile .
-FROM gradle:9.8.1-jdk25 AS build
+FROM gradle:9.9.2-jdk25 AS build
 WORKDIR /src
 COPY api/openapi.yaml api/openapi.yaml
 COPY backend/ backend/
